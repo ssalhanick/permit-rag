@@ -11,7 +11,7 @@ to your pgvector chunks.
 
 ```bash
 pip install -r requirements.txt
-python dfw_doc_harvester.py harvest
+python ingestion.harvester.py harvest
 ```
 
 ---
@@ -21,25 +21,25 @@ python dfw_doc_harvester.py harvest
 ### Download everything
 
 ```bash
-python dfw_doc_harvester.py harvest
+python ingestion.harvester.py harvest
 ```
 
 ### Force re-download even if unchanged
 
 ```bash
-python dfw_doc_harvester.py harvest --force
+python ingestion.harvester.py harvest --force
 ```
 
 ### Check all sources for changes (run weekly)
 
 ```bash
-python dfw_doc_harvester.py monitor
+python ingestion.harvester.py monitor
 ```
 
 ### Print governance summary
 
 ```bash
-python dfw_doc_harvester.py report
+python ingestion.harvester.py report
 ```
 
 ---

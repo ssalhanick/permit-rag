@@ -12,13 +12,13 @@ Nothing currently
 
 ## Next 3 tasks
 
-1. Set up pyproject.toml + .env.example + project scaffold
-2. Deploy db/schema.sql to Supabase (local dev first)
-3. Write ingestion/chunker.py + ingestion/verification.py together
+1. Write ingestion/chunker.py + ingestion/verification.py together
+2. Run harvester.py against live URLs, verify all 15 docs download
+3. Write db/client.py (psycopg3 connection pool + helper functions)
 
 ## Module status
 
-ingestion ✅ db ⏳ rag ⏳ api ⏳ eval ⏳ frontend ⏳
+ingestion ✅ db ✅ rag ⏳ api ⏳ eval ⏳ frontend ⏳
 
 ## Ingestion verification (last run: never)
 
@@ -34,7 +34,9 @@ faithfulness — relevancy — precision — recall —
 
 ## Decisions
 
-- Supabase + pgvector over Pinecone (BAA-eligible, cheaper at MVP scale)
+- Local Postgres 18 + pgvector for dev; Supabase or RDS for production deploy
+- psycopg3 (direct driver) over Supabase SDK — no vendor lock-in, portable to any Postgres host
+- Docker Compose for local Postgres + pgvector (pgvector/pgvector:pg17 image)
 - FastAPI over Flask (async support, auto OpenAPI docs)
 - Vite + React over Next.js (simpler for MVP, deploys free on Vercel)
 - Chroma locally during dev, migrate to pgvector for production

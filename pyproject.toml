@@ -15,9 +15,9 @@ dependencies = [
     # --- CLI / display ---
     "rich>=13.0.0",
 
-    # --- Supabase + pgvector ---
-    "supabase>=2.4.0",
-    "vecs>=0.4.3",
+    # --- Postgres + pgvector ---
+    "psycopg[binary]>=3.1.0",
+    "pgvector>=0.3.0",
 
     # --- LLM / embeddings ---
     "anthropic>=0.25.0",
