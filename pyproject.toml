@@ -1,0 +1,77 @@
+[project]
+name = "permit-rag"
+version = "0.1.0"
+description = "RAG-powered construction permit compliance tool for the DFW market"
+readme = "README.md"
+requires-python = ">=3.11"
+license = { text = "MIT" }
+authors = [{ name = "ssalh" }]
+
+dependencies = [
+    # --- HTTP & scraping ---
+    "requests>=2.31.0",
+    "beautifulsoup4>=4.12.0",
+
+    # --- CLI / display ---
+    "rich>=13.0.0",
+
+    # --- Supabase + pgvector ---
+    "supabase>=2.4.0",
+    "vecs>=0.4.3",
+
+    # --- LLM / embeddings ---
+    "anthropic>=0.25.0",
+
+    # --- PDF processing ---
+    "pypdf>=4.0.0",
+
+    # --- Chunking ---
+    "langchain-text-splitters>=0.2.0",
+
+    # --- API ---
+    "fastapi>=0.111.0",
+    "uvicorn[standard]>=0.29.0",
+
+    # --- Config ---
+    "python-dotenv>=1.0.0",
+    "pydantic>=2.7.0",
+    "pydantic-settings>=2.2.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.2.0",
+    "pytest-asyncio>=0.23.0",
+    "ruff>=0.4.0",
+    "mypy>=1.10.0",
+    "pre-commit>=3.7.0",
+]
+eval = [
+    "ragas>=0.1.8",
+    "datasets>=2.19.0",
+]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.ruff]
+target-version = "py311"
+line-length = 88
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "N", "UP", "B", "SIM", "RUF"]
+ignore = ["E501"]
+
+[tool.ruff.lint.isort]
+known-first-party = ["ingestion", "rag", "api", "db", "audit", "evaluation"]
+
+[tool.mypy]
+python_version = "3.11"
+strict = true
+warn_return_any = true
+warn_unused_configs = true
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+asyncio_mode = "auto"
