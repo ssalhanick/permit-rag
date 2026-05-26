@@ -13,6 +13,7 @@ plus Texas state and federal regulations.
 python -m venv .venv
 .\.venv\Scripts\Activate.ps1          # Windows PowerShell
 pip install -e ".[dev]"
+pip install sentence-transformers einops  # for local embeddings
 ```
 
 Copy `.env.example` → `.env` and fill in your credentials.
@@ -27,7 +28,7 @@ permit_rag/
 │   ├── harvester.py    # Download + tag municipal documents
 │   ├── chunker.py      # PDF/HTML extraction + text splitting
 │   ├── verification.py # Stage-by-stage ingestion verification
-│   ├── embedder.py     # (planned) Voyage-3 embedding
+│   ├── embedder.py     # nomic-embed-text-v1.5 local embedding (768-dim)
 │   └── governance.py   # Document lifecycle management
 ├── db/
 │   ├── schema.sql      # Postgres + pgvector schema (4 tables)
@@ -54,6 +55,9 @@ permit_rag/
 ## Commands
 
 ```bash
+# Start local Postgres + pgvector (port 5433)
+docker compose up -d
+
 # Download all catalog documents
 py -m ingestion.harvester harvest
 
@@ -65,6 +69,18 @@ py -m ingestion.harvester monitor
 
 # Print governance summary
 py -m ingestion.harvester report
+
+# Ingest all passing documents into DB (chunk + insert)
+py -m scripts.ingest_documents
+
+# Embed a single document (smoke test)
+py -m ingestion.embedder texas-contractor-licensing-electrical
+
+# Embed all documents
+py -m ingestion.embedder
+
+# Chunk + verify all documents (no DB insert)
+py -m scripts.run_chunk_verify
 ```
 
 ---
@@ -77,7 +93,7 @@ tuned for legal/code text.
 
 | Parameter | Value | Rationale |
 |-----------|-------|-----------|
-| Chunk size | 1,500 chars | ~375 tokens for Voyage-3 (8K context). Holds a complete code section. |
+| Chunk size | 1,500 chars | ~375 tokens for nomic-embed-text-v1.5 (8K context). Holds a complete code section. |
 | Overlap | 200 chars | Prevents splitting mid-sentence at boundaries. |
 | Split hierarchy | Section → paragraph → line → sentence → clause → word | Prefers clean breaks between legal sections. |
 
@@ -160,10 +176,11 @@ mark_superseded(
 
 ## Architecture Decisions
 
-- **Local Postgres 18 + pgvector** for dev; Supabase or RDS for production
+- **Local Postgres 17 + pgvector** for dev; Supabase or RDS for production
 - **psycopg3** (direct driver) over Supabase SDK — no vendor lock-in
-- **Docker Compose** for local Postgres (pgvector/pgvector:pg17 image)
+- **Docker Compose** for local Postgres (pgvector/pgvector:pg17 image, port 5433)
 - **FastAPI** over Flask (async support, auto OpenAPI docs)
 - **Vite + React** over Next.js (simpler for MVP)
-- **Claude API** for generation; Voyage-3 for embeddings (1024 dims)
+- **Claude API** for generation; **nomic-embed-text-v1.5** for embeddings (768-dim, local inference)
+- **Hybrid search planned**: dense (pgvector HNSW) + BM25 (tsvector + GIN) via RRF — deferred to RAGAs ablation
 - **Citations** must reference publisher + date, never imply direct city authority
