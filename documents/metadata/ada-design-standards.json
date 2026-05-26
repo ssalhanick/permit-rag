@@ -1,0 +1,55 @@
+{
+  "doc_id": "ada-design-standards",
+  "source_url": "https://www.ada.gov/law-and-regs/design-standards/",
+  "local_path": "raw\\ada-design-standards.html",
+  "filename": "ada-design-standards.html",
+  "municipality": "federal",
+  "authority_level": "federal",
+  "doc_type": "federal_regulation",
+  "subject_tags": [
+    "accessibility",
+    "design",
+    "commercial",
+    "public-accommodations",
+    "ADA"
+  ],
+  "effective_date": null,
+  "version": "2010",
+  "document_status": "active",
+  "is_current": true,
+  "supersedes_doc_id": null,
+  "review_due": "2027-05-22",
+  "ingested_at": "2026-05-22T22:16:04.333837Z",
+  "checksum_sha256": "9f1f4754f55f72cf72a4e2400338242e1cdcb635e4dfc0ce191db090e2df4fc4",
+  "source_etag": "\"7cef5c09eeecf070f2393dd6899d83f9\"",
+  "source_last_modified": "Tue, 21 Apr 2026 19:37:04 GMT",
+  "file_size_bytes": 61818,
+  "page_count": null,
+  "retrieval_weight": 1.0,
+  "notes": "ADA 2010 Design Standards \u2014 applies to all commercial construction.",
+  "verifications": {
+    "download": {
+      "result": "pass",
+      "detail": {
+        "raw_path": "documents\\raw\\ada-design-standards.html",
+        "file_size_bytes": 61818,
+        "checksum_sha256": "9f1f4754f55f72cf72a4e2400338242e1cdcb635e4dfc0ce191db090e2df4fc4"
+      }
+    },
+    "extraction": {
+      "result": "pass",
+      "detail": {
+        "raw_chars": 6216
+      }
+    },
+    "chunking": {
+      "result": "pass",
+      "detail": {
+        "source_chars": 4891,
+        "chunk_chars": 4917,
+        "num_chunks": 5,
+        "coverage_ratio": 1.0053
+      }
+    }
+  }
+}

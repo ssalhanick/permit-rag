@@ -1,0 +1,57 @@
+{
+  "doc_id": "fortworth-upcodes-building",
+  "source_url": "https://up.codes/codes/fort-worth",
+  "local_path": "raw\\fortworth-upcodes-building.html",
+  "filename": "fortworth-upcodes-building.html",
+  "municipality": "fortworth",
+  "authority_level": "municipal",
+  "doc_type": "building_code",
+  "subject_tags": [
+    "residential",
+    "plumbing",
+    "fire-safety",
+    "ordinance",
+    "amendments",
+    "electrical",
+    "building-code"
+  ],
+  "effective_date": null,
+  "version": null,
+  "document_status": "active",
+  "is_current": true,
+  "supersedes_doc_id": null,
+  "review_due": "2026-06-21",
+  "ingested_at": "2026-05-22T22:16:04.333837Z",
+  "checksum_sha256": "8f5bc9fd7154e5fe425ba418be65be1951280ee79e34d351662de7c7b81bd208",
+  "source_etag": "\"yi7sh9pit43pe0\"",
+  "source_last_modified": null,
+  "file_size_bytes": 172896,
+  "page_count": null,
+  "retrieval_weight": 1.0,
+  "notes": "Fort Worth building code amendments with ordinance numbers and effective dates. Good source for amendment tracking.",
+  "verifications": {
+    "download": {
+      "result": "pass",
+      "detail": {
+        "raw_path": "documents\\raw\\fortworth-upcodes-building.html",
+        "file_size_bytes": 172896,
+        "checksum_sha256": "8f5bc9fd7154e5fe425ba418be65be1951280ee79e34d351662de7c7b81bd208"
+      }
+    },
+    "extraction": {
+      "result": "pass",
+      "detail": {
+        "raw_chars": 4257
+      }
+    },
+    "chunking": {
+      "result": "pass",
+      "detail": {
+        "source_chars": 3539,
+        "chunk_chars": 3586,
+        "num_chunks": 3,
+        "coverage_ratio": 1.0133
+      }
+    }
+  }
+}

@@ -1,0 +1,55 @@
+{
+  "doc_id": "plano-building-permit-info",
+  "source_url": "https://www.plano.gov/2161/Building-Inspections",
+  "local_path": "raw\\plano-building-permit-info.html",
+  "filename": "plano-building-permit-info.html",
+  "municipality": "plano",
+  "authority_level": "municipal",
+  "doc_type": "permit_checklist",
+  "subject_tags": [
+    "residential",
+    "inspection",
+    "checklist",
+    "permit",
+    "commercial"
+  ],
+  "effective_date": null,
+  "version": null,
+  "document_status": "active",
+  "is_current": true,
+  "supersedes_doc_id": null,
+  "review_due": "2026-07-21",
+  "ingested_at": "2026-05-22T22:16:04.333837Z",
+  "checksum_sha256": "1f6b1b6a17160004e4dadc4d0ffae157a379533cd852ba4e59dc992faf119521",
+  "source_etag": null,
+  "source_last_modified": "Fri, 22 May 2026 22:16:08 GMT",
+  "file_size_bytes": 74325,
+  "page_count": null,
+  "retrieval_weight": 1.0,
+  "notes": "Plano building inspections landing page \u2014 scrape for PDF links",
+  "verifications": {
+    "download": {
+      "result": "pass",
+      "detail": {
+        "raw_path": "documents\\raw\\plano-building-permit-info.html",
+        "file_size_bytes": 74325,
+        "checksum_sha256": "1f6b1b6a17160004e4dadc4d0ffae157a379533cd852ba4e59dc992faf119521"
+      }
+    },
+    "extraction": {
+      "result": "pass",
+      "detail": {
+        "raw_chars": 291
+      }
+    },
+    "chunking": {
+      "result": "pass",
+      "detail": {
+        "source_chars": 280,
+        "chunk_chars": 280,
+        "num_chunks": 1,
+        "coverage_ratio": 1.0
+      }
+    }
+  }
+}

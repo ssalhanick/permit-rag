@@ -27,6 +27,9 @@ and Fort Worth municipal codes, plus Texas state and federal regs.
 - No inline supabase calls — go through db/client.py exclusively
 - No inline anthropic calls — go through rag/generator.py exclusively
 - All git commands will be run manually, though I will ask for assistance and may need clarification on git best practices
+- All python module terminal commands will be run manually (I'll run them after you generate them)
+- If you want me to run an ad hoc terminal command, please provide the full command in a single line for me to paste into the terminal.
+- At the end of a session, write a prompt for the next session and a single line git commit message summary of the session. It can be long, but it has to be a single line.
 
 ---
 

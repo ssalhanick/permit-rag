@@ -110,15 +110,56 @@ class DocumentMetadata:
 DOCUMENT_CATALOG = [
 
     # ── DALLAS ──────────────────────────────────────────────────────────
+    # City charter + 3 ordinance volumes exported from amlegal as PDF
     {
-        "doc_id":          "dallas-amlegal-code",
-            "url":      "https://codelibrary.amlegal.com/codes/dallas/latest/dallas_tx/0-0-0-1",
+        "doc_id":          "city-of-dallas-charter",
+        "url":             "https://codelibrary.amlegal.com/codes/dallas/latest/dallas_tx/0-0-0-1",
+        "municipality":    "dallas",
+        "authority_level": "municipal",
+        "doc_type":        "administrative_rule",
+        "subject_tags":    ["charter", "governance", "authority", "municipal"],
+        "version":         None,
+        "notes":           "Dallas City Charter — manually exported from amlegal PDF. "
+                           "Defines city government structure and authority.",
+        "review_days":     180,
+    },
+    {
+        "doc_id":          "city-of-dallas-ordiance-v1",
+        "url":             "https://codelibrary.amlegal.com/codes/dallas/latest/dallas_tx/0-0-0-1",
         "municipality":    "dallas",
         "authority_level": "municipal",
         "doc_type":        "zoning_ordinance",
-        "subject_tags":    ["zoning","land-use","setbacks","easements","residential","commercial"],
+        "subject_tags":    ["zoning", "land-use", "setbacks", "easements",
+                           "residential", "commercial", "ordinance"],
         "version":         None,
-        "notes":    "Dallas full code via American Legal Publishing. May lag city council by days-weeks. Review every 60 days.",
+        "notes":           "Dallas Code of Ordinances Volume I — manually exported "
+                           "from amlegal PDF. Review every 60 days.",
+        "review_days":     60,
+    },
+    {
+        "doc_id":          "city-of-dallas-ordiance-v2",
+        "url":             "https://codelibrary.amlegal.com/codes/dallas/latest/dallas_tx/0-0-0-1",
+        "municipality":    "dallas",
+        "authority_level": "municipal",
+        "doc_type":        "building_code",
+        "subject_tags":    ["building-code", "construction", "permits",
+                           "inspection", "ordinance"],
+        "version":         None,
+        "notes":           "Dallas Code of Ordinances Volume II — manually exported "
+                           "from amlegal PDF. Review every 60 days.",
+        "review_days":     60,
+    },
+    {
+        "doc_id":          "city-of-dallas-ordiance-v3",
+        "url":             "https://codelibrary.amlegal.com/codes/dallas/latest/dallas_tx/0-0-0-1",
+        "municipality":    "dallas",
+        "authority_level": "municipal",
+        "doc_type":        "zoning_ordinance",
+        "subject_tags":    ["zoning", "land-use", "development",
+                           "subdivision", "ordinance"],
+        "version":         None,
+        "notes":           "Dallas Code of Ordinances Volume III — manually exported "
+                           "from amlegal PDF. Review every 60 days.",
         "review_days":     60,
     },
     {
@@ -127,7 +168,7 @@ DOCUMENT_CATALOG = [
         "municipality":    "dallas",
         "authority_level": "municipal",
         "doc_type":        "permit_checklist",
-        "subject_tags":    ["permit","residential","checklist","inspection"],
+        "subject_tags":    ["permit", "residential", "checklist", "inspection"],
         "version":         None,
         "notes":           "Dallas residential new construction permit checklist",
         "review_days":     60,
@@ -137,8 +178,8 @@ DOCUMENT_CATALOG = [
         "url":             "https://www.dallascityhall.com/departments/sustainabledevelopment/buildinginspection/DCH%20Documents/Fee%20Schedule.pdf",
         "municipality":    "dallas",
         "authority_level": "municipal",
-        "doc_type":        "fee_schedule",
-        "subject_tags":    ["fees","permit","inspection"],
+        "doc_type":        "other",
+        "subject_tags":    ["fees", "permit", "inspection"],
         "version":         None,
         "notes":           "Dallas building inspection fee schedule — check every 30 days",
         "review_days":     30,
@@ -219,12 +260,17 @@ DOCUMENT_CATALOG = [
     },
     # UpCodes for Fort Worth building amendments
     {
-        "doc_id":   "fortworth-upcodes-building",
-        "url":      "https://up.codes/codes/fort-worth",
-        "notes":    "Fort Worth building code amendments with ordinance numbers "
-                    "and effective dates. Good source for amendment tracking.",
-        "review_days": 30,
-    }
+        "doc_id":          "fortworth-upcodes-building",
+        "url":             "https://up.codes/codes/fort-worth",
+        "municipality":    "fortworth",
+        "authority_level": "municipal",
+        "doc_type":        "building_code",
+        "subject_tags":    ["building-code", "amendments", "ordinance"],
+        "version":         None,
+        "notes":           "Fort Worth building code amendments with ordinance numbers "
+                           "and effective dates. Good source for amendment tracking.",
+        "review_days":     30,
+    },
 
     # ── TEXAS STATE ──────────────────────────────────────────────────────
     {
@@ -416,7 +462,9 @@ def infer_tags_from_content(text_snippet: str, base_tags: list) -> list:
 
 def load_registry(registry_path: Path) -> dict:
     if registry_path.exists():
-        return json.loads(registry_path.read_text())
+        content = registry_path.read_text().strip()
+        if content:
+            return json.loads(content)
     return {}
 
 def save_registry(registry: dict, registry_path: Path):

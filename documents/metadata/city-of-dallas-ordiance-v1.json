@@ -1,0 +1,28 @@
+{
+  "doc_id": "city-of-dallas-ordiance-v1",
+  "verifications": {
+    "download": {
+      "result": "pass",
+      "detail": {
+        "raw_path": "documents\\raw\\city-of-dallas-ordiance-v1.pdf",
+        "file_size_bytes": 4076087,
+        "checksum_sha256": "4b4071b65387484571cc7bd37eca46454ce4af4f555bbe5103c525137a2a8043"
+      }
+    },
+    "extraction": {
+      "result": "pass",
+      "detail": {
+        "raw_chars": 2490795
+      }
+    },
+    "chunking": {
+      "result": "pass",
+      "detail": {
+        "source_chars": 2411385,
+        "chunk_chars": 2619651,
+        "num_chunks": 2111,
+        "coverage_ratio": 1.0864
+      }
+    }
+  }
+}

@@ -39,6 +39,8 @@ create type doc_type as enum (
     'osha_standard',
     'administrative_rule',
     'amendment',
+    'state_statute',
+    'federal_regulation',
     'other'
 );
 
@@ -100,7 +102,7 @@ create table chunks (
     char_count      integer not null,
     page_start      integer,                         -- source PDF page (nullable)
     page_end        integer,
-    embedding       vector(1024),                    -- Voyage-3 = 1024 dims
+    embedding       vector(768),                     -- nomic-embed-text-v1.5 = 768 dims
     created_at      timestamptz not null default now(),
 
     constraint unique_chunk_per_doc unique (document_id, chunk_index)
@@ -188,7 +190,7 @@ create trigger trg_documents_updated_at
 -- 8. Helper: vector similarity search
 -- ─────────────────────────────────────────────────────────
 create or replace function match_chunks(
-    query_embedding  vector(1024),
+    query_embedding  vector(768),
     match_count      int default 5,
     filter_municipality text default null
 )

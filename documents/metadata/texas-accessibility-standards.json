@@ -1,0 +1,55 @@
+{
+  "doc_id": "texas-accessibility-standards",
+  "source_url": "https://www.tdlr.texas.gov/ab/abtas.htm",
+  "local_path": "raw\\texas-accessibility-standards.html",
+  "filename": "texas-accessibility-standards.html",
+  "municipality": "texas",
+  "authority_level": "state",
+  "doc_type": "state_statute",
+  "subject_tags": [
+    "ADA",
+    "TAS",
+    "commercial",
+    "accessibility",
+    "public-buildings"
+  ],
+  "effective_date": null,
+  "version": "2012",
+  "document_status": "active",
+  "is_current": true,
+  "supersedes_doc_id": null,
+  "review_due": "2026-11-18",
+  "ingested_at": "2026-05-22T22:16:04.333837Z",
+  "checksum_sha256": "9f3709a27373eda8c65048e4500ac0f442ca391541829a7c1cc66ce7a532a2cd",
+  "source_etag": null,
+  "source_last_modified": null,
+  "file_size_bytes": 39009,
+  "page_count": null,
+  "retrieval_weight": 1.0,
+  "notes": "Texas Accessibility Standards \u2014 TDLR. Apply statewide to all commercial projects.",
+  "verifications": {
+    "download": {
+      "result": "pass",
+      "detail": {
+        "raw_path": "documents\\raw\\texas-accessibility-standards.html",
+        "file_size_bytes": 39009,
+        "checksum_sha256": "9f3709a27373eda8c65048e4500ac0f442ca391541829a7c1cc66ce7a532a2cd"
+      }
+    },
+    "extraction": {
+      "result": "pass",
+      "detail": {
+        "raw_chars": 6756
+      }
+    },
+    "chunking": {
+      "result": "pass",
+      "detail": {
+        "source_chars": 6090,
+        "chunk_chars": 6636,
+        "num_chunks": 5,
+        "coverage_ratio": 1.0897
+      }
+    }
+  }
+}

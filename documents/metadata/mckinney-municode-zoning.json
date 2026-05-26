@@ -1,0 +1,48 @@
+{
+  "doc_id": "mckinney-municode-zoning",
+  "source_url": "https://library.municode.com/tx/mckinney/codes/code_of_ordinances",
+  "local_path": "raw\\mckinney-municode-zoning.html",
+  "filename": "mckinney-municode-zoning.html",
+  "municipality": "mckinney",
+  "authority_level": "municipal",
+  "doc_type": "zoning_ordinance",
+  "subject_tags": [
+    "easements",
+    "residential",
+    "setbacks",
+    "commercial",
+    "land-use",
+    "zoning"
+  ],
+  "effective_date": null,
+  "version": null,
+  "document_status": "active",
+  "is_current": true,
+  "supersedes_doc_id": null,
+  "review_due": "2026-08-20",
+  "ingested_at": "2026-05-22T22:16:04.333837Z",
+  "checksum_sha256": "3806fc66ac14c91f047aea062381b5726d851fb30c4e73435f782049d63197aa",
+  "source_etag": null,
+  "source_last_modified": null,
+  "file_size_bytes": 6095,
+  "page_count": null,
+  "retrieval_weight": 1.0,
+  "notes": "McKinney full municipal code via Municode",
+  "verifications": {
+    "download": {
+      "result": "pass",
+      "detail": {
+        "raw_path": "documents\\raw\\mckinney-municode-zoning.html",
+        "file_size_bytes": 6095,
+        "checksum_sha256": "3806fc66ac14c91f047aea062381b5726d851fb30c4e73435f782049d63197aa"
+      }
+    },
+    "extraction": {
+      "result": "fail",
+      "detail": {
+        "raw_chars": 90,
+        "error": "Too few chars extracted (90 < 100 minimum)"
+      }
+    }
+  }
+}

@@ -1,0 +1,28 @@
+{
+  "doc_id": "city-of-dallas-charter",
+  "verifications": {
+    "download": {
+      "result": "pass",
+      "detail": {
+        "raw_path": "documents\\raw\\city-of-dallas-charter.pdf",
+        "file_size_bytes": 435114,
+        "checksum_sha256": "02e172d94671fcf2eead9aa9a047dae377ebe5d8c9cffae064be93c8b7e63923"
+      }
+    },
+    "extraction": {
+      "result": "pass",
+      "detail": {
+        "raw_chars": 253893
+      }
+    },
+    "chunking": {
+      "result": "pass",
+      "detail": {
+        "source_chars": 249704,
+        "chunk_chars": 270627,
+        "num_chunks": 218,
+        "coverage_ratio": 1.0838
+      }
+    }
+  }
+}
