@@ -103,15 +103,20 @@ create table chunks (
     page_start      integer,                         -- source PDF page (nullable)
     page_end        integer,
     embedding       vector(768),                     -- nomic-embed-text-v1.5 = 768 dims
+    search_vector   tsvector generated always as      -- BM25 hybrid search (Week 4-5 ablation)
+                    (to_tsvector('english', content)) stored,
     created_at      timestamptz not null default now(),
 
     constraint unique_chunk_per_doc unique (document_id, chunk_index)
 );
 
--- HNSW index for vector similarity search
+-- HNSW index for vector similarity search (dense)
 create index idx_chunks_embedding on chunks
     using hnsw (embedding vector_cosine_ops)
     with (m = 16, ef_construction = 64);
+
+-- GIN index for BM25/full-text search (sparse)
+create index idx_chunks_search on chunks using gin (search_vector);
 
 create index idx_chunks_document_id on chunks (document_id);
 

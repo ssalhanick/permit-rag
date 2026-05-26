@@ -23,6 +23,14 @@
         "num_chunks": 1890,
         "coverage_ratio": 1.0883
       }
+    },
+    "embedding": {
+      "result": "pass",
+      "detail": {
+        "num_chunks": 1890,
+        "num_embedded": 1890,
+        "embedding_dim": 768
+      }
     }
   }
 }

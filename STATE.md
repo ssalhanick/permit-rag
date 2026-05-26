@@ -1,6 +1,6 @@
 # permit_rag — State
 
-_Updated: 2026-05-25_
+_Updated: 2026-05-26_
 
 ## Phase
 
@@ -12,9 +12,9 @@ Nothing currently
 
 ## Next 3 tasks
 
-1. Install `sentence-transformers`, recreate Docker volume (schema changed to 768-dim), verify embedder smoke test
-2. Ingest all 10 passing documents into DB (insert_document + insert_chunks), then run embedder
-3. Begin rag/pipeline.py — retrieval using match_chunks(), plan hybrid search (dense + BM25)
+1. Build rag/pipeline.py — retrieval using match_chunks(), plan hybrid search (dense + BM25)
+2. Build api/ — FastAPI endpoints for query and document management
+3. Begin evaluation/ — RAGAs integration for retrieval quality metrics
 
 ## Module status
 
@@ -22,7 +22,7 @@ ingestion ✅ db ✅ rag ⏳ api ⏳ eval ⏳ frontend ⏳
 
 ## Ingestion verification (last run: 2026-05-25)
 
-download ✅ extraction ✅ chunking ✅ embedding ⏳
+download ✅ extraction ✅ chunking ✅ embedding ✅
 
 ## RAGAs (last run: never)
 
@@ -32,6 +32,7 @@ faithfulness — relevancy — precision — recall —
 
 13 active · 0 superseded · 0 overdue · last harvest 2026-05-22
 10 pass chunking · 3 fail extraction (Municode redirect pages)
+10 docs ingested · 7,170 chunks · 7,170 embeddings (100% coverage)
 
 ## Decisions
 
@@ -56,6 +57,8 @@ faithfulness — relevancy — precision — recall —
 - Chunking: 1500 chars / 200 overlap, RecursiveCharacterTextSplitter
 - No tokenization/lemmatization — dense embedding models handle semantics internally
 - Chunk size to be empirically tuned via RAGAs ablation in Week 4–5
+- tsvector GENERATED column + GIN index added to chunks table for future BM25 hybrid search
+- Hybrid search (HNSW + BM25 RRF) deferred to Week 4–5 RAGAs ablation — build dense-only first
 - Hatchling build with explicit packages list (no single-package layout)
 - psycopg-pool is a separate package from psycopg (added to pyproject.toml)
 - Schema doc_type enum expanded: added state_statute + federal_regulation
