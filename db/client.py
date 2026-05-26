@@ -273,6 +273,56 @@ def count_chunks(document_id: UUID) -> int:
     return row["n"] if row else 0
 
 
+def match_chunks(
+    query_embedding: list[float],
+    *,
+    top_k: int = 5,
+    municipality: Optional[str] = None,
+    min_similarity: float = 0.0,
+) -> list[dict[str, Any]]:
+    """
+    Dense vector similarity search via the match_chunks() SQL function.
+
+    Calls the pgvector cosine-distance search defined in db/schema.sql.
+    Returns up to *top_k* chunks ordered by descending similarity.
+
+    Args:
+        query_embedding: 768-dim float vector (nomic-embed-text query).
+        top_k: Maximum number of chunks to return.
+        municipality: Optional filter (e.g. "dallas", "plano").
+        min_similarity: Discard results below this cosine similarity.
+
+    Returns:
+        List of dicts with keys: id, document_id, doc_id, content,
+        chunk_index, municipality, authority_level, doc_type,
+        document_status, similarity.
+    """
+    sql = """
+        SELECT * FROM match_chunks(
+            %(query_embedding)s::vector,
+            %(match_count)s,
+            %(filter_municipality)s
+        );
+    """
+    params = {
+        "query_embedding": str(query_embedding),
+        "match_count": top_k,
+        "filter_municipality": municipality,
+    }
+    with get_conn() as conn:
+        rows = conn.execute(sql, params).fetchall()
+
+    # Apply client-side similarity floor
+    if min_similarity > 0.0:
+        rows = [r for r in rows if r["similarity"] >= min_similarity]
+
+    log.info(
+        "match_chunks: %d results (top_k=%d, municipality=%s)",
+        len(rows), top_k, municipality,
+    )
+    return rows
+
+
 # ════════════════════════════════════════════════
 #  INGESTION VERIFICATIONS
 # ════════════════════════════════════════════════

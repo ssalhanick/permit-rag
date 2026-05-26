@@ -12,17 +12,25 @@ Nothing currently
 
 ## Next 3 tasks
 
-1. Build rag/pipeline.py — retrieval using match_chunks(), plan hybrid search (dense + BM25)
-2. Build api/ — FastAPI endpoints for query and document management
-3. Begin evaluation/ — RAGAs integration for retrieval quality metrics
+1. Build api/ — FastAPI endpoints for query and document management
+2. Begin evaluation/ — RAGAs integration for retrieval quality metrics
+3. Build rag/generator.py — Claude-powered answer generation with citations
 
 ## Module status
 
-ingestion ✅ db ✅ rag ⏳ api ⏳ eval ⏳ frontend ⏳
+ingestion ✅ db ✅ rag 🔶 api ⏳ eval ⏳ frontend ⏳
+
+_rag note: retriever + pipeline done (dense-only); generator + reranker + conflict_detector still ⏳_
 
 ## Ingestion verification (last run: 2026-05-25)
 
 download ✅ extraction ✅ chunking ✅ embedding ✅
+
+## Retrieval baseline (2026-05-26, dense-only, 7 test queries)
+
+good 6 · weak 1 · miss 0 · avg latency 1455ms (incl. model load)
+top_sim range: 0.704–0.814 · mean_sim range: 0.704–0.793
+weak = Plano (1 chunk in DB — data coverage, not retrieval quality)
 
 ## RAGAs (last run: never)
 
@@ -63,3 +71,5 @@ faithfulness — relevancy — precision — recall —
 - psycopg-pool is a separate package from psycopg (added to pyproject.toml)
 - Schema doc_type enum expanded: added state_statute + federal_regulation
 - Schema vector column: 768-dim (nomic) not 1024-dim (voyage)
+- Local Windows Postgres 16+18 services disabled — Docker is sole DB for dev
+- Dense retrieval quality sufficient for API layer — hybrid search still deferred to Week 4–5
