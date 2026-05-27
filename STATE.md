@@ -1,6 +1,6 @@
 # permit_rag — State
 
-_Updated: 2026-05-26_
+_Updated: 2026-05-26 (session c)_
 
 ## Phase
 
@@ -12,15 +12,16 @@ Nothing currently
 
 ## Next 3 tasks
 
-1. Build api/ — FastAPI endpoints for query and document management
-2. Begin evaluation/ — RAGAs integration for retrieval quality metrics
-3. Build rag/generator.py — Claude-powered answer generation with citations
+1. Begin evaluation/ — RAGAs integration for retrieval quality metrics
+2. Add POST /query/answer endpoint wiring generator → API (requires ANTHROPIC_API_KEY in .env)
+3. Build api/routes/documents.py — document listing/status endpoints
 
 ## Module status
 
-ingestion ✅ db ✅ rag 🔶 api ⏳ eval ⏳ frontend ⏳
+ingestion ✅ db ✅ rag 🔶 api 🔶 eval ⏳ frontend ⏳
 
-_rag note: retriever + pipeline done (dense-only); generator + reranker + conflict_detector still ⏳_
+_rag note: retriever + pipeline + generator done; reranker + conflict_detector still ⏳_
+_api note: POST /query + GET /health live; documents + admin routes still ⏳_
 
 ## Ingestion verification (last run: 2026-05-25)
 
@@ -31,6 +32,14 @@ download ✅ extraction ✅ chunking ✅ embedding ✅
 good 6 · weak 1 · miss 0 · avg latency 1455ms (incl. model load)
 top_sim range: 0.704–0.814 · mean_sim range: 0.704–0.793
 weak = Plano (1 chunk in DB — data coverage, not retrieval quality)
+
+## API baseline (2026-05-26, tested via Swagger UI)
+
+GET /health → {"status":"healthy","database":true,"version":"0.1.0"}
+POST /query → 200 OK, 5 chunks, top_sim 0.762, 2 unique docs (dallas fence query)
+First-request latency ~29s (model load); steady-state 64–112ms
+Pydantic schemas: QueryRequest, QueryResponse, ChunkResponse, DiagnosticsResponse, HealthResponse, ErrorResponse
+Swagger UI: http://localhost:8000/docs
 
 ## RAGAs (last run: never)
 
@@ -73,3 +82,6 @@ faithfulness — relevancy — precision — recall —
 - Schema vector column: 768-dim (nomic) not 1024-dim (voyage)
 - Local Windows Postgres 16+18 services disabled — Docker is sole DB for dev
 - Dense retrieval quality sufficient for API layer — hybrid search still deferred to Week 4–5
+- API CORS set to allow_origins=["*"] for local dev — must tighten for production
+- Generator system prompt enforces [doc_id, chunk N] citation format — regex extraction in _extract_citations()
+- Lifespan pattern (not @app.on_event) for startup/shutdown — compatible with FastAPI 0.111+
