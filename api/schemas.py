@@ -92,6 +92,32 @@ class HealthResponse(BaseModel):
     version: str = Field(description="API version string.")
 
 
+class CitationResponse(BaseModel):
+    """A single citation extracted from the generated answer."""
+
+    doc_id: str = Field(description="Human-readable document identifier.")
+    chunk_index: int = Field(description="Chunk position within the document.")
+    found_in_context: bool = Field(description="True if citation matched a retrieved chunk.")
+    municipality: Optional[str] = Field(description="Source municipality.")
+    authority_level: Optional[str] = Field(description="Authority level of cited source.")
+
+
+class AnswerResponse(BaseModel):
+    """Response for POST /query/answer — generated answer with citations."""
+
+    query: str = Field(description="Original query string.")
+    answer: str = Field(description="Claude-generated answer text with inline citations.")
+    citations: list[CitationResponse] = Field(description="Structured citations extracted from the answer.")
+    model: str = Field(description="LLM model used for generation.")
+    input_tokens: int = Field(description="Prompt tokens consumed.")
+    output_tokens: int = Field(description="Completion tokens consumed.")
+    latency_generation_ms: int = Field(description="Generation latency in milliseconds.")
+    latency_retrieval_ms: int = Field(description="Retrieval latency in milliseconds.")
+    num_chunks: int = Field(description="Number of chunks sent to the generator.")
+    chunks: list[ChunkResponse] = Field(description="Retrieved chunks used as context.")
+    diagnostics: DiagnosticsResponse = Field(description="Retrieval quality diagnostics.")
+
+
 class ErrorResponse(BaseModel):
     """Standard error response body."""
 

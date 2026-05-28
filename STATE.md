@@ -1,6 +1,6 @@
 # permit_rag — State
 
-_Updated: 2026-05-26 (session c)_
+_Updated: 2026-05-27 (session, prompt caching update)_
 
 ## Phase
 
@@ -12,13 +12,13 @@ Nothing currently
 
 ## Next 3 tasks
 
-1. Begin evaluation/ — RAGAs integration for retrieval quality metrics
+1. Stabilize RAGAs faithfulness scoring (increase evaluator token budget) and rerun full 7-query suite
 2. Add POST /query/answer endpoint wiring generator → API (requires ANTHROPIC_API_KEY in .env)
 3. Build api/routes/documents.py — document listing/status endpoints
 
 ## Module status
 
-ingestion ✅ db ✅ rag 🔶 api 🔶 eval ⏳ frontend ⏳
+ingestion ✅ db ✅ rag 🔶 api 🔶 eval 🔶 frontend ⏳
 
 _rag note: retriever + pipeline + generator done; reranker + conflict_detector still ⏳_
 _api note: POST /query + GET /health live; documents + admin routes still ⏳_
@@ -41,9 +41,15 @@ First-request latency ~29s (model load); steady-state 64–112ms
 Pydantic schemas: QueryRequest, QueryResponse, ChunkResponse, DiagnosticsResponse, HealthResponse, ErrorResponse
 Swagger UI: http://localhost:8000/docs
 
-## RAGAs (last run: never)
+## RAGAs (last run: 2026-05-27, full + cache validation)
 
-faithfulness — relevancy — precision — recall —
+smoke (query 0): faithfulness 0.778 · relevancy 0.000 · context precision 0.200
+partial full run: relevancy now computes (observed 0.000 and 0.996 on sampled queries)
+known issue: faithfulness intermittently fails with LLMDidNotFinishException (increase evaluator max_tokens)
+answer caching: strict-key generation cache enabled for eval reruns
+cache validation: query 0 run 1 = miss (0 hit / 1 miss), run 2 = hit (1 hit / 0 miss)
+prompt caching rollout: Anthropic explicit-breakpoint path wired for generator + evaluator
+prompt caching observation: evaluator usage logs currently show cache create/read=0/0 on sampled calls (instrumented, no cache benefit yet)
 
 ## Docs
 
@@ -85,3 +91,8 @@ faithfulness — relevancy — precision — recall —
 - API CORS set to allow_origins=["*"] for local dev — must tighten for production
 - Generator system prompt enforces [doc_id, chunk N] citation format — regex extraction in _extract_citations()
 - Lifespan pattern (not @app.on_event) for startup/shutdown — compatible with FastAPI 0.111+
+- RAGAs relevancy embedding adapter now uses LangchainEmbeddingsWrapper composition (not subclassing HuggingfaceEmbeddings)
+- Preferred eval dependency path is langchain-huggingface with langchain_community fallback import
+- Eval answer cache strategy: generation-only cache with strict key (query + retrieval fingerprint + model + prompt version)
+- LLM provider capability layer added (`LLM_PROVIDER` + `supports_prompt_caching`) so prompt caching is optional and Anthropic-specific
+- Anthropic prompt caching uses explicit system-block breakpoints (`cache_control`) gated by provider capability + env flag

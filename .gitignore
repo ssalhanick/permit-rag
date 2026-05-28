@@ -22,3 +22,6 @@ node_modules/
 .vscode/
 .idea/
 *.swp
+
+# ── Cache ────────────────────────────────────────────────
+evaluation/cache/

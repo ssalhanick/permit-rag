@@ -16,8 +16,10 @@ from __future__ import annotations
 import logging
 import os
 import time
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from typing import Any, Optional
+
+from rag.llm_provider import get_provider_capabilities
 
 log = logging.getLogger(__name__)
 
@@ -43,22 +45,50 @@ class GenerationResult:
 
 SYSTEM_PROMPT = """\
 You are a construction permit compliance assistant for the Dallas–Fort Worth \
-metropolitan area. You answer questions about building codes, permits, zoning, \
-and regulatory requirements using ONLY the provided source chunks.
-
+metropolitan area. Answer questions about permits, codes, zoning, and regulatory \
+requirements using ONLY the provided source chunks.
 Rules:
-1. Answer ONLY from the provided chunks. If the chunks don't contain enough \
-   information, say so explicitly — never fabricate information.
-2. Cite every factual claim using [doc_id, chunk N] format. Example: \
-   [dallas-building-code-vol1, chunk 42].
-3. If chunks from different sources conflict, flag the conflict explicitly \
-   and cite both sources.
-4. Never imply you have direct access to municipal authority. Always reference \
-   the publisher and document.
-5. Be concise but thorough. Use bullet points for multi-part answers.
-6. If a question is ambiguous about which municipality, ask for clarification \
-   or note which jurisdiction(s) the answer applies to.
+1. If support is partial, state uncertainty briefly, then provide only the supported points with citations.
+2. Cite factual claims using [doc_id, chunk N] format. \
+   Example: [dallas-building-code-vol1, chunk 42].
+3. Prioritize direct, actionable requirements (thresholds, permit triggers, \
+   exceptions, scope, authority).
+4. If sources conflict, explicitly note the conflict and cite both sides.
+5. If jurisdiction is ambiguous, state what jurisdiction the cited chunks appear \
+   to apply to.
+6. Keep answers concise and structured. Use bullet points for multi-part answers.
+Output style:
+- Start with a direct answer in 1-2 sentences when possible.
+- Follow with short bullet points of supporting details.
+- Include citations on claims that state requirements, limits, or conditions.
+- Avoid generic background unless it is needed to interpret a cited requirement.
 """
+
+
+def _env_bool(name: str, default: bool) -> bool:
+    """Parse boolean environment variable values."""
+    raw = os.environ.get(name)
+    if raw is None:
+        return default
+    return raw.strip().lower() in {"1", "true", "yes", "on"}
+
+
+def _prompt_cache_control() -> Optional[dict[str, str]]:
+    """Build Anthropic cache_control payload from environment."""
+    ttl = os.environ.get("ANTHROPIC_PROMPT_CACHE_TTL", "5m").strip().lower()
+    if ttl not in {"5m", "1h"}:
+        ttl = "5m"
+    cache_control: dict[str, str] = {"type": "ephemeral"}
+    if ttl == "1h":
+        cache_control["ttl"] = "1h"
+    return cache_control
+
+
+def _extract_cache_tokens(usage: Any) -> tuple[int, int]:
+    """Return (cache_creation_tokens, cache_read_tokens) from usage."""
+    created = int(getattr(usage, "cache_creation_input_tokens", 0) or 0)
+    read = int(getattr(usage, "cache_read_input_tokens", 0) or 0)
+    return created, read
 
 
 def _format_chunks_for_prompt(chunks: list[dict[str, Any]]) -> str:
@@ -136,7 +166,7 @@ def generate_answer(
     *,
     model: Optional[str] = None,
     max_tokens: int = 1024,
-    temperature: float = 0.1,
+    temperature: float = 0.0,
 ) -> GenerationResult:
     """
     Generate a cited answer from retrieved chunks via Claude.
@@ -165,6 +195,14 @@ def generate_answer(
         )
 
     model = model or os.environ.get("LLM_MODEL", "claude-sonnet-4-20250514")
+    capabilities = get_provider_capabilities()
+    cache_requested = _env_bool("ANTHROPIC_PROMPT_CACHE_ENABLED", False)
+    cache_enabled = cache_requested and capabilities.supports_prompt_caching
+    if cache_requested and not capabilities.supports_prompt_caching:
+        log.info(
+            "Prompt caching requested but provider '%s' does not support it.",
+            capabilities.provider,
+        )
 
     # Format context
     context = _format_chunks_for_prompt(chunks)
@@ -178,11 +216,23 @@ def generate_answer(
     t0 = time.perf_counter()
 
     client = anthropic.Anthropic(api_key=api_key)
+    cache_control = _prompt_cache_control()
+    system_payload: Any
+    if cache_enabled:
+        system_payload = [
+            {
+                "type": "text",
+                "text": SYSTEM_PROMPT,
+                "cache_control": cache_control,
+            }
+        ]
+    else:
+        system_payload = SYSTEM_PROMPT
     response = client.messages.create(
         model=model,
         max_tokens=max_tokens,
         temperature=temperature,
-        system=SYSTEM_PROMPT,
+        system=system_payload,
         messages=[{"role": "user", "content": user_message}],
     )
 
@@ -201,14 +251,17 @@ def generate_answer(
         latency_ms=latency_ms,
         chunk_count=len(chunks),
     )
+    cache_create_tokens, cache_read_tokens = _extract_cache_tokens(response.usage)
 
     log.info(
-        "Generated answer: %d chars, %d citations, %d+%d tokens, %dms",
+        "Generated answer: %d chars, %d citations, %d+%d tokens, %dms, cache create/read=%d/%d",
         len(answer),
         len(citations),
         result.input_tokens,
         result.output_tokens,
         result.latency_ms,
+        cache_create_tokens,
+        cache_read_tokens,
     )
 
     return result
