@@ -4,7 +4,7 @@ _Updated: 2026-05-27 (session, prompt caching update)_
 
 ## Phase
 
-Week 1 of 9 — Foundation
+Week 2 of 9 (calendar) — Evaluation active (Phase 4 deliverables pulled forward)
 
 ## Blocked on
 
