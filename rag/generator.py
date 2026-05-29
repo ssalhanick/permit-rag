@@ -1,10 +1,10 @@
 """
-rag/generator.py — Claude-powered answer generation with citations
+rag/generator.py — Provider-backed answer generation with citations
 ===================================================================
-Takes retrieved chunks and produces a cited answer using the Anthropic API.
+Takes retrieved chunks and produces a cited answer using the configured LLM.
 
 Import boundary: rag/ → db/, audit/, standard library only (AGENTS.md).
-All Anthropic calls go through this module exclusively (AGENTS.md).
+All model calls go through this module exclusively (AGENTS.md).
 
 Usage:
     from rag.generator import generate_answer
@@ -91,6 +91,80 @@ def _extract_cache_tokens(usage: Any) -> tuple[int, int]:
     return created, read
 
 
+def _generate_with_ollama(
+    query: str,
+    chunks: list[dict[str, Any]],
+    *,
+    model: str,
+    max_tokens: int,
+    temperature: float,
+) -> GenerationResult:
+    """Generate answer using local Ollama runtime."""
+    import requests
+
+    base_url = os.environ.get("OLLAMA_BASE_URL", "http://localhost:11434").rstrip("/")
+    timeout_s = int(os.environ.get("OLLAMA_TIMEOUT_SECONDS", "180"))
+
+    context = _format_chunks_for_prompt(chunks)
+    user_message = (
+        f"Question: {query}\n\n"
+        f"Context ({len(chunks)} chunks):\n\n"
+        f"{context}\n\n"
+        "Provide a thorough, cited answer based on the above context."
+    )
+
+    payload = {
+        "model": model,
+        "messages": [
+            {"role": "system", "content": SYSTEM_PROMPT},
+            {"role": "user", "content": user_message},
+        ],
+        "stream": False,
+        "options": {
+            "temperature": temperature,
+            "num_predict": max_tokens,
+        },
+    }
+
+    t0 = time.perf_counter()
+    response = requests.post(
+        f"{base_url}/api/chat",
+        json=payload,
+        timeout=timeout_s,
+    )
+    response.raise_for_status()
+    body = response.json()
+    latency_ms = int((time.perf_counter() - t0) * 1000)
+
+    answer = body.get("message", {}).get("content", "")
+    citations = _extract_citations(answer, chunks)
+    input_tokens = int(body.get("prompt_eval_count") or 0)
+    output_tokens = int(body.get("eval_count") or 0)
+    used_model = str(body.get("model") or model)
+
+    result = GenerationResult(
+        query=query,
+        answer=answer,
+        citations=citations,
+        model=used_model,
+        input_tokens=input_tokens,
+        output_tokens=output_tokens,
+        latency_ms=latency_ms,
+        chunk_count=len(chunks),
+    )
+
+    log.info(
+        "Generated local answer: %d chars, %d citations, %d+%d tokens, %dms (%s)",
+        len(answer),
+        len(citations),
+        result.input_tokens,
+        result.output_tokens,
+        result.latency_ms,
+        used_model,
+    )
+    return result
+
+
 def _format_chunks_for_prompt(chunks: list[dict[str, Any]]) -> str:
     """Format retrieved chunks as numbered context blocks."""
     parts: list[str] = []
@@ -169,12 +243,12 @@ def generate_answer(
     temperature: float = 0.0,
 ) -> GenerationResult:
     """
-    Generate a cited answer from retrieved chunks via Claude.
+    Generate a cited answer from retrieved chunks via configured provider.
 
     Args:
         query: The user's natural-language question.
         chunks: Retrieved chunks (from rag.retriever.retrieve()).
-        model: Claude model name. Defaults to LLM_MODEL env var.
+        model: Model name. Defaults to provider-specific env var.
         max_tokens: Maximum output tokens.
         temperature: Sampling temperature (low = more deterministic).
 
@@ -182,20 +256,31 @@ def generate_answer(
         GenerationResult with answer text, parsed citations, and usage stats.
 
     Raises:
-        RuntimeError: If ANTHROPIC_API_KEY is not set.
-        anthropic.APIError: On API failures.
+        RuntimeError: If configured provider credentials/runtime are unavailable.
     """
+    capabilities = get_provider_capabilities()
+    if capabilities.supports_local_runtime:
+        local_model = model or os.environ.get(
+            "OLLAMA_MODEL", "qwen2.5:14b-instruct-q4_K_M"
+        )
+        return _generate_with_ollama(
+            query,
+            chunks,
+            model=local_model,
+            max_tokens=max_tokens,
+            temperature=temperature,
+        )
+
     import anthropic
 
     api_key = os.environ.get("ANTHROPIC_API_KEY")
     if not api_key:
         raise RuntimeError(
             "ANTHROPIC_API_KEY is not set. "
-            "Add it to .env before using the generator."
+            "Add it to .env before using Anthropic generation."
         )
 
     model = model or os.environ.get("LLM_MODEL", "claude-sonnet-4-20250514")
-    capabilities = get_provider_capabilities()
     cache_requested = _env_bool("ANTHROPIC_PROMPT_CACHE_ENABLED", False)
     cache_enabled = cache_requested and capabilities.supports_prompt_caching
     if cache_requested and not capabilities.supports_prompt_caching:

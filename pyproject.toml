@@ -41,6 +41,10 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
+mcp = [
+  "langchain-mcp-adapters",
+]
+
 dev = [
     "pytest>=8.2.0",
     "pytest-asyncio>=0.23.0",
@@ -51,6 +55,7 @@ dev = [
 eval = [
     "ragas>=0.1.8",
     "datasets>=2.19.0",
+    "langsmith>=0.1.77",                # eval/local observability tracing
     "langchain-anthropic>=0.3.0",        # wraps Claude as RAGAs evaluator LLM
     "langchain-huggingface>=0.1.0",      # preferred HF embedding adapter path
     "langchain-google-vertexai>=2.0.0",  # peer dep ragas needs but doesn't declare

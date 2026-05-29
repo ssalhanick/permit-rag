@@ -35,6 +35,31 @@ pip install sentence-transformers einops  # for local embeddings
 
 Copy `.env.example` → `.env` and fill in your credentials.
 
+
+---
+
+## LangChain MCP Adapters (Optional)
+
+`langchain-mcp-adapters` is an optional integration layer that lets LangChain
+agents call tools exposed by MCP (Model Context Protocol) servers. In this
+project, it is intended for future tool-based workflows and is not required
+for core ingestion/retrieval/generation paths.
+
+### Why use it
+
+- Connect LangChain flows to MCP tool servers without custom transport code
+- Reuse MCP tool definitions in local or remote agent workflows
+- Keep MCP integrations isolated from core app dependencies
+
+### Install / activate
+
+If `langchain-mcp-adapters` is configured as an optional dependency group
+(e.g., `mcp`) in `pyproject.toml`:
+
+```bash
+# from project root, with venv active
+pip install -e ".[mcp]"
+
 ---
 
 ## Project Structure

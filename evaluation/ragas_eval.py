@@ -129,6 +129,98 @@ class CacheStats:
     misses: int = 0
 
 
+# ── LangSmith tracing helpers (optional, eval-local only) ──
+
+
+def _langsmith_enabled() -> bool:
+    """Return True when LangSmith tracing is explicitly enabled."""
+    if not _env_bool("LANGCHAIN_TRACING_V2", False):
+        return False
+    if not os.environ.get("LANGSMITH_API_KEY", "").strip():
+        log.info(
+            "LANGCHAIN_TRACING_V2 is true but LANGSMITH_API_KEY is missing;"
+            " tracing disabled."
+        )
+        return False
+    try:
+        import langsmith.run_trees  # noqa: F401
+    except ImportError:
+        log.warning("LangSmith SDK not installed; tracing disabled.")
+        return False
+    return True
+
+
+def _start_trace(
+    *,
+    name: str,
+    run_type: str,
+    inputs: dict[str, Any],
+    parent: Any = None,
+) -> Any:
+    """Start a LangSmith run/span and return its handle."""
+    try:
+        if parent is None:
+            from langsmith.run_trees import RunTree
+
+            kwargs: dict[str, Any] = {
+                "name": name,
+                "run_type": run_type,
+                "inputs": inputs,
+            }
+            project_name = os.environ.get("LANGCHAIN_PROJECT", "").strip()
+            if project_name:
+                kwargs["project_name"] = project_name
+            run = RunTree(**kwargs)
+        else:
+            run = parent.create_child(
+                name=name,
+                run_type=run_type,
+                inputs=inputs,
+            )
+        run.post()
+        return run
+    except Exception as exc:
+        log.warning("Failed to start LangSmith trace '%s': %s", name, exc)
+        return None
+
+
+def _end_trace(
+    run: Any,
+    *,
+    outputs: Optional[dict[str, Any]] = None,
+    error: Optional[str] = None,
+) -> None:
+    """End and patch a LangSmith run/span safely."""
+    if run is None:
+        return
+    try:
+        run.end(outputs=outputs, error=error)
+        patch_result = run.patch()
+        if hasattr(patch_result, "result"):
+            patch_result.result()
+    except Exception as exc:
+        log.warning("Failed to finalize LangSmith trace: %s", exc)
+
+
+def _serialize_eval_result(result: EvalResult) -> dict[str, Any]:
+    """Convert EvalResult into a serializable dictionary."""
+    return {
+        "query": result.query,
+        "municipality": result.municipality,
+        "num_chunks": result.num_chunks,
+        "top_similarity": result.top_similarity,
+        "faithfulness": result.faithfulness,
+        "relevancy": result.relevancy,
+        "context_precision": result.context_precision,
+        "answer_preview": result.answer_preview,
+        "latency_retrieval_ms": result.latency_retrieval_ms,
+        "latency_generation_ms": result.latency_generation_ms,
+        "latency_scoring_ms": result.latency_scoring_ms,
+        "answer_cache_hit": result.answer_cache_hit,
+        "error": result.error,
+    }
+
+
 # ── LLM + Embeddings factory ─────────────────────────────────
 
 
@@ -136,9 +228,16 @@ def _get_evaluator_llm() -> Any:
     """Create evaluator LLM wrapper for RAGAs scoring."""
     from langchain_anthropic import ChatAnthropic
 
+    eval_provider = os.environ.get("RAGAS_EVAL_PROVIDER", "anthropic").strip().lower()
     model = os.environ.get("LLM_MODEL", "claude-sonnet-4-20250514")
     max_tokens = int(os.environ.get("RAGAS_EVAL_MAX_TOKENS", "4096"))
     capabilities = get_provider_capabilities()
+    if eval_provider in {"ollama", "local"}:
+        from evaluation.ollama_eval_llm import OllamaEvalLLM
+
+        local_model = os.environ.get("OLLAMA_MODEL", "qwen2.5:14b-instruct-q4_K_M")
+        return OllamaEvalLLM(model=local_model, max_tokens=max_tokens)
+
     cache_requested = _env_bool("ANTHROPIC_PROMPT_CACHE_ENABLED", False)
     if capabilities.supports_prompt_caching and cache_requested:
         from evaluation.anthropic_eval_llm import AnthropicCachedEvalLLM
@@ -365,6 +464,9 @@ def evaluate_query(
     cache_stats: CacheStats,
     *,
     retrieval_only: bool = False,
+    trace_parent: Any = None,
+    query_position: int = 0,
+    query_total: int = 0,
 ) -> EvalResult:
     """
     Run a single query through retrieve → generate → score.
@@ -384,20 +486,63 @@ def evaluate_query(
     query = query_def["query"]
     municipality = query_def.get("municipality")
     top_k = query_def.get("top_k", 10)
+    answer = ""
+    trace_start = time.perf_counter()
+    query_trace = _start_trace(
+        name=f"evaluate_query_{query_position}",
+        run_type="chain",
+        inputs={
+            "query_position": query_position,
+            "query_total": query_total,
+            "query": query,
+            "municipality": municipality,
+            "top_k": top_k,
+            "retrieval_only": retrieval_only,
+        },
+        parent=trace_parent,
+    ) if trace_parent is not None else None
 
     # 1. Retrieve
+    retrieval_span = _start_trace(
+        name="retrieval",
+        run_type="tool",
+        inputs={"query": query, "municipality": municipality, "top_k": top_k},
+        parent=query_trace,
+    ) if query_trace is not None else None
     try:
         result: RetrievalResult = retrieve(
             query, top_k=top_k, municipality=municipality
         )
+        _end_trace(
+            retrieval_span,
+            outputs={
+                "num_chunks": result.num_results,
+                "top_similarity": result.top_similarity,
+                "latency_retrieval_ms": result.latency_ms,
+                "chunks": result.chunks,
+            },
+        )
     except Exception as exc:
-        return EvalResult(
+        error_message = f"Retrieval failed: {exc}"
+        _end_trace(retrieval_span, error=error_message)
+        eval_result = EvalResult(
             query=query,
             municipality=municipality,
             num_chunks=0,
             top_similarity=0.0,
-            error=f"Retrieval failed: {exc}",
+            error=error_message,
         )
+        _end_trace(
+            query_trace,
+            outputs={
+                "query": query,
+                "municipality": municipality,
+                "top_k": top_k,
+                "latency_total_ms": int((time.perf_counter() - trace_start) * 1000),
+            },
+            error=error_message,
+        )
+        return eval_result
 
     contexts = [c["content"] for c in result.chunks]
 
@@ -410,8 +555,19 @@ def evaluate_query(
     )
 
     # 2. Generate answer (unless retrieval-only mode)
-    answer = ""
     if not retrieval_only:
+        generation_span = _start_trace(
+            name="generation",
+            run_type="llm",
+            inputs={
+                "query": query,
+                "municipality": municipality,
+                "top_k": top_k,
+                "cache_enabled": cache_enabled,
+                "retrieved_chunks": result.chunks,
+            },
+            parent=query_trace,
+        ) if query_trace is not None else None
         try:
             from rag.generator import generate_answer
 
@@ -444,7 +600,16 @@ def evaluate_query(
                         "prompt_version": _cache_prompt_version(),
                     }
             eval_result.answer_preview = answer[:200]
+            _end_trace(
+                generation_span,
+                outputs={
+                    "answer": answer,
+                    "answer_cache_hit": eval_result.answer_cache_hit,
+                    "latency_generation_ms": eval_result.latency_generation_ms,
+                },
+            )
         except Exception as exc:
+            _end_trace(generation_span, error=f"Generation failed: {exc}")
             log.warning("Generation failed for query '%s': %s", query[:50], exc)
             eval_result.error = f"Generation failed: {exc}"
             # Fall through — we can still score context precision
@@ -459,6 +624,19 @@ def evaluate_query(
 
     # 4. Score with RAGAs
     t0 = time.perf_counter()
+    scoring_span = _start_trace(
+        name="scoring",
+        run_type="chain",
+        inputs={
+            "sample": {
+                "user_input": sample.user_input,
+                "response": sample.response,
+                "retrieved_contexts": sample.retrieved_contexts,
+            },
+            "skip_generation_metrics": retrieval_only,
+        },
+        parent=query_trace,
+    ) if query_trace is not None else None
     try:
         scores = asyncio.run(
             _score_sample(
@@ -471,12 +649,50 @@ def evaluate_query(
         eval_result.faithfulness = scores["faithfulness"]
         eval_result.relevancy = scores["relevancy"]
         eval_result.context_precision = scores["context_precision"]
+        eval_result.latency_scoring_ms = int((time.perf_counter() - t0) * 1000)
+        _end_trace(
+            scoring_span,
+            outputs={
+                "scores": scores,
+                "latency_scoring_ms": eval_result.latency_scoring_ms,
+            },
+        )
     except Exception as exc:
+        _end_trace(scoring_span, error=f"Scoring failed: {exc}")
         log.warning("RAGAs scoring failed for query '%s': %s", query[:50], exc)
         if not eval_result.error:
             eval_result.error = f"Scoring failed: {exc}"
+        eval_result.latency_scoring_ms = int((time.perf_counter() - t0) * 1000)
 
-    eval_result.latency_scoring_ms = int((time.perf_counter() - t0) * 1000)
+    _end_trace(
+        query_trace,
+        outputs={
+            "query": query,
+            "municipality": municipality,
+            "top_k": top_k,
+            "provider": os.environ.get("LLM_PROVIDER", "anthropic"),
+            "evaluator_provider": os.environ.get(
+                "RAGAS_EVAL_PROVIDER",
+                os.environ.get("LLM_PROVIDER", "anthropic"),
+            ),
+            "llm_model": os.environ.get("LLM_MODEL"),
+            "answer_cache_enabled": cache_enabled,
+            "answer_cache_hit": eval_result.answer_cache_hit,
+            "latency_retrieval_ms": eval_result.latency_retrieval_ms,
+            "latency_generation_ms": eval_result.latency_generation_ms,
+            "latency_scoring_ms": eval_result.latency_scoring_ms,
+            "latency_total_ms": int((time.perf_counter() - trace_start) * 1000),
+            "metrics": {
+                "faithfulness": eval_result.faithfulness,
+                "relevancy": eval_result.relevancy,
+                "context_precision": eval_result.context_precision,
+            },
+            "retrieved_chunks": result.chunks,
+            "retrieved_contexts": contexts,
+            "generated_answer": answer,
+        },
+        error=eval_result.error,
+    )
 
     return eval_result
 
@@ -510,6 +726,24 @@ def run_evaluation(
     cache_enabled = _env_bool("RAGAS_ANSWER_CACHE_ENABLED", True)
     answer_cache = _load_answer_cache() if cache_enabled else {}
     cache_stats = CacheStats()
+    tracing_enabled = _langsmith_enabled()
+
+    root_trace = _start_trace(
+        name="ragas_eval_run",
+        run_type="chain",
+        inputs={
+            "retrieval_only": retrieval_only,
+            "query_indices": query_indices or [],
+            "query_count": len(queries),
+            "llm_provider": os.environ.get("LLM_PROVIDER", "anthropic"),
+            "ragas_eval_provider": os.environ.get(
+                "RAGAS_EVAL_PROVIDER",
+                os.environ.get("LLM_PROVIDER", "anthropic"),
+            ),
+            "llm_model": os.environ.get("LLM_MODEL"),
+            "cache_enabled": cache_enabled,
+        },
+    ) if tracing_enabled else None
 
     evaluator_llm = _get_evaluator_llm()
     try:
@@ -534,6 +768,9 @@ def run_evaluation(
             cache_enabled,
             cache_stats,
             retrieval_only=retrieval_only,
+            trace_parent=root_trace,
+            query_position=i,
+            query_total=len(queries),
         )
         results.append(result)
 
@@ -551,6 +788,24 @@ def run_evaluation(
 
     if cache_enabled:
         _save_answer_cache(answer_cache)
+
+    def _avg(vals: list[Optional[float]]) -> Optional[float]:
+        real = [v for v in vals if v is not None]
+        return sum(real) / len(real) if real else None
+
+    _end_trace(
+        root_trace,
+        outputs={
+            "retrieval_only": retrieval_only,
+            "query_count": len(results),
+            "avg_faithfulness": _avg([r.faithfulness for r in results]),
+            "avg_relevancy": _avg([r.relevancy for r in results]),
+            "avg_context_precision": _avg([r.context_precision for r in results]),
+            "cache_hits": cache_stats.hits,
+            "cache_misses": cache_stats.misses,
+            "results": [_serialize_eval_result(r) for r in results],
+        },
+    )
 
     return results
 

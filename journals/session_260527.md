@@ -42,6 +42,34 @@ generation answer caching.
     `LLM_PROVIDER=anthropic` and prompt caching is enabled
   - falls back to existing LangChain evaluator wrapper otherwise
 
+### Added LangSmith eval tracing (local-dev, eval-only)
+
+- Added optional LangSmith tracing dependency to eval extras:
+  - `langsmith>=0.1.77`
+- Added `.env.example` placeholders for eval tracing:
+  - `LANGSMITH_API_KEY=`
+  - `LANGCHAIN_TRACING_V2=true`
+  - `LANGCHAIN_PROJECT=permit-rag-eval`
+  - optional `LANGCHAIN_ENDPOINT=...`
+- Instrumented `evaluation/ragas_eval.py` with additive trace boundaries:
+  - root run around `run_evaluation()`
+  - per-query child runs around `evaluate_query()`
+  - nested spans for retrieval, generation, and scoring
+- Included full payload debugging data in traces:
+  - query metadata, provider/model, cache hit/miss, metric outputs, latencies
+  - retrieved chunks/contexts, generated answer, and scoring sample payload
+- Added safe env-gated no-op behavior:
+  - tracing only activates when `LANGCHAIN_TRACING_V2=true` and
+    `LANGSMITH_API_KEY` is present
+  - missing SDK/key falls back without changing CLI behavior
+
+### LangSmith validation outcomes
+
+- Smoke eval traces appeared in LangSmith project with nested spans and payloads.
+- Back-to-back `ragas_eval` runs produced consistent summary metrics for the same
+  query subset, supporting instrumentation stability.
+- Existing CLI output/summary format remained unchanged (tracing additive only).
+
 ### Updated pyproject.toml (eval extras)
 
 - Added `langchain-huggingface>=0.1.0` to `[project.optional-dependencies].eval`

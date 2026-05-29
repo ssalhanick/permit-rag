@@ -1,6 +1,6 @@
 # permit_rag — State
 
-_Updated: 2026-05-27 (session, prompt caching update)_
+_Updated: 2026-05-28 (session, LangSmith eval tracing update)_
 
 ## Phase
 
@@ -50,6 +50,8 @@ answer caching: strict-key generation cache enabled for eval reruns
 cache validation: query 0 run 1 = miss (0 hit / 1 miss), run 2 = hit (1 hit / 0 miss)
 prompt caching rollout: Anthropic explicit-breakpoint path wired for generator + evaluator
 prompt caching observation: evaluator usage logs currently show cache create/read=0/0 on sampled calls (instrumented, no cache benefit yet)
+langsmith tracing: eval-only instrumentation added in `evaluation/ragas_eval.py` (run + per-query + retrieval/generation/scoring spans)
+langsmith validation: traces visible in LangSmith project for smoke eval; tracing remains no-op when env flags/API key are unset
 
 ## Docs
 
@@ -96,3 +98,4 @@ prompt caching observation: evaluator usage logs currently show cache create/rea
 - Eval answer cache strategy: generation-only cache with strict key (query + retrieval fingerprint + model + prompt version)
 - LLM provider capability layer added (`LLM_PROVIDER` + `supports_prompt_caching`) so prompt caching is optional and Anthropic-specific
 - Anthropic prompt caching uses explicit system-block breakpoints (`cache_control`) gated by provider capability + env flag
+- LangSmith tracing scope is eval-local only (gated by `LANGCHAIN_TRACING_V2` + `LANGSMITH_API_KEY`) with full payload capture for prompt/metric debugging
