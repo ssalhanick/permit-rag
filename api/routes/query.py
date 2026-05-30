@@ -10,6 +10,7 @@ Import boundary: api/ → rag/, db/, audit/, standard library only (AGENTS.md).
 from __future__ import annotations
 
 import logging
+import os
 
 from fastapi import APIRouter, HTTPException
 
@@ -27,6 +28,8 @@ from rag.retriever import retrieve
 log = logging.getLogger(__name__)
 
 router = APIRouter(tags=["query"])
+MIN_GROUNDED_CHUNKS = int(os.environ.get("RAG_GUARD_MIN_CHUNKS", "3"))
+MIN_GROUNDED_TOP_SIM = float(os.environ.get("RAG_GUARD_MIN_TOP_SIM", "0.74"))
 
 
 @router.post(
@@ -98,7 +101,7 @@ def query_chunks(body: QueryRequest) -> QueryResponse:
     "/query/answer",
     response_model=AnswerResponse,
     responses={
-        422: {"model": ErrorResponse, "description": "Validation error"},
+        422: {"model": ErrorResponse, "description": "Validation or low-confidence retrieval"},
         500: {"model": ErrorResponse, "description": "Retrieval or generation failure"},
     },
     summary="Generate a cited answer from retrieved chunks",
@@ -132,6 +135,20 @@ def query_answer(body: QueryRequest) -> AnswerResponse:
         raise HTTPException(
             status_code=404,
             detail="No relevant chunks found for this query.",
+        )
+
+    if (
+        result.num_results < MIN_GROUNDED_CHUNKS
+        or result.top_similarity < MIN_GROUNDED_TOP_SIM
+    ):
+        raise HTTPException(
+            status_code=422,
+            detail=(
+                "Insufficient retrieval confidence for grounded answer. "
+                f"chunks={result.num_results}, top_similarity={result.top_similarity:.4f}, "
+                f"required_chunks>={MIN_GROUNDED_CHUNKS}, "
+                f"required_top_similarity>={MIN_GROUNDED_TOP_SIM:.2f}"
+            ),
         )
 
     # 2. Generate answer

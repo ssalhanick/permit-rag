@@ -1,0 +1,16 @@
+[
+  {
+    "query": "What are the building permit requirements in Plano?",
+    "municipality": "plano",
+    "num_chunks": 10,
+    "top_similarity": 0.7449596372222698,
+    "faithfulness": 0.5,
+    "relevancy": 0.0,
+    "context_precision": 0.0,
+    "latency_retrieval_ms": 3790,
+    "latency_generation_ms": 2869,
+    "latency_scoring_ms": 191806,
+    "answer_cache_hit": false,
+    "error": null
+  }
+]

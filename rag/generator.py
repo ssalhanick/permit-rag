@@ -56,10 +56,11 @@ Rules:
 4. If sources conflict, explicitly note the conflict and cite both sides.
 5. If jurisdiction is ambiguous, state what jurisdiction the cited chunks appear \
    to apply to.
-6. Keep answers concise and structured. Use bullet points for multi-part answers.
+6. If context is insufficient, state that the question cannot be answered based on the available context and do not infer.
+7. Keep answers concise and structured. Use bullet points for multi-part answers.
 Output style:
 - Start with a direct answer in 1-2 sentences when possible.
-- Follow with short bullet points of supporting details.
+- Follow with 1-2short bullet points of supporting details.
 - Include citations on claims that state requirements, limits, or conditions.
 - Avoid generic background unless it is needed to interpret a cited requirement.
 """
@@ -295,7 +296,7 @@ def generate_answer(
         f"Question: {query}\n\n"
         f"Context ({len(chunks)} chunks):\n\n"
         f"{context}\n\n"
-        f"Provide a thorough, cited answer based on the above context."
+        f"Provide a strictly grounded, cited answer based on the above context. Use only facts explicitly present in context."
     )
 
     t0 = time.perf_counter()

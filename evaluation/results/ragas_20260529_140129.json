@@ -1,0 +1,16 @@
+[
+  {
+    "query": "What are the building permit requirements in Plano?",
+    "municipality": "plano",
+    "num_chunks": 0,
+    "top_similarity": 0.0,
+    "faithfulness": null,
+    "relevancy": null,
+    "context_precision": null,
+    "latency_retrieval_ms": 0,
+    "latency_generation_ms": 0,
+    "latency_scoring_ms": 0,
+    "answer_cache_hit": null,
+    "error": "Retrieval failed: unsupported operand type(s) for +: 'float' and 'NoneType'"
+  }
+]

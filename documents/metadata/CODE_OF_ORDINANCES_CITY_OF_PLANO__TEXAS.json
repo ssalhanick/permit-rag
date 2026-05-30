@@ -1,0 +1,36 @@
+{
+  "doc_id": "CODE_OF_ORDINANCES_CITY_OF_PLANO__TEXAS",
+  "verifications": {
+    "download": {
+      "result": "pass",
+      "detail": {
+        "raw_path": "documents\\raw\\CODE_OF_ORDINANCES_CITY_OF_PLANO__TEXAS.docx",
+        "file_size_bytes": 107943,
+        "checksum_sha256": "3873f50532017e1a9ebeb937f4663809f047a796080edc85202b42972330f682"
+      }
+    },
+    "extraction": {
+      "result": "pass",
+      "detail": {
+        "raw_chars": 223555
+      }
+    },
+    "chunking": {
+      "result": "pass",
+      "detail": {
+        "source_chars": 223534,
+        "chunk_chars": 240667,
+        "num_chunks": 185,
+        "coverage_ratio": 1.0766
+      }
+    },
+    "embedding": {
+      "result": "pass",
+      "detail": {
+        "num_chunks": 185,
+        "num_embedded": 185,
+        "embedding_dim": 768
+      }
+    }
+  }
+}

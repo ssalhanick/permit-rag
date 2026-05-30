@@ -1,0 +1,36 @@
+{
+  "doc_id": "plano-2",
+  "verifications": {
+    "download": {
+      "result": "pass",
+      "detail": {
+        "raw_path": "documents\\raw\\plano-2.docx",
+        "file_size_bytes": 1448045,
+        "checksum_sha256": "01612cccfbc7f741a8afde2f328479e522fac2ef1316b37d8daf4ffdaea21004"
+      }
+    },
+    "extraction": {
+      "result": "pass",
+      "detail": {
+        "raw_chars": 788510
+      }
+    },
+    "chunking": {
+      "result": "pass",
+      "detail": {
+        "source_chars": 788508,
+        "chunk_chars": 840262,
+        "num_chunks": 632,
+        "coverage_ratio": 1.0656
+      }
+    },
+    "embedding": {
+      "result": "pass",
+      "detail": {
+        "num_chunks": 632,
+        "num_embedded": 632,
+        "embedding_dim": 768
+      }
+    }
+  }
+}

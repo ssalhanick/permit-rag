@@ -43,10 +43,11 @@ def get_catalog_entry(doc_id: str) -> dict | None:
     return None
 
 
-def ingest_all():
-    """Ingest all passing documents into the database."""
+def ingest_all(*, new_only: bool = True):
+    """Ingest passing documents into the database."""
     from db.client import (
         close_pool,
+        get_document_by_doc_id,
         insert_chunks,
         insert_document,
         ping,
@@ -77,11 +78,16 @@ def ingest_all():
         len(all_doc_ids), len(doc_ids), len(SKIP_DOC_IDS),
     )
 
-    results = {"success": [], "fail": []}
+    results = {"success": [], "fail": [], "skipped_existing": []}
 
     for doc_id in doc_ids:
         log.info("\n" + "=" * 60)
         log.info("Ingesting: %s", doc_id)
+
+        if new_only and get_document_by_doc_id(doc_id):
+            log.info("Skipping existing document (new-only mode): %s", doc_id)
+            results["skipped_existing"].append(doc_id)
+            continue
 
         # ── Step 1: Chunk the document ──────────────────────────
         try:
@@ -159,6 +165,7 @@ def ingest_all():
     print("  INGESTION SUMMARY")
     print(f"{'=' * 60}")
     print(f"  Succeeded: {len(results['success'])}")
+    print(f"  Skipped existing: {len(results['skipped_existing'])}")
     print(f"  Failed:    {len(results['fail'])}")
 
     total_chunks = sum(r["num_chunks"] for r in results["success"])
@@ -176,4 +183,16 @@ def ingest_all():
 
 
 if __name__ == "__main__":
-    ingest_all()
+    import argparse
+
+    parser = argparse.ArgumentParser(
+        description="Ingest documents into DB (new-only by default)"
+    )
+    parser.add_argument(
+        "--include-existing",
+        action="store_true",
+        help="Re-ingest existing doc_ids (default: skip existing)",
+    )
+    args = parser.parse_args()
+
+    ingest_all(new_only=not args.include_existing)

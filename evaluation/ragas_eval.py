@@ -49,7 +49,33 @@ from rag.llm_provider import get_provider_capabilities
 log = logging.getLogger(__name__)
 ANSWER_CACHE_DEFAULT_PATH = "evaluation/cache/answers.json"
 ANSWER_CACHE_PROMPT_VERSION = "v1"
+# Guardrails: retrieval confidence required before free-form generation
+MIN_GROUNDED_CHUNKS = int(os.environ.get("RAG_GUARD_MIN_CHUNKS", "3"))
+MIN_GROUNDED_TOP_SIM = float(os.environ.get("RAG_GUARD_MIN_TOP_SIM", "0.74"))
 
+
+def _guardrail_triggered(num_chunks: int, top_similarity: float) -> bool:
+    """Return True when retrieval confidence is too weak for grounded generation."""
+    return (
+        num_chunks < MIN_GROUNDED_CHUNKS
+        or top_similarity < MIN_GROUNDED_TOP_SIM
+    )
+
+
+def _abstain_answer_from_context(chunks: list[dict[str, Any]]) -> str:
+    """Return a grounded abstention answer with best available citation."""
+    if not chunks:
+        return (
+            "I do not have enough high-confidence source context to answer this "
+            "reliably. Please refine the question or provide a jurisdiction/document."
+        )
+    first = chunks[0]
+    citation = f"[{first.get('doc_id', 'unknown-doc')}, chunk {first.get('chunk_index', '?')}]"
+    return (
+        "I do not have enough high-confidence source support to provide a reliable "
+        "requirement-level answer from the retrieved context. "
+        f"Best available source: {citation}"
+    )
 
 # ── Test queries (mirrors rag/pipeline.py TEST_QUERIES) ──────
 
@@ -498,6 +524,10 @@ def evaluate_query(
             "municipality": municipality,
             "top_k": top_k,
             "retrieval_only": retrieval_only,
+            "guardrail_thresholds": {
+                "min_chunks": MIN_GROUNDED_CHUNKS,
+                "min_top_similarity": MIN_GROUNDED_TOP_SIM,
+            },
         },
         parent=trace_parent,
     ) if trace_parent is not None else None
@@ -554,8 +584,20 @@ def evaluate_query(
         latency_retrieval_ms=result.latency_ms,
     )
 
+    guardrail_on = _guardrail_triggered(result.num_results, result.top_similarity)
+    if not retrieval_only and guardrail_on:
+        answer = _abstain_answer_from_context(result.chunks)
+        eval_result.answer_preview = answer[:200]
+        eval_result.latency_generation_ms = 0
+        eval_result.answer_cache_hit = None
+        log.info(
+            "Generation guardrail triggered: chunks=%d top_sim=%.4f",
+            result.num_results,
+            result.top_similarity,
+        )
+
     # 2. Generate answer (unless retrieval-only mode)
-    if not retrieval_only:
+    if not retrieval_only and not guardrail_on:
         generation_span = _start_trace(
             name="generation",
             run_type="llm",
@@ -565,6 +607,11 @@ def evaluate_query(
                 "top_k": top_k,
                 "cache_enabled": cache_enabled,
                 "retrieved_chunks": result.chunks,
+                "guardrail_triggered": guardrail_on,
+                "guardrail_thresholds": {
+                    "min_chunks": MIN_GROUNDED_CHUNKS,
+                    "min_top_similarity": MIN_GROUNDED_TOP_SIM,
+                },
             },
             parent=query_trace,
         ) if query_trace is not None else None
@@ -682,6 +729,11 @@ def evaluate_query(
             "latency_generation_ms": eval_result.latency_generation_ms,
             "latency_scoring_ms": eval_result.latency_scoring_ms,
             "latency_total_ms": int((time.perf_counter() - trace_start) * 1000),
+            "guardrail": {
+                "triggered": guardrail_on,
+                "min_chunks": MIN_GROUNDED_CHUNKS,
+                "min_top_similarity": MIN_GROUNDED_TOP_SIM,
+            },
             "metrics": {
                 "faithfulness": eval_result.faithfulness,
                 "relevancy": eval_result.relevancy,

@@ -18,6 +18,15 @@ and Fort Worth municipal codes, plus Texas state and federal regs.
 
 ---
 
+## Post-Session Protocol (mandatory, no exceptions)
+1. Do a health check of the readme file to make sure everything is documented and up to date based on the session we just finished.
+2. Write a single line git commit message and put it in the session, as well as in the chat window.
+3. Update the STATE.md file, removing unnecessary/outdated/deprecated documentation from the previous state. The state.md file should always include a checklist of deliverables and the validation/verification steps for the deliverables.
+4. Update the session_{date}.md file with what was accomplished in the current session.
+5. Write a prompt for the next session referencing what needs to be done, along with the state, previous session and agents.md file.
+
+---
+
 ## Code Rules
 
 - Python 3.11+ only — no walrus operator abuse, no 3.10 match hacks
@@ -30,7 +39,6 @@ and Fort Worth municipal codes, plus Texas state and federal regs.
 - All python module terminal commands will be run manually (I'll run them after you generate them)
 - All docker commands will be run manually (I'll run them after you generate them)
 - If you want me to run an ad hoc terminal command, please provide the full command in a single line for me to paste into the terminal.
-- At the end of a session, write a prompt for the next session and a single line git commit message summary of the session. It can be long, but it has to be a single line.
 
 ---
 
