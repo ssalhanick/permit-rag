@@ -973,6 +973,7 @@ def _print_summary(
 def export_results(
     results: list[EvalResult],
     output_path: Optional[Path] = None,
+    run_command: Optional[str] = None,
 ) -> Path:
     """Export evaluation results to JSON for tracking."""
     if output_path is None:
@@ -981,9 +982,9 @@ def export_results(
         ts = time.strftime("%Y%m%d_%H%M%S")
         output_path = output_path / f"ragas_{ts}.json"
 
-    data = []
+    per_query = []
     for r in results:
-        data.append({
+        per_query.append({
             "query": r.query,
             "municipality": r.municipality,
             "num_chunks": r.num_chunks,
@@ -997,10 +998,24 @@ def export_results(
             "answer_cache_hit": r.answer_cache_hit,
             "error": r.error,
         })
+    payload = {
+        "run_command": run_command,
+        "exported_at": time.strftime("%Y-%m-%d %H:%M:%S"),
+        "query_count": len(per_query),
+        "results": per_query,
+    }
 
-    output_path.write_text(json.dumps(data, indent=2))
+    output_path.write_text(json.dumps(payload, indent=2))
     print(f"  Results exported to {output_path}")
     return output_path
+
+
+def _build_cli_command(argv: list[str]) -> str:
+    """Build a reproducible CLI command string from argv."""
+    if len(argv) <= 1:
+        return "py -m evaluation.ragas_eval"
+    args = " ".join(argv[1:])
+    return f"py -m evaluation.ragas_eval {args}"
 
 
 # ════════════════════════════════════════════════
@@ -1009,6 +1024,7 @@ def export_results(
 
 if __name__ == "__main__":
     import argparse
+    import sys
 
     from dotenv import load_dotenv
 
@@ -1047,4 +1063,7 @@ if __name__ == "__main__":
     )
 
     if args.export:
-        export_results(results)
+        export_results(
+            results,
+            run_command=_build_cli_command(sys.argv),
+        )

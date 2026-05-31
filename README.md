@@ -59,6 +59,7 @@ If `langchain-mcp-adapters` is configured as an optional dependency group
 ```bash
 # from project root, with venv active
 pip install -e ".[mcp]"
+```
 
 ---
 
@@ -83,6 +84,7 @@ permit_rag/
 ├── documents/
 │   ├── raw/            # Downloaded PDFs + HTML (gitignored)
 │   ├── metadata/       # JSON sidecar per document
+│   ├── catalog.json    # Source catalog entries for harvester
 │   └── registry.json   # Master document registry
 ├── scripts/            # One-off utilities
 ├── tests/              # pytest test suite
@@ -101,6 +103,8 @@ permit_rag/
 docker compose up -d
 
 # Download all catalog documents
+# If a matching doc_id file already exists in documents/raw and --force is not set,
+# harvester reuses the local raw file instead of downloading from URL.
 py -m ingestion.harvester harvest
 
 # Force re-download even if unchanged
@@ -112,8 +116,15 @@ py -m ingestion.harvester monitor
 # Print governance summary
 py -m ingestion.harvester report
 
+# Edit source entries for harvesting
+# (add/remove docs and metadata here)
+# documents/catalog.json
+
 # Ingest all passing documents into DB (chunk + insert)
 py -m scripts.ingest_documents
+
+# Re-ingest existing doc_ids too (use after normalization changes)
+py -m scripts.ingest_documents --include-existing
 
 # Embed a single document (smoke test)
 py -m ingestion.embedder texas-contractor-licensing-electrical
@@ -121,9 +132,114 @@ py -m ingestion.embedder texas-contractor-licensing-electrical
 # Embed all documents
 py -m ingestion.embedder
 
+# Force re-embed all chunks (including already-embedded chunks)
+py -m ingestion.embedder --force
+
 # Chunk + verify all documents (no DB insert)
 py -m scripts.run_chunk_verify
 ```
+
+---
+
+## Document Ingestion Pipeline
+
+Use this workflow for deterministic ingestion with normalization and embedding refresh.
+
+### 1) Set normalization + retrieval controls in `.env`
+
+```bash
+CHUNK_NORMALIZATION_ENABLED=true
+CHUNK_PROCEDURAL_FILTER_ENABLED=true
+CHUNK_PROCEDURAL_DROP_THRESHOLD=3
+CHUNK_FILTER_WARN_DROP_RATIO=0.50
+RETRIEVAL_PROCEDURAL_PENALTY_ENABLED=true
+RETRIEVAL_PROCEDURAL_PENALTY=0.015
+RETRIEVAL_PROCEDURAL_MAX_HITS=4
+# Hybrid retrieval rollout (default off for safe fallback)
+RETRIEVAL_HYBRID_ENABLED=false
+RETRIEVAL_DENSE_TOP_N=20
+RETRIEVAL_BM25_TOP_N=20
+RETRIEVAL_RRF_K=60
+RETRIEVAL_RRF_DENSE_WEIGHT=1.0
+RETRIEVAL_RRF_BM25_WEIGHT=1.0
+```
+
+### 2) Download/update sources
+
+```bash
+# Reuse local raw files when doc_id files already exist
+py -m ingestion.harvester harvest
+```
+
+### 3) Ingest to DB
+
+```bash
+# New docs only (default)
+py -m scripts.ingest_documents
+
+# Include existing docs (recommended after cleaning/normalization changes)
+py -m scripts.ingest_documents --include-existing
+```
+
+### 4) Embed vectors
+
+```bash
+# Standard embed (only chunks with NULL embeddings)
+py -m ingestion.embedder
+
+# Force re-embed all chunks (use after major text normalization updates)
+py -m ingestion.embedder --force
+```
+
+### 5) Validate ingestion quality
+
+```bash
+# Retrieval previews for weak queries
+py -m rag.pipeline --municipality dallas --top-k 10 "What are the setback requirements for a residential fence in Dallas?"
+py -m rag.pipeline --top-k 10 "What are the ADA accessibility requirements for commercial buildings?"
+py -m rag.pipeline --municipality plano --top-k 10 "What are the building permit requirements in Plano?"
+py -m rag.pipeline --municipality dallas --top-k 10 "What are the fire sprinkler requirements for new construction in Dallas?"
+
+# Focused RAGAs pass then full suite
+$env:RAGAS_ANSWER_CACHE_ENABLED="false"; py -m evaluation.ragas_eval --query 0 2 4 5 --export
+$env:RAGAS_ANSWER_CACHE_PROMPT_VERSION="v4"; py -m evaluation.ragas_eval --export
+
+# Hybrid retrieval validation (feature-flagged)
+$env:RETRIEVAL_HYBRID_ENABLED="true"; py -m rag.pipeline --municipality dallas --top-k 10 "What are the setback requirements for a residential fence in Dallas?"
+$env:RETRIEVAL_HYBRID_ENABLED="true"; py -m rag.pipeline --municipality dallas --top-k 10 "What are the fire sprinkler requirements for new construction in Dallas?"
+$env:RETRIEVAL_HYBRID_ENABLED="true"; $env:RAGAS_ANSWER_CACHE_ENABLED="false"; py -m evaluation.ragas_eval --query 0 5 --export
+```
+
+Notes:
+- `chunk_document()` logs normalization stats (`chunks_before_filter`, `chunks_dropped`, `chunk_drop_ratio`).
+- If `chunk_drop_ratio` exceeds `CHUNK_FILTER_WARN_DROP_RATIO`, review source quality and thresholds.
+- Hybrid mode is rollback-safe: set `RETRIEVAL_HYBRID_ENABLED=false` to return to dense-only retrieval immediately.
+
+---
+
+## Ingestion Health Check
+
+Use this quick checklist after catalog or harvesting changes:
+
+```bash
+# Validate catalog loader and duplicate/required-field checks
+py -m pytest tests/test_harvester_catalog.py
+
+# Rebuild registry from current catalog/raw state
+py -m ingestion.harvester harvest
+
+# Compare catalog vs registry coverage and list missing doc_ids
+py -m ingestion.harvester report
+
+# Ingest to DB and refresh vectors
+py -m scripts.ingest_documents --include-existing
+py -m ingestion.embedder --force
+```
+
+Expected health indicators:
+- Harvester summary prints `Used local raw` and `Downloaded from URL` counts.
+- `report` shows `Catalog documents`, `Registry documents`, and `Missing from registry`.
+- Missing list should only contain intentionally non-harvestable/manual-only sources.
 
 ---
 
@@ -224,5 +340,5 @@ mark_superseded(
 - **FastAPI** over Flask (async support, auto OpenAPI docs)
 - **Vite + React** over Next.js (simpler for MVP)
 - **Claude API** for generation; **nomic-embed-text-v1.5** for embeddings (768-dim, local inference)
-- **Hybrid search planned**: dense (pgvector HNSW) + BM25 (tsvector + GIN) via RRF — deferred to RAGAs ablation
+- **Hybrid search implemented (feature flag)**: dense (pgvector HNSW) + BM25 (tsvector + GIN) with RRF fusion, defaulted off pending faithfulness/regression gate
 - **Citations** must reference publisher + date, never imply direct city authority

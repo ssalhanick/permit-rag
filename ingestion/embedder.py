@@ -215,6 +215,7 @@ def embed_document(
     *,
     model_name: Optional[str] = None,
     dry_run: bool = False,
+    force: bool = False,
 ) -> dict[str, Any]:
     """
     Full embedding pipeline for a single document.
@@ -229,6 +230,7 @@ def embed_document(
         doc_id: Human-readable document ID.
         model_name: Model override (default from env or nomic).
         dry_run: If True, compute embeddings but don't store.
+        force: If True, re-embed all chunks even when embedding exists.
 
     Returns:
         Dict with doc_id, num_chunks, num_embedded, and
@@ -257,15 +259,15 @@ def embed_document(
             f"No chunks in DB for {doc_id}. Run chunker first."
         )
 
-    # 3. Filter to un-embedded chunks
-    to_embed = [c for c in chunks if c.get("embedding") is None]
+    # 3. Select chunks to embed
+    to_embed = chunks if force else [c for c in chunks if c.get("embedding") is None]
     log.info(
-        "Document %s: %d total chunks, %d need embedding",
-        doc_id, len(chunks), len(to_embed),
+        "Document %s: %d total chunks, %d need embedding (force=%s)",
+        doc_id, len(chunks), len(to_embed), force,
     )
 
     if not to_embed:
-        log.info("All chunks already embedded for %s", doc_id)
+        log.info("All chunks already embedded for %s (force=%s)", doc_id, force)
         return {
             "doc_id": doc_id,
             "num_chunks": len(chunks),
@@ -322,6 +324,7 @@ def embed_all_documents(
     model_name: Optional[str] = None,
     dry_run: bool = False,
     skip_failed: bool = True,
+    force: bool = False,
 ) -> list[dict[str, Any]]:
     """
     Run the embedding pipeline for every active document in the DB.
@@ -330,6 +333,7 @@ def embed_all_documents(
         model_name: Model override.
         dry_run: If True, don't store embeddings.
         skip_failed: If True, continue on errors.
+        force: If True, re-embed all chunks for all documents.
 
     Returns:
         List of result dicts (one per document).
@@ -348,6 +352,7 @@ def embed_all_documents(
                 doc_id,
                 model_name=model_name,
                 dry_run=dry_run,
+                force=force,
             )
             results.append(r)
         except Exception as exc:
@@ -402,6 +407,11 @@ if __name__ == "__main__":
         action="store_true",
         help="Compute embeddings but don't store in DB",
     )
+    parser.add_argument(
+        "--force",
+        action="store_true",
+        help="Recompute/store embeddings for all chunks, including existing vectors",
+    )
     args = parser.parse_args()
 
     logging.basicConfig(
@@ -414,6 +424,7 @@ if __name__ == "__main__":
             args.doc_id,
             model_name=args.model,
             dry_run=args.dry_run,
+            force=args.force,
         )
         print(f"\n{'='*50}")
         print(f"  doc_id      : {result['doc_id']}")
@@ -426,6 +437,7 @@ if __name__ == "__main__":
         results = embed_all_documents(
             model_name=args.model,
             dry_run=args.dry_run,
+            force=args.force,
         )
         passed = sum(
             1 for r in results

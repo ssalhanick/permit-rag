@@ -1,0 +1,16 @@
+[
+  {
+    "query": "What are the ADA accessibility requirements for commercial buildings?",
+    "municipality": null,
+    "num_chunks": 10,
+    "top_similarity": 0.8143583314846015,
+    "faithfulness": 0.7777777777777778,
+    "relevancy": 1.0,
+    "context_precision": 0.737755102030277,
+    "latency_retrieval_ms": 4052,
+    "latency_generation_ms": 4197,
+    "latency_scoring_ms": 201242,
+    "answer_cache_hit": null,
+    "error": null
+  }
+]

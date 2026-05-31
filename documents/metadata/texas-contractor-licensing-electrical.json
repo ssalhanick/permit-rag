@@ -7,18 +7,18 @@
   "authority_level": "state",
   "doc_type": "state_statute",
   "subject_tags": [
+    "licensing",
     "registration",
     "contractor",
-    "electrical",
-    "licensing"
+    "electrical"
   ],
   "effective_date": null,
   "version": null,
   "document_status": "active",
   "is_current": true,
   "supersedes_doc_id": null,
-  "review_due": "2026-11-18",
-  "ingested_at": "2026-05-22T22:16:04.333837Z",
+  "review_due": "2026-11-26",
+  "ingested_at": "2026-05-30T14:29:19.725447Z",
   "checksum_sha256": "3f40209d80d55de9b27ea69a7ae1c421ed8effdf9ec1ddae0e29bcfdf71f0085",
   "source_etag": null,
   "source_last_modified": null,
@@ -48,14 +48,6 @@
         "chunk_chars": 2905,
         "num_chunks": 2,
         "coverage_ratio": 1.0629
-      }
-    },
-    "embedding": {
-      "result": "pass",
-      "detail": {
-        "num_chunks": 2,
-        "num_embedded": 2,
-        "embedding_dim": 768
       }
     }
   }

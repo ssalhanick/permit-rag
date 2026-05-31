@@ -12,6 +12,7 @@ Run from project root:
 
 import logging
 import sys
+from functools import lru_cache
 from datetime import date, timedelta
 from pathlib import Path
 
@@ -35,12 +36,16 @@ SKIP_DOC_IDS = {
 
 def get_catalog_entry(doc_id: str) -> dict | None:
     """Look up a doc_id in the harvester catalog."""
-    from ingestion.harvester import DOCUMENT_CATALOG
+    return _catalog_by_doc_id().get(doc_id)
 
-    for entry in DOCUMENT_CATALOG:
-        if entry["doc_id"] == doc_id:
-            return entry
-    return None
+
+@lru_cache(maxsize=1)
+def _catalog_by_doc_id() -> dict[str, dict]:
+    """Load document catalog once and map by doc_id."""
+    from ingestion.harvester import load_document_catalog
+
+    catalog = load_document_catalog()
+    return {str(entry["doc_id"]): entry for entry in catalog}
 
 
 def ingest_all(*, new_only: bool = True):

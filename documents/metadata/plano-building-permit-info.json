@@ -7,9 +7,9 @@
   "authority_level": "municipal",
   "doc_type": "permit_checklist",
   "subject_tags": [
-    "residential",
-    "inspection",
     "checklist",
+    "inspection",
+    "residential",
     "permit",
     "commercial"
   ],
@@ -18,12 +18,12 @@
   "document_status": "active",
   "is_current": true,
   "supersedes_doc_id": null,
-  "review_due": "2026-07-21",
-  "ingested_at": "2026-05-22T22:16:04.333837Z",
-  "checksum_sha256": "1f6b1b6a17160004e4dadc4d0ffae157a379533cd852ba4e59dc992faf119521",
+  "review_due": "2026-07-29",
+  "ingested_at": "2026-05-30T14:29:19.725447Z",
+  "checksum_sha256": "81d032bf469cbbc7af651054ece3723af90cd640967c908ea4ab6f72c6670bc1",
   "source_etag": null,
-  "source_last_modified": "Fri, 22 May 2026 22:16:08 GMT",
-  "file_size_bytes": 74325,
+  "source_last_modified": "Sat, 30 May 2026 14:29:23 GMT",
+  "file_size_bytes": 76258,
   "page_count": null,
   "retrieval_weight": 1.0,
   "notes": "Plano building inspections landing page \u2014 scrape for PDF links",
@@ -32,8 +32,8 @@
       "result": "pass",
       "detail": {
         "raw_path": "documents\\raw\\plano-building-permit-info.html",
-        "file_size_bytes": 74325,
-        "checksum_sha256": "1f6b1b6a17160004e4dadc4d0ffae157a379533cd852ba4e59dc992faf119521"
+        "file_size_bytes": 76258,
+        "checksum_sha256": "81d032bf469cbbc7af651054ece3723af90cd640967c908ea4ab6f72c6670bc1"
       }
     },
     "extraction": {
@@ -49,14 +49,6 @@
         "chunk_chars": 280,
         "num_chunks": 1,
         "coverage_ratio": 1.0
-      }
-    },
-    "embedding": {
-      "result": "pass",
-      "detail": {
-        "num_chunks": 1,
-        "num_embedded": 1,
-        "embedding_dim": 768
       }
     }
   }

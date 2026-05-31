@@ -1,0 +1,44 @@
+[
+  {
+    "query": "What are the setback requirements for a residential fence in Dallas?",
+    "municipality": "dallas",
+    "num_chunks": 10,
+    "top_similarity": 0.7620133615740495,
+    "faithfulness": 0.8888888888888888,
+    "relevancy": 0.9892358877517954,
+    "context_precision": 0.19999999998,
+    "latency_retrieval_ms": 4398,
+    "latency_generation_ms": 4783,
+    "latency_scoring_ms": 196417,
+    "answer_cache_hit": null,
+    "error": null
+  },
+  {
+    "query": "What are the ADA accessibility requirements for commercial buildings?",
+    "municipality": null,
+    "num_chunks": 10,
+    "top_similarity": 0.8143583314846015,
+    "faithfulness": 1.0,
+    "relevancy": 0.0,
+    "context_precision": 0.7777777777518519,
+    "latency_retrieval_ms": 286,
+    "latency_generation_ms": 5380,
+    "latency_scoring_ms": 195733,
+    "answer_cache_hit": null,
+    "error": null
+  },
+  {
+    "query": "What are the fire sprinkler requirements for new construction in Dallas?",
+    "municipality": "dallas",
+    "num_chunks": 10,
+    "top_similarity": 0.7675591430138574,
+    "faithfulness": 0.4444444444444444,
+    "relevancy": 0.0,
+    "context_precision": 0.0,
+    "latency_retrieval_ms": 322,
+    "latency_generation_ms": 3919,
+    "latency_scoring_ms": 190040,
+    "answer_cache_hit": null,
+    "error": null
+  }
+]

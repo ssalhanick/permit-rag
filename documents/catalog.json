@@ -1,0 +1,461 @@
+[
+  {
+    "doc_id": "city-of-dallas-charter",
+    "url": "https://codelibrary.amlegal.com/codes/dallas/latest/dallas_tx/0-0-0-1",
+    "municipality": "dallas",
+    "authority_level": "municipal",
+    "doc_type": "administrative_rule",
+    "subject_tags": [
+      "charter",
+      "governance",
+      "authority",
+      "municipal"
+    ],
+    "version": null,
+    "notes": "Dallas City Charter \u2014 manually exported from amlegal PDF. Defines city government structure and authority.",
+    "review_days": 180
+  },
+  {
+    "doc_id": "city-of-dallas-ordiance-v1",
+    "url": "https://codelibrary.amlegal.com/codes/dallas/latest/dallas_tx/0-0-0-1",
+    "municipality": "dallas",
+    "authority_level": "municipal",
+    "doc_type": "zoning_ordinance",
+    "subject_tags": [
+      "zoning",
+      "land-use",
+      "setbacks",
+      "easements",
+      "residential",
+      "commercial",
+      "ordinance"
+    ],
+    "version": null,
+    "notes": "Dallas Code of Ordinances Volume I \u2014 manually exported from amlegal PDF. Review every 60 days.",
+    "review_days": 60
+  },
+  {
+    "doc_id": "city-of-dallas-ordiance-v2",
+    "url": "https://codelibrary.amlegal.com/codes/dallas/latest/dallas_tx/0-0-0-1",
+    "municipality": "dallas",
+    "authority_level": "municipal",
+    "doc_type": "building_code",
+    "subject_tags": [
+      "building-code",
+      "construction",
+      "permits",
+      "inspection",
+      "ordinance"
+    ],
+    "version": null,
+    "notes": "Dallas Code of Ordinances Volume II \u2014 manually exported from amlegal PDF. Review every 60 days.",
+    "review_days": 60
+  },
+  {
+    "doc_id": "city-of-dallas-ordiance-v3",
+    "url": "https://codelibrary.amlegal.com/codes/dallas/latest/dallas_tx/0-0-0-1",
+    "municipality": "dallas",
+    "authority_level": "municipal",
+    "doc_type": "zoning_ordinance",
+    "subject_tags": [
+      "zoning",
+      "land-use",
+      "development",
+      "subdivision",
+      "ordinance"
+    ],
+    "version": null,
+    "notes": "Dallas Code of Ordinances Volume III \u2014 manually exported from amlegal PDF. Review every 60 days.",
+    "review_days": 60
+  },
+  {
+    "doc_id": "dallas-building-permit-checklist",
+    "url": "https://www.dallascityhall.com/departments/sustainabledevelopment/buildinginspection/DCH%20Documents/New%20One%20and%20Two%20Family%20Dwelling%20Checklist.pdf",
+    "municipality": "dallas",
+    "authority_level": "municipal",
+    "doc_type": "permit_checklist",
+    "subject_tags": [
+      "permit",
+      "residential",
+      "checklist",
+      "inspection"
+    ],
+    "version": null,
+    "notes": "Dallas residential new construction permit checklist",
+    "review_days": 60
+  },
+  {
+    "doc_id": "dallas-fee-schedule",
+    "url": "https://www.dallascityhall.com/departments/sustainabledevelopment/buildinginspection/DCH%20Documents/Fee%20Schedule.pdf",
+    "municipality": "dallas",
+    "authority_level": "municipal",
+    "doc_type": "other",
+    "subject_tags": [
+      "fees",
+      "permit",
+      "inspection"
+    ],
+    "version": null,
+    "notes": "Dallas building inspection fee schedule \u2014 check every 30 days",
+    "review_days": 30
+  },
+  {
+    "doc_id": "dallas-fire-code-2021",
+    "url": "https://dallascityhall.com/departments/sustainabledevelopment/buildinginspection/lists/city%20codes%20and%20ordinances/allitems.aspxf",
+    "municipality": "dallas",
+    "authority_level": "municipal",
+    "doc_type": "fire_code",
+    "subject_tags": [
+      "fire-code",
+      "fire-safety",
+      "fire-prevention",
+      "fire-protection",
+      "fire-extinguisher",
+      "fire-alarm",
+      "fire-exit",
+      "fire-sprinkler",
+      "fire-hydrant"
+    ],
+    "version": null,
+    "notes": "Dallas Fire Code 2021 \u2014 check every 365 days",
+    "review_days": 365
+  },
+  {
+    "doc_id": "plano-municode-zoning",
+    "url": "https://library.municode.com/tx/plano/codes/code_of_ordinances",
+    "municipality": "plano",
+    "authority_level": "municipal",
+    "doc_type": "zoning_ordinance",
+    "subject_tags": [
+      "zoning",
+      "land-use",
+      "setbacks",
+      "easements",
+      "residential",
+      "commercial"
+    ],
+    "version": null,
+    "notes": "Plano full municipal code via Municode",
+    "review_days": 90
+  },
+  {
+    "doc_id": "plano-building-permit-info",
+    "url": "https://www.plano.gov/2161/Building-Inspections",
+    "municipality": "plano",
+    "authority_level": "municipal",
+    "doc_type": "permit_checklist",
+    "subject_tags": [
+      "permit",
+      "checklist",
+      "inspection",
+      "residential",
+      "commercial"
+    ],
+    "version": null,
+    "notes": "Plano building inspections landing page \u2014 scrape for PDF links",
+    "review_days": 60
+  },
+  {
+    "doc_id": "CODE_OF_ORDINANCES_CITY_OF_PLANO__TEXAS",
+    "url": "https://library.municode.com/tx/plano/codes/code_of_ordinances?nodeId=COORPLTE",
+    "municipality": "plano",
+    "authority_level": "municipal",
+    "doc_type": "zoning_ordinance",
+    "subject_tags": [
+      "zoning",
+      "land-use",
+      "setbacks",
+      "easements",
+      "residential",
+      "commercial"
+    ],
+    "version": null,
+    "notes": "Plano City Code of Ordinances via Municode",
+    "review_days": 60
+  },
+  {
+    "doc_id": "plano-1",
+    "url": "https://library.municode.com/tx/plano/codes/code_of_ordinances?nodeId=COORPLTE",
+    "municipality": "plano",
+    "authority_level": "municipal",
+    "doc_type": "zoning_ordinance",
+    "subject_tags": [
+      "charter",
+      "general-provisions",
+      "administration",
+      "alcoholic-beverages"
+    ],
+    "version": null,
+    "notes": "Plano City Code of Ordinances via Municode",
+    "review_days": 60
+  },
+  {
+    "doc_id": "plano-2",
+    "url": "https://library.municode.com/tx/plano/codes/code_of_ordinances?nodeId=COORPLTE",
+    "municipality": "plano",
+    "authority_level": "municipal",
+    "doc_type": "zoning_ordinance",
+    "subject_tags": [
+      "building-regulations",
+      "cable-television",
+      "emergency-services",
+      "fire-previention",
+      "food-code"
+    ],
+    "version": null,
+    "notes": "Plano City Code of Ordinances via Municode",
+    "review_days": 60
+  },
+  {
+    "doc_id": "plano-3",
+    "url": "https://library.municode.com/tx/plano/codes/code_of_ordinances?nodeId=COORPLTE",
+    "municipality": "plano",
+    "authority_level": "municipal",
+    "doc_type": "zoning_ordinance",
+    "subject_tags": [
+      "business-regulations",
+      "municipal-courts",
+      "planning-and-development"
+    ],
+    "version": null,
+    "notes": "Plano City Code of Ordinances via Municode",
+    "review_days": 60
+  },
+  {
+    "doc_id": "plano-4",
+    "url": "https://library.municode.com/tx/plano/codes/code_of_ordinances?nodeId=COORPLTE",
+    "municipality": "plano",
+    "authority_level": "municipal",
+    "doc_type": "zoning_ordinance",
+    "subject_tags": [
+      "police",
+      "solid-waste",
+      "streets-and-sidewalks",
+      "taxation",
+      "utilities"
+    ],
+    "version": null,
+    "notes": "Plano City Code of Ordinances via Municode",
+    "review_days": 60
+  },
+  {
+    "doc_id": "frisco-municode-zoning",
+    "url": "https://library.municode.com/tx/frisco/codes/code_of_ordinances",
+    "municipality": "frisco",
+    "authority_level": "municipal",
+    "doc_type": "zoning_ordinance",
+    "subject_tags": [
+      "zoning",
+      "land-use",
+      "setbacks",
+      "easements",
+      "residential",
+      "commercial"
+    ],
+    "version": null,
+    "notes": "Frisco full municipal code via Municode",
+    "review_days": 90
+  },
+  {
+    "doc_id": "frisco-unified-development-code",
+    "url": "https://www.friscotexas.gov/2785/Zoning-Ordinance",
+    "municipality": "frisco",
+    "authority_level": "municipal",
+    "doc_type": "zoning_ordinance",
+    "subject_tags": [
+      "zoning",
+      "udc",
+      "land-use",
+      "development"
+    ],
+    "version": null,
+    "notes": "Frisco UDC landing page",
+    "review_days": 90
+  },
+  {
+    "doc_id": "mckinney-municode-zoning",
+    "url": "https://library.municode.com/tx/mckinney/codes/code_of_ordinances",
+    "municipality": "mckinney",
+    "authority_level": "municipal",
+    "doc_type": "zoning_ordinance",
+    "subject_tags": [
+      "zoning",
+      "land-use",
+      "setbacks",
+      "easements",
+      "residential",
+      "commercial"
+    ],
+    "version": null,
+    "notes": "McKinney full municipal code via Municode",
+    "review_days": 90
+  },
+  {
+    "doc_id": "ftworth-tx-1",
+    "url": "https://codelibrary.amlegal.com/codes/ftworth/latest/ftworth_tx/0-0-0-1",
+    "municipality": "fortworth",
+    "authority_level": "municipal",
+    "doc_type": "zoning_ordinance",
+    "subject_tags": [
+      "zoning",
+      "land-use",
+      "setbacks",
+      "easements",
+      "residential",
+      "commercial"
+    ],
+    "version": null,
+    "notes": "Fort Worth full code via American Legal Publishing.",
+    "review_days": 60
+  },
+  {
+    "doc_id": "fortworth-upcodes-building",
+    "url": "https://up.codes/codes/fort-worth",
+    "municipality": "fortworth",
+    "authority_level": "municipal",
+    "doc_type": "building_code",
+    "subject_tags": [
+      "building-code",
+      "amendments",
+      "ordinance"
+    ],
+    "version": null,
+    "notes": "Fort Worth building code amendments with ordinance numbers and effective dates. Good source for amendment tracking.",
+    "review_days": 30
+  },
+  {
+    "doc_id": "texas-accessibility-standards",
+    "url": "https://www.tdlr.texas.gov/ab/abtas.htm",
+    "municipality": "texas",
+    "authority_level": "state",
+    "doc_type": "state_statute",
+    "subject_tags": [
+      "accessibility",
+      "ADA",
+      "TAS",
+      "commercial",
+      "public-buildings"
+    ],
+    "version": "2012",
+    "notes": "Texas Accessibility Standards \u2014 TDLR. Apply statewide to all commercial projects.",
+    "review_days": 180
+  },
+  {
+    "doc_id": "texas-contractor-licensing-hvac",
+    "url": "https://www.tdlr.texas.gov/air/airforms.htm",
+    "municipality": "texas",
+    "authority_level": "state",
+    "doc_type": "state_statute",
+    "subject_tags": [
+      "licensing",
+      "HVAC",
+      "contractor",
+      "registration"
+    ],
+    "version": null,
+    "notes": "TDLR HVAC contractor licensing requirements",
+    "review_days": 180
+  },
+  {
+    "doc_id": "texas-contractor-licensing-electrical",
+    "url": "https://www.tdlr.texas.gov/electricians/elec.htm",
+    "municipality": "texas",
+    "authority_level": "state",
+    "doc_type": "state_statute",
+    "subject_tags": [
+      "licensing",
+      "electrical",
+      "contractor",
+      "registration"
+    ],
+    "version": null,
+    "notes": "TDLR electrical contractor licensing requirements",
+    "review_days": 180
+  },
+  {
+    "doc_id": "texas-contractor-licensing-plumbing",
+    "url": "https://www.tsbpe.texas.gov/licensing",
+    "municipality": "texas",
+    "authority_level": "state",
+    "doc_type": "state_statute",
+    "subject_tags": [
+      "licensing",
+      "plumbing",
+      "contractor",
+      "registration"
+    ],
+    "version": null,
+    "notes": "Texas State Board of Plumbing Examiners licensing",
+    "review_days": 180
+  },
+  {
+    "doc_id": "osha-1926-construction",
+    "url": "https://www.osha.gov/laws-regs/regulations/standardnumber/1926",
+    "municipality": "federal",
+    "authority_level": "federal",
+    "doc_type": "federal_regulation",
+    "subject_tags": [
+      "OSHA",
+      "safety",
+      "fall-protection",
+      "scaffolding",
+      "electrical",
+      "excavation"
+    ],
+    "version": "1926",
+    "notes": "OSHA 29 CFR 1926 \u2014 Construction industry safety standards. Applies to all job sites.",
+    "review_days": 365
+  },
+  {
+    "doc_id": "ada-design-standards",
+    "url": "https://www.ada.gov/law-and-regs/design-standards/",
+    "municipality": "federal",
+    "authority_level": "federal",
+    "doc_type": "federal_regulation",
+    "subject_tags": [
+      "ADA",
+      "accessibility",
+      "design",
+      "commercial",
+      "public-accommodations"
+    ],
+    "version": "2010",
+    "notes": "ADA 2010 Design Standards \u2014 applies to all commercial construction.",
+    "review_days": 365
+  },
+  {
+    "doc_id": "ADA-Standards",
+    "url": "https://www.access-board.gov/ada/",
+    "municipality": "federal",
+    "authority_level": "federal",
+    "doc_type": "federal_regulation",
+    "subject_tags": [
+      "ADA",
+      "accessibility",
+      "design",
+      "commercial",
+      "public-accommodations"
+    ],
+    "version": "2010",
+    "notes": "ADA 2010 Design Standards \u2014 applies to all commercial construction.",
+    "review_days": 365
+  },
+  {
+    "doc_id": "epa-stormwater-construction",
+    "url": "https://www.epa.gov/npdes/stormwater-discharges-construction-activities",
+    "municipality": "federal",
+    "authority_level": "federal",
+    "doc_type": "federal_regulation",
+    "subject_tags": [
+      "EPA",
+      "stormwater",
+      "NPDES",
+      "erosion",
+      "grading",
+      "site-prep"
+    ],
+    "version": null,
+    "notes": "EPA NPDES stormwater requirements for construction sites over 1 acre.",
+    "review_days": 365
+  }
+]

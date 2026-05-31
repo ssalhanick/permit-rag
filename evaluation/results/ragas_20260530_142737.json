@@ -1,0 +1,35 @@
+{
+  "run_command": "py -m evaluation.ragas_eval --query 0 5 --export",
+  "exported_at": "2026-05-30 14:27:37",
+  "query_count": 2,
+  "results": [
+    {
+      "query": "What are the setback requirements for a residential fence in Dallas?",
+      "municipality": "dallas",
+      "num_chunks": 10,
+      "top_similarity": 0.7620133615740495,
+      "faithfulness": 1.0,
+      "relevancy": 0.0,
+      "context_precision": 0.19999999998,
+      "latency_retrieval_ms": 4850,
+      "latency_generation_ms": 4408,
+      "latency_scoring_ms": 196410,
+      "answer_cache_hit": null,
+      "error": null
+    },
+    {
+      "query": "What are the fire sprinkler requirements for new construction in Dallas?",
+      "municipality": "dallas",
+      "num_chunks": 10,
+      "top_similarity": 0.7675591430138574,
+      "faithfulness": 0.5,
+      "relevancy": 0.0,
+      "context_precision": 0.0,
+      "latency_retrieval_ms": 163,
+      "latency_generation_ms": 3275,
+      "latency_scoring_ms": 164162,
+      "answer_cache_hit": null,
+      "error": null
+    }
+  ]
+}

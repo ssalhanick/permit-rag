@@ -8,23 +8,23 @@
   "doc_type": "federal_regulation",
   "subject_tags": [
     "stormwater",
-    "erosion",
     "NPDES",
-    "EPA",
+    "erosion",
     "site-prep",
-    "grading"
+    "grading",
+    "EPA"
   ],
   "effective_date": null,
   "version": null,
   "document_status": "active",
   "is_current": true,
   "supersedes_doc_id": null,
-  "review_due": "2027-05-22",
-  "ingested_at": "2026-05-22T22:16:04.333837Z",
-  "checksum_sha256": "53982d97a1e38388de3eb9ffc534ef1f62b3b323523fd3735f97f1ca489c8d22",
-  "source_etag": "W/\"1779487277\"",
-  "source_last_modified": "Fri, 22 May 2026 22:01:17 GMT",
-  "file_size_bytes": 68883,
+  "review_due": "2027-05-30",
+  "ingested_at": "2026-05-30T14:29:19.725447Z",
+  "checksum_sha256": "7e387b99fd3f4130b96b0bfff958af2b7406e24b2bd42262b1089cfe5de30aa9",
+  "source_etag": "W/\"1780150687\"",
+  "source_last_modified": "Sat, 30 May 2026 14:18:07 GMT",
+  "file_size_bytes": 68882,
   "page_count": null,
   "retrieval_weight": 1.0,
   "notes": "EPA NPDES stormwater requirements for construction sites over 1 acre.",
@@ -33,31 +33,23 @@
       "result": "pass",
       "detail": {
         "raw_path": "documents\\raw\\epa-stormwater-construction.html",
-        "file_size_bytes": 68883,
-        "checksum_sha256": "53982d97a1e38388de3eb9ffc534ef1f62b3b323523fd3735f97f1ca489c8d22"
+        "file_size_bytes": 68882,
+        "checksum_sha256": "7e387b99fd3f4130b96b0bfff958af2b7406e24b2bd42262b1089cfe5de30aa9"
       }
     },
     "extraction": {
       "result": "pass",
       "detail": {
-        "raw_chars": 4769
+        "raw_chars": 4768
       }
     },
     "chunking": {
       "result": "pass",
       "detail": {
-        "source_chars": 4188,
-        "chunk_chars": 4348,
+        "source_chars": 4187,
+        "chunk_chars": 4347,
         "num_chunks": 4,
         "coverage_ratio": 1.0382
-      }
-    },
-    "embedding": {
-      "result": "pass",
-      "detail": {
-        "num_chunks": 4,
-        "num_embedded": 4,
-        "embedding_dim": 768
       }
     }
   }

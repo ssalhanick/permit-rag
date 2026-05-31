@@ -1,0 +1,36 @@
+{
+  "doc_id": "ftworth-tx-1",
+  "verifications": {
+    "download": {
+      "result": "pass",
+      "detail": {
+        "raw_path": "documents\\raw\\ftworth-tx-1.pdf",
+        "file_size_bytes": 36137638,
+        "checksum_sha256": "2ca7e5af474a9e5293274b07d4582c94e962c40e30e088a61dde3befb6ef37d4"
+      }
+    },
+    "extraction": {
+      "result": "pass",
+      "detail": {
+        "raw_chars": 8259180
+      }
+    },
+    "chunking": {
+      "result": "pass",
+      "detail": {
+        "source_chars": 8051761,
+        "chunk_chars": 8551051,
+        "num_chunks": 6854,
+        "coverage_ratio": 1.062
+      }
+    },
+    "embedding": {
+      "result": "pass",
+      "detail": {
+        "num_chunks": 6854,
+        "num_embedded": 6854,
+        "embedding_dim": 768
+      }
+    }
+  }
+}

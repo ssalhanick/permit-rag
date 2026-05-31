@@ -1,5 +1,32 @@
 {
   "doc_id": "plano-2",
+  "source_url": "https://library.municode.com/tx/plano/codes/code_of_ordinances?nodeId=COORPLTE",
+  "local_path": "raw\\plano-2.html",
+  "filename": "plano-2.html",
+  "municipality": "plano",
+  "authority_level": "municipal",
+  "doc_type": "zoning_ordinance",
+  "subject_tags": [
+    "cable-television",
+    "emergency-services",
+    "building-regulations",
+    "food-code",
+    "fire-previention"
+  ],
+  "effective_date": null,
+  "version": null,
+  "document_status": "active",
+  "is_current": true,
+  "supersedes_doc_id": null,
+  "review_due": "2026-07-29",
+  "ingested_at": "2026-05-30T14:29:19.725447Z",
+  "checksum_sha256": "3806fc66ac14c91f047aea062381b5726d851fb30c4e73435f782049d63197aa",
+  "source_etag": null,
+  "source_last_modified": null,
+  "file_size_bytes": 6095,
+  "page_count": null,
+  "retrieval_weight": 1.0,
+  "notes": "Plano City Code of Ordinances via Municode",
   "verifications": {
     "download": {
       "result": "pass",
@@ -22,14 +49,6 @@
         "chunk_chars": 840262,
         "num_chunks": 632,
         "coverage_ratio": 1.0656
-      }
-    },
-    "embedding": {
-      "result": "pass",
-      "detail": {
-        "num_chunks": 632,
-        "num_embedded": 632,
-        "embedding_dim": 768
       }
     }
   }

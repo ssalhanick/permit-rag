@@ -1,6 +1,6 @@
 # permit_rag — State
 
-_Updated: 2026-05-28 (session, LangSmith eval tracing update)_
+_Updated: 2026-05-30 (hybrid dense+BM25 RRF implementation pass)_
 
 ## Phase
 
@@ -12,8 +12,8 @@ Nothing currently
 
 ## Next 3 tasks
 
-1. Stabilize RAGAs faithfulness scoring (increase evaluator token budget) and rerun full 7-query suite
-2. Add POST /query/answer endpoint wiring generator → API (requires ANTHROPIC_API_KEY in .env)
+1. Run hybrid retrieval hyperparameter tuning sweep (RRF weights/top-N/penalty) to recover weak-query faithfulness (query 5) while preserving relevance gains
+2. Run full 7-query hybrid-on RAGAs pass and compare against dense-only baseline (0.855 faithfulness)
 3. Build api/routes/documents.py — document listing/status endpoints
 
 ## Module status
@@ -41,17 +41,16 @@ First-request latency ~29s (model load); steady-state 64–112ms
 Pydantic schemas: QueryRequest, QueryResponse, ChunkResponse, DiagnosticsResponse, HealthResponse, ErrorResponse
 Swagger UI: http://localhost:8000/docs
 
-## RAGAs (last run: 2026-05-27, full + cache validation)
+## RAGAs (latest: 2026-05-30 hybrid weak-query run + 2026-05-29 full baseline)
 
-smoke (query 0): faithfulness 0.778 · relevancy 0.000 · context precision 0.200
-partial full run: relevancy now computes (observed 0.000 and 0.996 on sampled queries)
-known issue: faithfulness intermittently fails with LLMDidNotFinishException (increase evaluator max_tokens)
-answer caching: strict-key generation cache enabled for eval reruns
-cache validation: query 0 run 1 = miss (0 hit / 1 miss), run 2 = hit (1 hit / 0 miss)
-prompt caching rollout: Anthropic explicit-breakpoint path wired for generator + evaluator
-prompt caching observation: evaluator usage logs currently show cache create/read=0/0 on sampled calls (instrumented, no cache benefit yet)
-langsmith tracing: eval-only instrumentation added in `evaluation/ragas_eval.py` (run + per-query + retrieval/generation/scoring spans)
-langsmith validation: traces visible in LangSmith project for smoke eval; tracing remains no-op when env flags/API key are unset
+full run summary (2026-05-29, dense-only): avg faithfulness 0.855 · avg relevancy 0.401 · avg context precision 0.534
+faithfulness gate on dense-only baseline: PASS (0.855 >= 0.85)
+per-query faithfulness: q0 0.750 · q1 0.864 · q2 0.938 · q3 1.000 · q4 0.895 · q5 0.667 · q6 0.875
+hybrid weak-query check (2026-05-30, q0+q5): avg faithfulness 0.750 · avg relevancy 0.000 · avg context precision 0.100 (below gate)
+hybrid retrieval smoke preview: q0 and q5 return high-similarity Dallas chunks, but answer faithfulness regressed in evaluator
+known weak spots: q5 remains primary outlier; hybrid ranking interaction still needs tuning before default enablement
+answer cache: observed 1 hit / 6 misses on latest full run
+langsmith tracing: eval-local tracing remains enabled for retrieval/generation/scoring inspection
 
 ## Docs
 
@@ -69,7 +68,7 @@ langsmith validation: traces visible in LangSmith project for smoke eval; tracin
 - Vite + React over Next.js (simpler for MVP, deploys free on Vercel)
 - Claude API for generation; nomic-embed-text-v1.5 for embeddings (local, free)
 - nomic-embed-text-v1.5 over Voyage-3: no API key, no cost, 768-dim, local inference
-- Hybrid search planned: dense (nomic) + BM25 for future retrieval quality
+- Hybrid search implemented behind `RETRIEVAL_HYBRID_ENABLED` with dense+BM25 RRF fusion and rollback-safe default-off behavior
 - Dallas + Fort Worth use amlegal not Municode (codelibrary.amlegal.com)
 - Plano, McKinney, Frisco confirmed on Municode
 - up.codes added for Fort Worth amendment tracking
@@ -83,7 +82,7 @@ langsmith validation: traces visible in LangSmith project for smoke eval; tracin
 - No tokenization/lemmatization — dense embedding models handle semantics internally
 - Chunk size to be empirically tuned via RAGAs ablation in Week 4–5
 - tsvector GENERATED column + GIN index added to chunks table for future BM25 hybrid search
-- Hybrid search (HNSW + BM25 RRF) deferred to Week 4–5 RAGAs ablation — build dense-only first
+- Hybrid search rollout remains gated: keep disabled by default until hybrid-on faithfulness returns to >= 0.85 on full suite
 - Hatchling build with explicit packages list (no single-package layout)
 - psycopg-pool is a separate package from psycopg (added to pyproject.toml)
 - Schema doc_type enum expanded: added state_statute + federal_regulation
@@ -99,3 +98,5 @@ langsmith validation: traces visible in LangSmith project for smoke eval; tracin
 - LLM provider capability layer added (`LLM_PROVIDER` + `supports_prompt_caching`) so prompt caching is optional and Anthropic-specific
 - Anthropic prompt caching uses explicit system-block breakpoints (`cache_control`) gated by provider capability + env flag
 - LangSmith tracing scope is eval-local only (gated by `LANGCHAIN_TRACING_V2` + `LANGSMITH_API_KEY`) with full payload capture for prompt/metric debugging
+- Ingestion normalization is now env-gated (`CHUNK_NORMALIZATION_ENABLED`) with procedural line stripping + balanced chunk filtering
+- Retrieval now supports env-gated procedural downranking (`RETRIEVAL_PROCEDURAL_PENALTY_ENABLED`) to demote boilerplate-heavy chunks

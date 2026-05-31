@@ -1,0 +1,36 @@
+{
+  "doc_id": "dallas-fire-code-2021",
+  "verifications": {
+    "download": {
+      "result": "pass",
+      "detail": {
+        "raw_path": "documents\\raw\\dallas-fire-code-2021.pdf",
+        "file_size_bytes": 18205932,
+        "checksum_sha256": "beba3449055af22bda7067c6c2c385d586c4fec6cd6b45388e6fe13444d882e4"
+      }
+    },
+    "extraction": {
+      "result": "pass",
+      "detail": {
+        "raw_chars": 504090
+      }
+    },
+    "chunking": {
+      "result": "pass",
+      "detail": {
+        "source_chars": 504055,
+        "chunk_chars": 540174,
+        "num_chunks": 460,
+        "coverage_ratio": 1.0717
+      }
+    },
+    "embedding": {
+      "result": "pass",
+      "detail": {
+        "num_chunks": 460,
+        "num_embedded": 460,
+        "embedding_dim": 768
+      }
+    }
+  }
+}

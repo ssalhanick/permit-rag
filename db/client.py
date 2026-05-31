@@ -323,6 +323,82 @@ def match_chunks(
     return rows
 
 
+def _search_chunks_with_tsquery(
+    query_text: str,
+    *,
+    top_k: int,
+    municipality: Optional[str],
+    tsquery_func: str,
+) -> list[dict[str, Any]]:
+    """Run lexical chunk search using the provided tsquery parser."""
+    sql = f"""
+        SELECT
+            c.id,
+            c.document_id,
+            d.doc_id,
+            c.content,
+            c.chunk_index,
+            d.municipality,
+            d.authority_level,
+            d.doc_type,
+            d.document_status,
+            ts_rank_cd(c.search_vector, {tsquery_func}('english', %(query_text)s)) AS similarity,
+            ts_rank_cd(c.search_vector, {tsquery_func}('english', %(query_text)s)) AS bm25_score,
+            row_number() OVER (
+                ORDER BY ts_rank_cd(c.search_vector, {tsquery_func}('english', %(query_text)s)) DESC,
+                c.chunk_index ASC
+            ) AS bm25_rank
+        FROM chunks c
+        JOIN documents d ON d.id = c.document_id
+        WHERE d.document_status = 'active'
+          AND d.is_current = true
+          AND c.search_vector @@ {tsquery_func}('english', %(query_text)s)
+          AND (%(municipality)s::text IS NULL OR d.municipality = %(municipality)s::text)
+        ORDER BY similarity DESC, c.chunk_index ASC
+        LIMIT %(top_k)s;
+    """
+    params = {
+        "query_text": query_text,
+        "municipality": municipality,
+        "top_k": top_k,
+    }
+    with get_conn() as conn:
+        return conn.execute(sql, params).fetchall()
+
+
+def search_chunks_bm25(
+    query_text: str,
+    *,
+    top_k: int = 5,
+    municipality: Optional[str] = None,
+) -> list[dict[str, Any]]:
+    """
+    Lexical retrieval using chunks.search_vector with BM25-style ranking.
+
+    Returns the same row shape as match_chunks(), where similarity maps to
+    ts_rank_cd score for compatibility with downstream ranking.
+    """
+    try:
+        rows = _search_chunks_with_tsquery(
+            query_text,
+            top_k=top_k,
+            municipality=municipality,
+            tsquery_func="websearch_to_tsquery",
+        )
+    except psycopg.Error:
+        rows = _search_chunks_with_tsquery(
+            query_text,
+            top_k=top_k,
+            municipality=municipality,
+            tsquery_func="plainto_tsquery",
+        )
+    log.info(
+        "search_chunks_bm25: %d results (top_k=%d, municipality=%s)",
+        len(rows), top_k, municipality,
+    )
+    return rows
+
+
 # ════════════════════════════════════════════════
 #  INGESTION VERIFICATIONS
 # ════════════════════════════════════════════════

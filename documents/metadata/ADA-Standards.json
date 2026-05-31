@@ -1,8 +1,8 @@
 {
-  "doc_id": "ada-design-standards",
-  "source_url": "https://www.ada.gov/law-and-regs/design-standards/",
-  "local_path": "raw\\ada-design-standards.html",
-  "filename": "ada-design-standards.html",
+  "doc_id": "ADA-Standards",
+  "source_url": "https://www.access-board.gov/ada/",
+  "local_path": "raw\\ADA-Standards.html",
+  "filename": "ADA-Standards.html",
   "municipality": "federal",
   "authority_level": "federal",
   "doc_type": "federal_regulation",
@@ -20,10 +20,10 @@
   "supersedes_doc_id": null,
   "review_due": "2027-05-30",
   "ingested_at": "2026-05-30T14:29:19.725447Z",
-  "checksum_sha256": "9f1f4754f55f72cf72a4e2400338242e1cdcb635e4dfc0ce191db090e2df4fc4",
-  "source_etag": "\"7cef5c09eeecf070f2393dd6899d83f9\"",
-  "source_last_modified": "Tue, 21 Apr 2026 19:37:04 GMT",
-  "file_size_bytes": 61818,
+  "checksum_sha256": "c1fc39d0fa6829dc13121f726e1e52285dd3cb481f8f5549eaf6ee20139c58fa",
+  "source_etag": "\"252567c188966378c7fc63349b1cf548\"",
+  "source_last_modified": "Wed, 04 Feb 2026 13:37:17 GMT",
+  "file_size_bytes": 809071,
   "page_count": null,
   "retrieval_weight": 1.0,
   "notes": "ADA 2010 Design Standards \u2014 applies to all commercial construction.",
@@ -31,24 +31,24 @@
     "download": {
       "result": "pass",
       "detail": {
-        "raw_path": "documents\\raw\\ada-design-standards.html",
-        "file_size_bytes": 61818,
-        "checksum_sha256": "9f1f4754f55f72cf72a4e2400338242e1cdcb635e4dfc0ce191db090e2df4fc4"
+        "raw_path": "documents\\raw\\ADA-Standards.pdf",
+        "file_size_bytes": 3953645,
+        "checksum_sha256": "503df87a090a7b6fc3dbe8f9138d3ddc04781e55c1187c97770fb77b96225c20"
       }
     },
     "extraction": {
       "result": "pass",
       "detail": {
-        "raw_chars": 6216
+        "raw_chars": 513273
       }
     },
     "chunking": {
       "result": "pass",
       "detail": {
-        "source_chars": 4891,
-        "chunk_chars": 4917,
-        "num_chunks": 5,
-        "coverage_ratio": 1.0053
+        "source_chars": 504392,
+        "chunk_chars": 524506,
+        "num_chunks": 478,
+        "coverage_ratio": 1.0399
       }
     }
   }

@@ -22,10 +22,10 @@ import hashlib
 import logging
 import time
 import re
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from dataclasses import dataclass, asdict, field
-from typing import Optional
+from typing import Any, Optional
 from urllib.parse import urlparse
 
 import requests
@@ -102,314 +102,58 @@ class DocumentMetadata:
 
 
 # ════════════════════════════════════════════════
-#  DOCUMENT CATALOG
-#  Add / remove entries freely. Each dict becomes
-#  one downloaded document with full metadata.
+#  DOCUMENT CATALOG (JSON-backed)
 # ════════════════════════════════════════════════
 
-DOCUMENT_CATALOG = [
-
-    # ── DALLAS ──────────────────────────────────────────────────────────
-    # City charter + 3 ordinance volumes exported from amlegal as PDF
-    {
-        "doc_id":          "city-of-dallas-charter",
-        "url":             "https://codelibrary.amlegal.com/codes/dallas/latest/dallas_tx/0-0-0-1",
-        "municipality":    "dallas",
-        "authority_level": "municipal",
-        "doc_type":        "administrative_rule",
-        "subject_tags":    ["charter", "governance", "authority", "municipal"],
-        "version":         None,
-        "notes":           "Dallas City Charter — manually exported from amlegal PDF. "
-                           "Defines city government structure and authority.",
-        "review_days":     180,
-    },
-    {
-        "doc_id":          "city-of-dallas-ordiance-v1",
-        "url":             "https://codelibrary.amlegal.com/codes/dallas/latest/dallas_tx/0-0-0-1",
-        "municipality":    "dallas",
-        "authority_level": "municipal",
-        "doc_type":        "zoning_ordinance",
-        "subject_tags":    ["zoning", "land-use", "setbacks", "easements",
-                           "residential", "commercial", "ordinance"],
-        "version":         None,
-        "notes":           "Dallas Code of Ordinances Volume I — manually exported "
-                           "from amlegal PDF. Review every 60 days.",
-        "review_days":     60,
-    },
-    {
-        "doc_id":          "city-of-dallas-ordiance-v2",
-        "url":             "https://codelibrary.amlegal.com/codes/dallas/latest/dallas_tx/0-0-0-1",
-        "municipality":    "dallas",
-        "authority_level": "municipal",
-        "doc_type":        "building_code",
-        "subject_tags":    ["building-code", "construction", "permits",
-                           "inspection", "ordinance"],
-        "version":         None,
-        "notes":           "Dallas Code of Ordinances Volume II — manually exported "
-                           "from amlegal PDF. Review every 60 days.",
-        "review_days":     60,
-    },
-    {
-        "doc_id":          "city-of-dallas-ordiance-v3",
-        "url":             "https://codelibrary.amlegal.com/codes/dallas/latest/dallas_tx/0-0-0-1",
-        "municipality":    "dallas",
-        "authority_level": "municipal",
-        "doc_type":        "zoning_ordinance",
-        "subject_tags":    ["zoning", "land-use", "development",
-                           "subdivision", "ordinance"],
-        "version":         None,
-        "notes":           "Dallas Code of Ordinances Volume III — manually exported "
-                           "from amlegal PDF. Review every 60 days.",
-        "review_days":     60,
-    },
-    {
-        "doc_id":          "dallas-building-permit-checklist",
-        "url":             "https://www.dallascityhall.com/departments/sustainabledevelopment/buildinginspection/DCH%20Documents/New%20One%20and%20Two%20Family%20Dwelling%20Checklist.pdf",
-        "municipality":    "dallas",
-        "authority_level": "municipal",
-        "doc_type":        "permit_checklist",
-        "subject_tags":    ["permit", "residential", "checklist", "inspection"],
-        "version":         None,
-        "notes":           "Dallas residential new construction permit checklist",
-        "review_days":     60,
-    },
-    {
-        "doc_id":          "dallas-fee-schedule",
-        "url":             "https://www.dallascityhall.com/departments/sustainabledevelopment/buildinginspection/DCH%20Documents/Fee%20Schedule.pdf",
-        "municipality":    "dallas",
-        "authority_level": "municipal",
-        "doc_type":        "other",
-        "subject_tags":    ["fees", "permit", "inspection"],
-        "version":         None,
-        "notes":           "Dallas building inspection fee schedule — check every 30 days",
-        "review_days":     30,
-    },
-
-    # ── PLANO ────────────────────────────────────────────────────────────
-    {
-        "doc_id":          "plano-municode-zoning",
-        "url":             "https://library.municode.com/tx/plano/codes/code_of_ordinances",
-        "municipality":    "plano",
-        "authority_level": "municipal",
-        "doc_type":        "zoning_ordinance",
-        "subject_tags":    ["zoning","land-use","setbacks","easements","residential","commercial"],
-        "version":         None,
-        "notes":           "Plano full municipal code via Municode",
-        "review_days":     90,
-    },
-    {
-        "doc_id":          "plano-building-permit-info",
-        "url":             "https://www.plano.gov/2161/Building-Inspections",
-        "municipality":    "plano",
-        "authority_level": "municipal",
-        "doc_type":        "permit_checklist",
-        "subject_tags":    ["permit","checklist","inspection","residential","commercial"],
-        "version":         None,
-        "notes":           "Plano building inspections landing page — scrape for PDF links",
-        "review_days":     60,
-    },
-    {
-        "doc_id":          "CODE_OF_ORDINANCES_CITY_OF_PLANO__TEXAS",
-        "url":             "https://library.municode.com/tx/plano/codes/code_of_ordinances?nodeId=COORPLTE",
-        "municipality":    "plano",
-        "authority_level": "municipal",
-        "doc_type":        "zoning_ordinance",
-        "subject_tags":   ["zoning","land-use","setbacks","easements","residential","commercial"],
-        "version":         None,
-        "notes":           "Plano City Code of Ordinances via Municode",
-        "review_days":     60,
-    },
-    {
-        "doc_id":          "plano-1",
-        "url":             "https://library.municode.com/tx/plano/codes/code_of_ordinances?nodeId=COORPLTE",
-        "municipality":    "plano",
-        "authority_level": "municipal",
-        "doc_type":        "zoning_ordinance",
-        "subject_tags":   ["charter","general-provisions","administration","alcoholic-beverages"],
-        "version":         None,
-        "notes":           "Plano City Code of Ordinances via Municode",
-        "review_days":     60,
-    },
-     {
-        "doc_id":          "plano-2",
-        "url":             "https://library.municode.com/tx/plano/codes/code_of_ordinances?nodeId=COORPLTE",
-        "municipality":    "plano",
-        "authority_level": "municipal",
-        "doc_type":        "zoning_ordinance",
-        "subject_tags":   ["building-regulations","cable-television","emergency-services","fire-previention","food-code"],
-        "version":         None,
-        "notes":           "Plano City Code of Ordinances via Municode",
-        "review_days":     60,
-    },
-     {
-        "doc_id":          "plano-3",
-        "url":             "https://library.municode.com/tx/plano/codes/code_of_ordinances?nodeId=COORPLTE",
-        "municipality":    "plano",
-        "authority_level": "municipal",
-        "doc_type":        "zoning_ordinance",
-        "subject_tags":   ["business-regulations", "municipal-courts", "planning-and-development"],
-        "version":         None,
-        "notes":           "Plano City Code of Ordinances via Municode",
-        "review_days":     60,
-    },
-    {
-        "doc_id":          "plano-4",
-        "url":             "https://library.municode.com/tx/plano/codes/code_of_ordinances?nodeId=COORPLTE",
-        "municipality":    "plano",
-        "authority_level": "municipal",
-        "doc_type":        "zoning_ordinance",
-        "subject_tags":   [ "police", "solid-waste", "streets-and-sidewalks", 'taxation', 'utilities'],
-        "version":         None,
-        "notes":           "Plano City Code of Ordinances via Municode",
-        "review_days":     60,
-    },
+CATALOG_PATH = Path(__file__).resolve().parents[1] / "documents" / "catalog.json"
+REQUIRED_CATALOG_FIELDS: tuple[str, ...] = (
+    "doc_id",
+    "url",
+    "municipality",
+    "authority_level",
+    "doc_type",
+)
 
 
+def _validate_catalog_entry(entry: dict[str, Any], index: int) -> None:
+    """Validate required keys and minimal shape for catalog entries."""
+    missing = [k for k in REQUIRED_CATALOG_FIELDS if k not in entry]
+    if missing:
+        raise ValueError(
+            f"Catalog entry at index {index} missing required fields: {missing}"
+        )
+    if not str(entry["doc_id"]).strip():
+        raise ValueError(f"Catalog entry at index {index} has empty doc_id")
+    if not str(entry["url"]).strip():
+        raise ValueError(
+            f"Catalog entry '{entry.get('doc_id', index)}' has empty url"
+        )
 
-    # ── FRISCO ───────────────────────────────────────────────────────────
-    {
-        "doc_id":          "frisco-municode-zoning",
-        "url":             "https://library.municode.com/tx/frisco/codes/code_of_ordinances",
-        "municipality":    "frisco",
-        "authority_level": "municipal",
-        "doc_type":        "zoning_ordinance",
-        "subject_tags":    ["zoning","land-use","setbacks","easements","residential","commercial"],
-        "version":         None,
-        "notes":           "Frisco full municipal code via Municode",
-        "review_days":     90,
-    },
-    {
-        "doc_id":          "frisco-unified-development-code",
-        "url":             "https://www.friscotexas.gov/2785/Zoning-Ordinance",
-        "municipality":    "frisco",
-        "authority_level": "municipal",
-        "doc_type":        "zoning_ordinance",
-        "subject_tags":    ["zoning","udc","land-use","development"],
-        "version":         None,
-        "notes":           "Frisco UDC landing page",
-        "review_days":     90,
-    },
 
-    # ── MCKINNEY ─────────────────────────────────────────────────────────
-    {
-        "doc_id":          "mckinney-municode-zoning",
-        "url":             "https://library.municode.com/tx/mckinney/codes/code_of_ordinances",
-        "municipality":    "mckinney",
-        "authority_level": "municipal",
-        "doc_type":        "zoning_ordinance",
-        "subject_tags":    ["zoning","land-use","setbacks","easements","residential","commercial"],
-        "version":         None,
-        "notes":           "McKinney full municipal code via Municode",
-        "review_days":     90,
-    },
-
-    # ── FORT WORTH ───────────────────────────────────────────────────────
-    {
-        "doc_id":          "fortworth-amlegal-code",
-        "url":      "https://codelibrary.amlegal.com/codes/ftworth/latest/ftworth_tx/0-0-0-1",
-        "municipality":    "fortworth",
-        "authority_level": "municipal",
-        "doc_type":        "zoning_ordinance",
-        "subject_tags":    ["zoning","land-use","setbacks","easements","residential","commercial"],
-        "version":         None,
-        "notes":           "Fort Worth full code via American Legal Publishing.",
-        "review_days":     60,
-    },
-    # UpCodes for Fort Worth building amendments
-    {
-        "doc_id":          "fortworth-upcodes-building",
-        "url":             "https://up.codes/codes/fort-worth",
-        "municipality":    "fortworth",
-        "authority_level": "municipal",
-        "doc_type":        "building_code",
-        "subject_tags":    ["building-code", "amendments", "ordinance"],
-        "version":         None,
-        "notes":           "Fort Worth building code amendments with ordinance numbers "
-                           "and effective dates. Good source for amendment tracking.",
-        "review_days":     30,
-    },
-
-    # ── TEXAS STATE ──────────────────────────────────────────────────────
-    {
-        "doc_id":          "texas-accessibility-standards",
-        "url":             "https://www.tdlr.texas.gov/ab/abtas.htm",
-        "municipality":    "texas",
-        "authority_level": "state",
-        "doc_type":        "state_statute",
-        "subject_tags":    ["accessibility","ADA","TAS","commercial","public-buildings"],
-        "version":         "2012",
-        "notes":           "Texas Accessibility Standards — TDLR. Apply statewide to all commercial projects.",
-        "review_days":     180,
-    },
-    {
-        "doc_id":          "texas-contractor-licensing-hvac",
-        "url":             "https://www.tdlr.texas.gov/air/airforms.htm",
-        "municipality":    "texas",
-        "authority_level": "state",
-        "doc_type":        "state_statute",
-        "subject_tags":    ["licensing","HVAC","contractor","registration"],
-        "version":         None,
-        "notes":           "TDLR HVAC contractor licensing requirements",
-        "review_days":     180,
-    },
-    {
-        "doc_id":          "texas-contractor-licensing-electrical",
-        "url":             "https://www.tdlr.texas.gov/electricians/elec.htm",
-        "municipality":    "texas",
-        "authority_level": "state",
-        "doc_type":        "state_statute",
-        "subject_tags":    ["licensing","electrical","contractor","registration"],
-        "version":         None,
-        "notes":           "TDLR electrical contractor licensing requirements",
-        "review_days":     180,
-    },
-    {
-        "doc_id":          "texas-contractor-licensing-plumbing",
-        "url":             "https://www.tsbpe.texas.gov/licensing",
-        "municipality":    "texas",
-        "authority_level": "state",
-        "doc_type":        "state_statute",
-        "subject_tags":    ["licensing","plumbing","contractor","registration"],
-        "version":         None,
-        "notes":           "Texas State Board of Plumbing Examiners licensing",
-        "review_days":     180,
-    },
-
-    # ── FEDERAL ──────────────────────────────────────────────────────────
-    {
-        "doc_id":          "osha-1926-construction",
-        "url":             "https://www.osha.gov/laws-regs/regulations/standardnumber/1926",
-        "municipality":    "federal",
-        "authority_level": "federal",
-        "doc_type":        "federal_regulation",
-        "subject_tags":    ["OSHA","safety","fall-protection","scaffolding","electrical","excavation"],
-        "version":         "1926",
-        "notes":           "OSHA 29 CFR 1926 — Construction industry safety standards. Applies to all job sites.",
-        "review_days":     365,
-    },
-    {
-        "doc_id":          "ada-design-standards",
-        "url":             "https://www.ada.gov/law-and-regs/design-standards/",
-        "municipality":    "federal",
-        "authority_level": "federal",
-        "doc_type":        "federal_regulation",
-        "subject_tags":    ["ADA","accessibility","design","commercial","public-accommodations"],
-        "version":         "2010",
-        "notes":           "ADA 2010 Design Standards — applies to all commercial construction.",
-        "review_days":     365,
-    },
-    {
-        "doc_id":          "epa-stormwater-construction",
-        "url":             "https://www.epa.gov/npdes/stormwater-discharges-construction-activities",
-        "municipality":    "federal",
-        "authority_level": "federal",
-        "doc_type":        "federal_regulation",
-        "subject_tags":    ["EPA","stormwater","NPDES","erosion","grading","site-prep"],
-        "version":         None,
-        "notes":           "EPA NPDES stormwater requirements for construction sites over 1 acre.",
-        "review_days":     365,
-    },
-]
+def load_document_catalog(catalog_path: Optional[Path] = None) -> list[dict[str, Any]]:
+    """Load and validate document catalog entries from JSON."""
+    path = catalog_path or CATALOG_PATH
+    if not path.exists():
+        raise RuntimeError(
+            f"Document catalog not found at {path}. "
+            "Create documents/catalog.json before running harvester."
+        )
+    try:
+        loaded = json.loads(path.read_text(encoding="utf-8"))
+    except json.JSONDecodeError as exc:
+        raise RuntimeError(f"Invalid JSON in catalog file: {path}") from exc
+    if not isinstance(loaded, list):
+        raise RuntimeError(f"Catalog file must contain a JSON array: {path}")
+    seen_doc_ids: set[str] = set()
+    for idx, item in enumerate(loaded):
+        if not isinstance(item, dict):
+            raise ValueError(f"Catalog entry at index {idx} must be an object")
+        _validate_catalog_entry(item, idx)
+        doc_id = str(item["doc_id"])
+        if doc_id in seen_doc_ids:
+            raise ValueError(f"Duplicate doc_id in catalog: {doc_id}")
+        seen_doc_ids.add(doc_id)
+    return loaded
 
 
 # ════════════════════════════════════════════════
@@ -437,6 +181,16 @@ HEADERS = {
     )
 }
 
+
+def _find_existing_raw_file(doc_id: str, raw_dir: Path) -> Optional[Path]:
+    """Return existing raw file path for doc_id, if present."""
+    for ext in (".pdf", ".docx", ".txt", ".md", ".markdown", ".html", ".htm"):
+        candidate = raw_dir / f"{doc_id}{ext}"
+        if candidate.exists():
+            return candidate
+    return None
+
+
 def fetch_document(url: str, timeout: int = 30):
     """
     Fetch a URL. Returns (content_bytes, etag, last_modified, content_type).
@@ -456,8 +210,21 @@ def sha256_of(data: bytes) -> str:
 
 def safe_filename(doc_id: str, content_type: str, url: str) -> str:
     """Derive a clean local filename from doc_id + content type."""
-    if "pdf" in content_type or url.lower().endswith(".pdf"):
+    lowered_type = (content_type or "").lower()
+    lowered_url = url.lower()
+    if "pdf" in lowered_type or lowered_url.endswith(".pdf"):
         return f"{doc_id}.pdf"
+    if (
+        "wordprocessingml.document" in lowered_type
+        or lowered_url.endswith(".docx")
+    ):
+        return f"{doc_id}.docx"
+    if lowered_type.startswith("text/markdown") or lowered_url.endswith(
+        (".md", ".markdown")
+    ):
+        return f"{doc_id}.md"
+    if lowered_type.startswith("text/plain") or lowered_url.endswith(".txt"):
+        return f"{doc_id}.txt"
     return f"{doc_id}.html"
 
 
@@ -562,7 +329,7 @@ def check_for_updates(registry: dict) -> list:
 
 def find_overdue_reviews(registry: dict) -> list:
     """Return list of doc_ids past their review_due date."""
-    today = datetime.utcnow().date().isoformat()
+    today = datetime.now(timezone.utc).date().isoformat()
     overdue = []
     for doc_id, meta in registry.items():
         review_due = meta.get("review_due", "")
@@ -588,22 +355,54 @@ def harvest(output_dir: str = "documents", force: bool = False):
     registry_path = base / "registry.json"
 
     registry = load_registry(registry_path)
-    now_iso = datetime.utcnow().isoformat() + "Z"
+    now_iso = datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
 
-    results = {"success": [], "skipped": [], "failed": []}
+    catalog = load_document_catalog()
+    results = {
+        "success": [],
+        "skipped": [],
+        "failed": [],
+        "used_local_raw": 0,
+        "downloaded_from_url": 0,
+    }
 
-    for entry in track(DOCUMENT_CATALOG, description="Harvesting documents..."):
+    for entry in track(catalog, description="Harvesting documents..."):
         doc_id = entry["doc_id"]
         url = entry["url"]
 
         log.info(f"Processing: {doc_id}")
+        existing_raw = _find_existing_raw_file(doc_id, raw_dir)
+        used_local_raw = existing_raw is not None and not force
 
-        try:
-            content, etag, last_modified, content_type = fetch_document(url)
-        except Exception as e:
-            log.error(f"  FAILED to fetch {url}: {e}")
-            results["failed"].append({"doc_id": doc_id, "error": str(e)})
-            continue
+        if used_local_raw:
+            results["used_local_raw"] += 1
+            log.info("  Using existing local raw file: %s", existing_raw.name)
+            content = existing_raw.read_bytes()
+            previous = registry.get(doc_id, {})
+            etag = previous.get("source_etag")
+            last_modified = previous.get("source_last_modified")
+            suffix = existing_raw.suffix.lower()
+            if suffix == ".pdf":
+                content_type = "application/pdf"
+            elif suffix == ".docx":
+                content_type = (
+                    "application/vnd.openxmlformats-officedocument."
+                    "wordprocessingml.document"
+                )
+            elif suffix in {".md", ".markdown"}:
+                content_type = "text/markdown"
+            elif suffix == ".txt":
+                content_type = "text/plain"
+            else:
+                content_type = "text/html"
+        else:
+            results["downloaded_from_url"] += 1
+            try:
+                content, etag, last_modified, content_type = fetch_document(url)
+            except Exception as e:
+                log.error(f"  FAILED to fetch {url}: {e}")
+                results["failed"].append({"doc_id": doc_id, "error": str(e)})
+                continue
 
         checksum = sha256_of(content)
 
@@ -614,10 +413,14 @@ def harvest(output_dir: str = "documents", force: bool = False):
                 results["skipped"].append(doc_id)
                 continue
 
-        # Save raw file
-        filename = safe_filename(doc_id, content_type, url)
-        raw_path = raw_dir / filename
-        raw_path.write_bytes(content)
+        # Save raw file (or reuse existing local one)
+        if used_local_raw:
+            raw_path = existing_raw
+            filename = raw_path.name
+        else:
+            filename = safe_filename(doc_id, content_type, url)
+            raw_path = raw_dir / filename
+            raw_path.write_bytes(content)
 
         # Page count for PDFs
         page_count = None
@@ -633,7 +436,9 @@ def harvest(output_dir: str = "documents", force: bool = False):
             "review_days",
             REVIEW_DAYS_BY_TYPE.get(entry["doc_type"], 90)
         )
-        review_due = (datetime.utcnow() + timedelta(days=review_days)).date().isoformat()
+        review_due = (
+            datetime.now(timezone.utc) + timedelta(days=review_days)
+        ).date().isoformat()
 
         # Build metadata object
         meta = DocumentMetadata(
@@ -683,6 +488,8 @@ def harvest(output_dir: str = "documents", force: bool = False):
     log.info("\n" + "="*50)
     log.info(f"Harvest complete")
     log.info(f"  Downloaded : {len(results['success'])}")
+    log.info(f"  Used local raw     : {results['used_local_raw']}")
+    log.info(f"  Downloaded from URL: {results['downloaded_from_url']}")
     log.info(f"  Skipped    : {len(results['skipped'])} (unchanged)")
     log.info(f"  Failed     : {len(results['failed'])}")
 
@@ -760,7 +567,9 @@ def mark_superseded(old_doc_id: str, new_doc_id: str, registry_path: str = "docu
     registry[old_doc_id]["is_current"] = False
     registry[old_doc_id]["retrieval_weight"] = 0.1
     registry[old_doc_id]["superseded_by"] = new_doc_id
-    registry[old_doc_id]["superseded_date"] = datetime.utcnow().date().isoformat()
+    registry[old_doc_id]["superseded_date"] = datetime.now(
+        timezone.utc
+    ).date().isoformat()
 
     if new_doc_id in registry:
         registry[new_doc_id]["supersedes_doc_id"] = old_doc_id
@@ -786,9 +595,15 @@ def print_registry_report():
         log.error("No registry found.")
         return
 
+    catalog = load_document_catalog()
     registry = load_registry(rp)
-    today = datetime.utcnow().date().isoformat()
+    today = datetime.now(timezone.utc).date().isoformat()
 
+    catalog_doc_ids = {str(entry["doc_id"]) for entry in catalog}
+    registry_doc_ids = set(registry.keys())
+    missing_from_registry = sorted(catalog_doc_ids - registry_doc_ids)
+
+    total_catalog = len(catalog_doc_ids)
     total = len(registry)
     active = sum(1 for m in registry.values() if m["document_status"] == "active")
     superseded = sum(1 for m in registry.values() if m["document_status"] == "superseded")
@@ -803,7 +618,9 @@ def print_registry_report():
     print("\n" + "="*60)
     print("  DFW RAG Document Registry Report")
     print("="*60)
-    print(f"  Total documents : {total}")
+    print(f"  Catalog documents  : {total_catalog}")
+    print(f"  Registry documents : {total}")
+    print(f"  Missing from registry: {len(missing_from_registry)}")
     print(f"  Active          : {active}")
     print(f"  Superseded      : {superseded}")
     print(f"  Overdue review  : {len(overdue)}")
@@ -816,6 +633,11 @@ def print_registry_report():
         print("  OVERDUE:")
         for d in overdue:
             print(f"    {d}  (due: {registry[d].get('review_due')})")
+    if missing_from_registry:
+        print()
+        print("  MISSING FROM REGISTRY:")
+        for doc_id in missing_from_registry:
+            print(f"    {doc_id}")
     print("="*60 + "\n")
 
 
