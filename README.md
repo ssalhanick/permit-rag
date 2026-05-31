@@ -77,7 +77,8 @@ permit_rag/
 │   ├── schema.sql      # Postgres + pgvector schema (4 tables)
 │   └── client.py       # psycopg3 connection pool + CRUD helpers
 ├── rag/                # Retrieval + generation pipeline (active)
-├── api/                # FastAPI endpoints (query + health live)
+├── api/                # FastAPI endpoints (query + documents + health)
+├── docs/               # Supplemental docs (API usage examples)
 ├── evaluation/         # RAGAs evaluation workflows (active)
 ├── audit/              # Query audit logging (scaffold)
 ├── frontend/           # Vite + React UI (planned)
@@ -137,6 +138,42 @@ py -m ingestion.embedder --force
 
 # Chunk + verify all documents (no DB insert)
 py -m scripts.run_chunk_verify
+```
+
+---
+
+## API Quick Start
+
+```bash
+# Run API locally
+py -m uvicorn api.main:app --reload --port 8000
+```
+
+Interactive docs:
+- `http://localhost:8000/docs`
+- `http://localhost:8000/redoc`
+
+Documented endpoint examples also live in `docs/api.md`.
+
+### API examples
+
+```bash
+# Health check
+curl -s http://localhost:8000/health
+
+# Retrieval query
+curl -s -X POST http://localhost:8000/query \
+  -H "Content-Type: application/json" \
+  -d "{\"query\":\"What are the setback requirements for a residential fence in Dallas?\",\"top_k\":5,\"municipality\":\"dallas\"}"
+
+# List/filter documents
+curl -s "http://localhost:8000/documents?municipality=dallas&status=active&authority=municipal&doc_type=building_code"
+
+# Document detail
+curl -s http://localhost:8000/documents/dallas-building-code
+
+# Status aggregation for current filter scope
+curl -s "http://localhost:8000/documents/status?municipality=dallas&authority=municipal"
 ```
 
 ---

@@ -164,9 +164,11 @@ def list_documents(
     *,
     municipality: Optional[str] = None,
     status: Optional[str] = None,
+    authority_level: Optional[str] = None,
+    doc_type: Optional[str] = None,
 ) -> list[dict[str, Any]]:
     """
-    List documents with optional municipality and status filters.
+    List documents with optional municipality/status/authority/doc_type filters.
 
     Returns all columns, ordered by municipality then doc_id.
     """
@@ -179,10 +181,51 @@ def list_documents(
     if status:
         clauses.append("document_status = %(status)s::document_status")
         params["status"] = status
+    if authority_level:
+        clauses.append("authority_level = %(authority_level)s::authority_level")
+        params["authority_level"] = authority_level
+    if doc_type:
+        clauses.append("doc_type = %(doc_type)s::doc_type")
+        params["doc_type"] = doc_type
 
     where = "WHERE " + " AND ".join(clauses) if clauses else ""
     sql = f"SELECT * FROM documents {where} ORDER BY municipality, doc_id;"
 
+    with get_conn() as conn:
+        return conn.execute(sql, params).fetchall()
+
+
+def get_document_status_counts(
+    *,
+    municipality: Optional[str] = None,
+    status: Optional[str] = None,
+    authority_level: Optional[str] = None,
+    doc_type: Optional[str] = None,
+) -> list[dict[str, Any]]:
+    """Return grouped document status counts for optional filters."""
+    clauses: list[str] = []
+    params: dict[str, Any] = {}
+
+    if municipality:
+        clauses.append("municipality = %(municipality)s")
+        params["municipality"] = municipality
+    if status:
+        clauses.append("document_status = %(status)s::document_status")
+        params["status"] = status
+    if authority_level:
+        clauses.append("authority_level = %(authority_level)s::authority_level")
+        params["authority_level"] = authority_level
+    if doc_type:
+        clauses.append("doc_type = %(doc_type)s::doc_type")
+        params["doc_type"] = doc_type
+
+    where = "WHERE " + " AND ".join(clauses) if clauses else ""
+    sql = (
+        "SELECT document_status, count(*) AS count "
+        f"FROM documents {where} "
+        "GROUP BY document_status "
+        "ORDER BY document_status;"
+    )
     with get_conn() as conn:
         return conn.execute(sql, params).fetchall()
 

@@ -2,7 +2,7 @@
 
 ## Type
 
-Enhancement — hybrid retrieval guardrails, eval export enrichments, and gate re-validation.
+Enhancement — hybrid retrieval guardrails + documents API routes/tests/docs.
 
 ## Goal
 
@@ -64,6 +64,36 @@ Investigate q1 faithfulness collapse under hybrid retrieval, add non-municipalit
   - added new guardrail env vars in ingestion/retrieval config block,
   - refreshed hybrid status note with latest full-run gate result and caution on q1 instability.
 
+### Documents API route implementation
+
+- Added `api/routes/documents.py` with:
+  - `GET /documents` for list/filtering by `municipality`, `status`, `authority`, `doc_type`
+  - `GET /documents/{doc_id}` for document detail + `chunk_count`
+  - `GET /documents/status` for grouped status counts under optional filters
+- Updated `api/schemas.py` with typed document filter aliases + response models:
+  - `DocumentSummaryResponse`, `DocumentDetailResponse`,
+  - `DocumentStatusCountResponse`, `DocumentStatusResponse`
+- Extended `db/client.py`:
+  - `list_documents()` now accepts `authority_level` + `doc_type` filters
+  - added `get_document_status_counts()` grouped aggregation helper
+- Wired router in API bootstrap:
+  - `api/routes/__init__.py` exports `documents_router`
+  - `api/main.py` includes `documents_router`
+- Added route tests in `tests/test_documents_routes.py`:
+  - filter forwarding + response shape
+  - invalid filter 422 behavior
+  - detail success/404
+  - status aggregation shape
+- Added API usage docs/examples:
+  - `docs/api.md` (endpoint-specific examples)
+  - `README.md` API quick start + curl examples
+
+### Validation blocker
+
+- Could not execute new smoke checks or confirmatory eval from this session tooling:
+  - every attempted shell command returned unknown exit status with no reliable stdout/stderr.
+- Marked as blocker in `STATE.md` with pending commands for immediate follow-up run in local terminal.
+
 ---
 
 ## Validation outcomes observed this session
@@ -76,14 +106,49 @@ Investigate q1 faithfulness collapse under hybrid retrieval, add non-municipalit
 
 ## Next session should
 
-1. Build `api/routes/documents.py` endpoints for listing/filtering/status inspection.
-2. Add route tests and response models for document metadata + optional chunk preview.
-3. Run API smoke validation (`/docs`, `/health`, `/query`, new `/documents` routes), then perform one confirmatory hybrid full RAGAs run.
+1. Run `py -m pytest tests/test_documents_routes.py` and confirm route smoke passes.
+2. Run confirmatory hybrid full eval:
+   - `$env:RETRIEVAL_HYBRID_ENABLED="true"; $env:RAGAS_ANSWER_CACHE_ENABLED="false"; py -m evaluation.ragas_eval --export`
+3. Record final metric deltas from the confirmatory run in `STATE.md` and revisit hybrid default toggle.
 
 ## Prompt for next session
 
-Read `AGENTS.md`, `STATE.md`, and `journals/session_260531.md`. Implement `api/routes/documents.py` with list/detail/status endpoints and filtering by municipality/status/authority/doc_type, add tests for route behavior and response shape, and update API docs/README examples. After API smoke checks, run one confirmatory hybrid full suite (`$env:RETRIEVAL_HYBRID_ENABLED="true"; $env:RAGAS_ANSWER_CACHE_ENABLED="false"; py -m evaluation.ragas_eval --export`) to verify faithfulness stability before revisiting default hybrid enablement.
+Read `AGENTS.md`, `STATE.md`, and `journals/session_260531.md`. Run pending API/eval verification commands from local terminal:
+`py -m pytest tests/test_documents_routes.py`
+`$env:RETRIEVAL_HYBRID_ENABLED="true"; $env:RAGAS_ANSWER_CACHE_ENABLED="false"; py -m evaluation.ragas_eval --export`
+Then update `STATE.md` with confirmatory full-run metric deltas (faithfulness/relevancy/context precision vs `ragas_20260531_102544.json`) and decide whether `RETRIEVAL_HYBRID_ENABLED` can be default-enabled or should remain false.
 
 ## Git commit message
 
-feat(retrieval): add non-municipality authority guardrails, record hybrid rerun deltas, and enrich eval export with top-chunk provenance
+feat(api): add documents list/detail/status routes with typed filters, response schemas, tests, and API usage docs
+
+---
+
+## Closeout addendum (2026-05-31, later run)
+
+### Final verification completed
+
+- `py -m pytest tests/test_documents_routes.py` → `5 passed`
+- Confirmatory full eval run completed:
+  - command: `$env:RETRIEVAL_HYBRID_ENABLED="true"; $env:RAGAS_ANSWER_CACHE_ENABLED="false"; py -m evaluation.ragas_eval --export`
+  - output: `evaluation/results/ragas_20260531_122639.json`
+
+### Confirmatory deltas vs prior full run (`ragas_20260531_102544.json`)
+
+- avg faithfulness: `0.860` (`+0.008`)
+- avg relevancy: `0.838` (`+0.006`)
+- avg context precision: `0.669` (`+0.049`)
+- top similarity avg: `0.790` (`+0.000`)
+- top similarity min/max: `0.762/0.819` (unchanged vs prior run)
+
+### Decision update
+
+- `RETRIEVAL_HYBRID_ENABLED` is approved for default enablement, with env toggle retained for quick rollback if q1 regresses.
+
+## Prompt for next session
+
+Read `AGENTS.md`, `STATE.md`, and `journals/session_260531.md`. Validate that hybrid mode remains stable after default enablement by running one fresh full eval and comparing against `ragas_20260531_122639.json`. Then add a lightweight eval regression guard (script or test) that fails if avg faithfulness drops below `0.85` or q1 faithfulness drops by more than `0.10` from the current confirmatory baseline.
+
+## Git commit message
+
+chore(state): close out confirmatory eval, record final deltas, and approve hybrid default enablement

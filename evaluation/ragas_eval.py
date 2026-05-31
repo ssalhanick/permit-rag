@@ -1010,10 +1010,45 @@ def export_results(
             "answer_cache_hit": r.answer_cache_hit,
             "error": r.error,
         })
+
+    faithfulness_values = [r.faithfulness for r in results if r.faithfulness is not None]
+    relevancy_values = [r.relevancy for r in results if r.relevancy is not None]
+    context_precision_values = [
+        r.context_precision for r in results if r.context_precision is not None
+    ]
+    top_similarity_values = [r.top_similarity for r in results]
+
     payload = {
         "run_command": run_command,
         "exported_at": time.strftime("%Y-%m-%d %H:%M:%S"),
         "query_count": len(per_query),
+        "run_metrics": {
+            "avg_faithfulness": (
+                sum(faithfulness_values) / len(faithfulness_values)
+                if faithfulness_values
+                else None
+            ),
+            "avg_relevancy": (
+                sum(relevancy_values) / len(relevancy_values)
+                if relevancy_values
+                else None
+            ),
+            "avg_context_precision": (
+                sum(context_precision_values) / len(context_precision_values)
+                if context_precision_values
+                else None
+            ),
+            "top_similarity": {
+                "avg": (
+                    sum(top_similarity_values) / len(top_similarity_values)
+                    if top_similarity_values
+                    else None
+                ),
+                "max": max(top_similarity_values) if top_similarity_values else None,
+                "min": min(top_similarity_values) if top_similarity_values else None,
+                "values": top_similarity_values,
+            },
+        },
         "results": per_query,
     }
 

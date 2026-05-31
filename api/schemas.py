@@ -7,10 +7,31 @@ Keeps route files thin and enables OpenAPI schema generation.
 
 from __future__ import annotations
 
-from typing import Optional
+from datetime import date, datetime
+from typing import Literal, Optional
 from uuid import UUID
 
 from pydantic import BaseModel, Field
+
+DocumentStatusType = Literal["active", "superseded", "repealed", "needs_ocr", "draft"]
+AuthorityLevelType = Literal["municipal", "county", "state", "federal"]
+DocTypeType = Literal[
+    "building_code",
+    "zoning_ordinance",
+    "permit_checklist",
+    "fire_code",
+    "plumbing_code",
+    "electrical_code",
+    "mechanical_code",
+    "energy_code",
+    "accessibility_code",
+    "osha_standard",
+    "administrative_rule",
+    "amendment",
+    "state_statute",
+    "federal_regulation",
+    "other",
+]
 
 
 # ── Request models ───────────────────────────────────────────
@@ -122,3 +143,52 @@ class ErrorResponse(BaseModel):
     """Standard error response body."""
 
     detail: str = Field(description="Human-readable error description.")
+
+
+class DocumentSummaryResponse(BaseModel):
+    """Summary metadata for a single document."""
+
+    id: UUID = Field(description="Document UUID primary key.")
+    doc_id: str = Field(description="Human-readable document identifier.")
+    source_url: str = Field(description="Canonical source URL.")
+    municipality: str = Field(description="Source municipality.")
+    authority_level: AuthorityLevelType = Field(description="Authority level.")
+    doc_type: DocTypeType = Field(description="Document type.")
+    subject_tags: list[str] = Field(description="Subject tags from registry metadata.")
+    document_status: DocumentStatusType = Field(description="Lifecycle status.")
+    is_current: bool = Field(description="Whether this row is the current active revision.")
+    effective_date: Optional[date] = Field(description="Effective date if known.")
+    review_due: Optional[date] = Field(description="Review due date if tracked.")
+    retrieval_weight: float = Field(description="Retrieval weighting factor.")
+    updated_at: datetime = Field(description="Last update timestamp.")
+
+
+class DocumentDetailResponse(DocumentSummaryResponse):
+    """Detailed metadata for a single document."""
+
+    checksum_sha256: Optional[str] = Field(description="Source checksum fingerprint.")
+    source_etag: Optional[str] = Field(description="Source ETag when available.")
+    local_path: Optional[str] = Field(description="Relative raw file path.")
+    superseded_by: Optional[UUID] = Field(description="UUID of replacement document, if any.")
+    ingested_at: datetime = Field(description="Ingestion timestamp.")
+    chunk_count: int = Field(description="Total number of stored chunks for this document.")
+
+
+class DocumentStatusCountResponse(BaseModel):
+    """Per-status count bucket returned by the status endpoint."""
+
+    status: DocumentStatusType = Field(description="Document lifecycle status.")
+    count: int = Field(description="Number of documents in this status bucket.")
+
+
+class DocumentStatusResponse(BaseModel):
+    """Aggregated status totals for filtered document subsets."""
+
+    municipality: Optional[str] = Field(description="Applied municipality filter.")
+    authority: Optional[AuthorityLevelType] = Field(description="Applied authority filter.")
+    doc_type: Optional[DocTypeType] = Field(description="Applied document type filter.")
+    status: Optional[DocumentStatusType] = Field(description="Applied status filter.")
+    total_documents: int = Field(description="Total documents matching all filters.")
+    counts: list[DocumentStatusCountResponse] = Field(
+        description="Counts grouped by document_status."
+    )
