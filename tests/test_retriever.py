@@ -134,3 +134,56 @@ def test_retrieve_hybrid_passes_municipality_to_bm25(
     mock_search_bm25.assert_called_once()
     assert mock_search_bm25.call_args.kwargs["municipality"] == "plano"
     assert mock_search_bm25.call_args.kwargs["top_k"] == 7
+
+
+def test_non_muni_guardrail_boosts_state_for_texas_query(monkeypatch) -> None:
+    """Statewide query should downrank municipal noise under hybrid scoring."""
+    from rag.retriever import _apply_non_municipal_authority_guardrails
+
+    monkeypatch.setenv("RETRIEVAL_AUTHORITY_GUARDRAIL_ENABLED", "true")
+    monkeypatch.setenv("RETRIEVAL_NON_MUNI_MUNICIPAL_PENALTY", "0.08")
+    monkeypatch.setenv("RETRIEVAL_NON_MUNI_SCOPE_MATCH_BONUS", "0.02")
+    monkeypatch.setenv("RETRIEVAL_NON_MUNI_SCOPE_MISMATCH_PENALTY", "0.03")
+
+    chunks = [
+        {
+            "id": "dallas-1",
+            "authority_level": "municipal",
+            "rrf_score": 0.100,
+            "similarity": 0.86,
+        },
+        {
+            "id": "tx-1",
+            "authority_level": "state",
+            "rrf_score": 0.095,
+            "similarity": 0.80,
+        },
+    ]
+
+    reranked = _apply_non_municipal_authority_guardrails(
+        chunks,
+        query="Do I need a permit for electrical work in Texas?",
+        municipality=None,
+        top_k=2,
+    )
+
+    assert [row["id"] for row in reranked] == ["tx-1", "dallas-1"]
+    assert reranked[0]["authority_guardrail_bonus"] > 0.0
+    assert reranked[1]["authority_guardrail_penalty"] > 0.0
+
+
+def test_non_muni_guardrail_skips_municipality_filtered_queries(monkeypatch) -> None:
+    """Municipality-filtered retrieval should not get authority penalties."""
+    from rag.retriever import _apply_non_municipal_authority_guardrails
+
+    monkeypatch.setenv("RETRIEVAL_AUTHORITY_GUARDRAIL_ENABLED", "true")
+    chunks = [{"id": "dallas-1", "authority_level": "municipal", "similarity": 0.90}]
+
+    reranked = _apply_non_municipal_authority_guardrails(
+        chunks,
+        query="What are Dallas fence setbacks?",
+        municipality="dallas",
+        top_k=1,
+    )
+
+    assert reranked == chunks

@@ -1,6 +1,6 @@
 # permit_rag — State
 
-_Updated: 2026-05-31 (hybrid sweep validation + gate decision)_
+_Updated: 2026-05-31 (authority guardrails + full-suite recheck)_
 
 ## Phase
 
@@ -12,9 +12,9 @@ Nothing currently
 
 ## Next 3 tasks
 
-1. Isolate and fix q1 faithfulness regression under hybrid retrieval (statewide electrical permit query)
-2. Add retrieval-time source/authority guardrails for non-municipality queries to reduce cross-jurisdiction noise
-3. Build api/routes/documents.py — document listing/status endpoints
+1. Build `api/routes/documents.py` — document listing/status endpoints + response schemas
+2. Add tests for document route filtering (municipality/status/authority/doc_type) and detail responses
+3. Add API docs + README endpoint examples for document listing and status inspection
 
 ## Module status
 
@@ -41,32 +41,38 @@ First-request latency ~29s (model load); steady-state 64–112ms
 Pydantic schemas: QueryRequest, QueryResponse, ChunkResponse, DiagnosticsResponse, HealthResponse, ErrorResponse
 Swagger UI: http://localhost:8000/docs
 
-## RAGAs (latest: 2026-05-31 hybrid sweep + full gate check)
+## RAGAs (latest: 2026-05-31 hybrid guardrail rerun)
 
-full run summary (2026-05-29, dense-only): avg faithfulness 0.855 · avg relevancy 0.401 · avg context precision 0.534
-faithfulness gate on dense-only baseline: PASS (0.855 >= 0.85)
-per-query faithfulness: q0 0.750 · q1 0.864 · q2 0.938 · q3 1.000 · q4 0.895 · q5 0.667 · q6 0.875
-hybrid tuning profile A (2026-05-30):
-- RETRIEVAL_RRF_DENSE_WEIGHT=1.4
-- RETRIEVAL_RRF_BM25_WEIGHT=0.6
-- RETRIEVAL_DENSE_TOP_N=24
-- RETRIEVAL_BM25_TOP_N=10
-- RETRIEVAL_PROCEDURAL_PENALTY_ENABLED=true
-- RETRIEVAL_PROCEDURAL_PENALTY=0.02
-- RETRIEVAL_PROCEDURAL_MAX_HITS=4
-focused run (q0,q1,q2,q3,q5; `ragas_20260530_232025.json`):
-- avg faithfulness 0.813 (vs dense-only subset baseline 0.844, delta -0.031)
-- avg relevancy 0.787
-- avg context precision 0.690
-- per-query faithfulness deltas vs dense-only: q0 -0.036 · q1 -0.511 · q2 +0.062 · q3 +0.000 · q5 +0.333
-full gate run (7-query; `ragas_20260531_003019.json`):
-- avg faithfulness 0.798 (FAIL vs 0.85 gate; delta vs dense-only -0.057)
-- avg relevancy 0.824 (delta +0.423)
-- avg context precision 0.603 (delta +0.069)
-- per-query faithfulness: q0 0.778 · q1 0.353 · q2 0.867 · q3 0.842 · q4 1.000 · q5 1.000 · q6 0.750
-key takeaway: hybrid tuning recovered weak-query targeting on q5 but introduced severe q1 grounding regression that pulls full-suite faithfulness below gate
-answer cache: disabled for tuning (`RAGAS_ANSWER_CACHE_ENABLED=false`) during subset/full validation runs
-langsmith tracing: eval-local tracing remains enabled for retrieval/generation/scoring inspection
+full run summary (2026-05-29, dense-only baseline; `ragas_20260529_222152.json`):
+- avg faithfulness 0.855 · avg relevancy 0.401 · avg context precision 0.534
+- per-query faithfulness: q0 0.750 · q1 0.864 · q2 0.938 · q3 1.000 · q4 0.895 · q5 0.667 · q6 0.875
+
+hybrid tuning profile A:
+- `RETRIEVAL_RRF_DENSE_WEIGHT=1.4`
+- `RETRIEVAL_RRF_BM25_WEIGHT=0.6`
+- `RETRIEVAL_DENSE_TOP_N=24`
+- `RETRIEVAL_BM25_TOP_N=10`
+- `RETRIEVAL_PROCEDURAL_PENALTY_ENABLED=true`
+- `RETRIEVAL_PROCEDURAL_PENALTY=0.02`
+- `RETRIEVAL_PROCEDURAL_MAX_HITS=4`
+- plus non-municipality authority guardrails (`RETRIEVAL_AUTHORITY_GUARDRAIL_*`)
+
+hybrid subset rerun (q0,q1,q2,q3,q5; `ragas_20260531_094718.json`):
+- avg faithfulness 0.784 (delta vs prior hybrid subset 0.813: -0.029)
+- avg relevancy 0.778
+- avg context precision 0.663
+- q1 faithfulness 0.588 (improved vs prior hybrid subset q1=0.353, but still below baseline)
+
+hybrid full rerun (7-query; `ragas_20260531_102544.json`):
+- avg faithfulness 0.852 (PASS vs 0.85 gate; +0.054 vs prior hybrid full 0.798; -0.003 vs dense baseline 0.855)
+- avg relevancy 0.832 (+0.008 vs prior hybrid full; +0.431 vs dense baseline)
+- avg context precision 0.621 (+0.018 vs prior hybrid full; +0.087 vs dense baseline)
+- per-query faithfulness: q0 0.778 · q1 0.438 · q2 0.947 · q3 1.000 · q4 1.000 · q5 1.000 · q6 0.800
+
+key takeaway:
+- full-suite faithfulness recovered above gate on the latest run (`0.852`)
+- q1 remains the weakest query and still shows cross-jurisdiction contamination risk in retrieval previews
+- answer cache remained disabled (`RAGAS_ANSWER_CACHE_ENABLED=false`) during tuning/validation runs
 
 ## Docs
 
@@ -98,8 +104,8 @@ langsmith tracing: eval-local tracing remains enabled for retrieval/generation/s
 - No tokenization/lemmatization — dense embedding models handle semantics internally
 - Chunk size to be empirically tuned via RAGAs ablation in Week 4–5
 - tsvector GENERATED column + GIN index added to chunks table for future BM25 hybrid search
-- Hybrid search rollout remains gated: keep disabled by default until hybrid-on faithfulness returns to >= 0.85 on full suite
-- `RETRIEVAL_HYBRID_ENABLED` remains false after 2026-05-31 sweep because full hybrid faithfulness is 0.798 (< 0.85 gate)
+- Hybrid search rollout gate: require full-suite avg faithfulness >= 0.85 and no severe single-query grounding collapse before default enablement
+- `RETRIEVAL_HYBRID_ENABLED` remains false for now despite latest full run pass (0.852) due to unstable q1 grounding; re-check after API work with one additional confirmatory full run
 - Hatchling build with explicit packages list (no single-package layout)
 - psycopg-pool is a separate package from psycopg (added to pyproject.toml)
 - Schema doc_type enum expanded: added state_statute + federal_regulation
@@ -117,3 +123,22 @@ langsmith tracing: eval-local tracing remains enabled for retrieval/generation/s
 - LangSmith tracing scope is eval-local only (gated by `LANGCHAIN_TRACING_V2` + `LANGSMITH_API_KEY`) with full payload capture for prompt/metric debugging
 - Ingestion normalization is now env-gated (`CHUNK_NORMALIZATION_ENABLED`) with procedural line stripping + balanced chunk filtering
 - Retrieval now supports env-gated procedural downranking (`RETRIEVAL_PROCEDURAL_PENALTY_ENABLED`) to demote boilerplate-heavy chunks
+- Retrieval now supports non-municipality authority guardrails (`RETRIEVAL_AUTHORITY_GUARDRAIL_ENABLED`) to penalize municipal noise and prefer state/federal scope alignment on statewide/federal queries
+
+## Deliverables checklist
+
+- [x] Investigated q1 faithfulness collapse under hybrid retrieval
+- [x] Added retrieval-time authority/source guardrails for non-municipality queries
+- [x] Ran `rag.pipeline` previews for q1 and q5 under hybrid mode
+- [x] Ran `py -m evaluation.ragas_eval --query 0 1 2 3 5 --export`
+- [x] Ran `py -m evaluation.ragas_eval --export` (full 7-query)
+- [x] Recorded metric deltas and rollout decision in state
+- [x] Added export support for `most_relevant_chunk_id` and `most_relevant_doc_id` in eval output
+
+## Validation / verification steps
+
+1. `py -m pytest tests/test_retriever.py` → pass (`6 passed`)
+2. `$env:RETRIEVAL_HYBRID_ENABLED="true"; py -m rag.pipeline --top-k 10 "Do I need a permit for electrical work in Texas?"`
+3. `$env:RETRIEVAL_HYBRID_ENABLED="true"; py -m rag.pipeline --municipality dallas --top-k 10 "What are the fire sprinkler requirements for new construction in Dallas?"`
+4. `$env:RETRIEVAL_HYBRID_ENABLED="true"; $env:RAGAS_ANSWER_CACHE_ENABLED="false"; py -m evaluation.ragas_eval --query 0 1 2 3 5 --export` → `evaluation/results/ragas_20260531_094718.json`
+5. `$env:RETRIEVAL_HYBRID_ENABLED="true"; $env:RAGAS_ANSWER_CACHE_ENABLED="false"; py -m evaluation.ragas_eval --export` → `evaluation/results/ragas_20260531_102544.json`

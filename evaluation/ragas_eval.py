@@ -143,6 +143,8 @@ class EvalResult:
     latency_retrieval_ms: int = 0
     latency_generation_ms: int = 0
     latency_scoring_ms: int = 0
+    most_relevant_chunk_id: Optional[str] = None
+    most_relevant_doc_id: Optional[str] = None
     answer_cache_hit: Optional[bool] = None
     error: Optional[str] = None
 
@@ -242,6 +244,8 @@ def _serialize_eval_result(result: EvalResult) -> dict[str, Any]:
         "latency_retrieval_ms": result.latency_retrieval_ms,
         "latency_generation_ms": result.latency_generation_ms,
         "latency_scoring_ms": result.latency_scoring_ms,
+        "most_relevant_chunk_id": result.most_relevant_chunk_id,
+        "most_relevant_doc_id": result.most_relevant_doc_id,
         "answer_cache_hit": result.answer_cache_hit,
         "error": result.error,
     }
@@ -582,6 +586,12 @@ def evaluate_query(
         num_chunks=result.num_results,
         top_similarity=result.top_similarity,
         latency_retrieval_ms=result.latency_ms,
+        most_relevant_chunk_id=(
+            str(result.chunks[0].get("id")) if result.chunks else None
+        ),
+        most_relevant_doc_id=(
+            str(result.chunks[0].get("doc_id")) if result.chunks else None
+        ),
     )
 
     guardrail_on = _guardrail_triggered(result.num_results, result.top_similarity)
@@ -995,6 +1005,8 @@ def export_results(
             "latency_retrieval_ms": r.latency_retrieval_ms,
             "latency_generation_ms": r.latency_generation_ms,
             "latency_scoring_ms": r.latency_scoring_ms,
+            "most_relevant_chunk_id": r.most_relevant_chunk_id,
+            "most_relevant_doc_id": r.most_relevant_doc_id,
             "answer_cache_hit": r.answer_cache_hit,
             "error": r.error,
         })

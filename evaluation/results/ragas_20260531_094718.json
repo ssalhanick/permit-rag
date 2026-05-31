@@ -1,0 +1,77 @@
+{
+  "run_command": "py -m evaluation.ragas_eval --query 0 1 2 3 5 --export",
+  "exported_at": "2026-05-31 09:47:18",
+  "query_count": 5,
+  "results": [
+    {
+      "query": "What are the setback requirements for a residential fence in Dallas?",
+      "municipality": "dallas",
+      "num_chunks": 10,
+      "top_similarity": 0.7620133615740495,
+      "faithfulness": 0.8,
+      "relevancy": 0.0,
+      "context_precision": 0.19999999998,
+      "latency_retrieval_ms": 4343,
+      "latency_generation_ms": 4076,
+      "latency_scoring_ms": 178779,
+      "answer_cache_hit": null,
+      "error": null
+    },
+    {
+      "query": "Do I need a permit for electrical work in Texas?",
+      "municipality": null,
+      "num_chunks": 10,
+      "top_similarity": 0.7904096966737704,
+      "faithfulness": 0.5882352941176471,
+      "relevancy": 0.9402928353487092,
+      "context_precision": 0.5166666666537499,
+      "latency_retrieval_ms": 232,
+      "latency_generation_ms": 4358,
+      "latency_scoring_ms": 181966,
+      "answer_cache_hit": null,
+      "error": null
+    },
+    {
+      "query": "What are the ADA accessibility requirements for commercial buildings?",
+      "municipality": null,
+      "num_chunks": 10,
+      "top_similarity": 0.8143583314846015,
+      "faithfulness": 0.5333333333333333,
+      "relevancy": 1.0,
+      "context_precision": 0.9749999999878125,
+      "latency_retrieval_ms": 376,
+      "latency_generation_ms": 5347,
+      "latency_scoring_ms": 197443,
+      "answer_cache_hit": null,
+      "error": null
+    },
+    {
+      "query": "What is the stormwater management plan requirement for construction sites?",
+      "municipality": null,
+      "num_chunks": 10,
+      "top_similarity": 0.7665276527404785,
+      "faithfulness": 1.0,
+      "relevancy": 0.9933213482805028,
+      "context_precision": 0.624999999984375,
+      "latency_retrieval_ms": 581,
+      "latency_generation_ms": 6553,
+      "latency_scoring_ms": 192146,
+      "answer_cache_hit": null,
+      "error": null
+    },
+    {
+      "query": "What are the fire sprinkler requirements for new construction in Dallas?",
+      "municipality": "dallas",
+      "num_chunks": 10,
+      "top_similarity": 0.7718999657750225,
+      "faithfulness": 1.0,
+      "relevancy": 0.9568466797054693,
+      "context_precision": 0.9999999999,
+      "latency_retrieval_ms": 321,
+      "latency_generation_ms": 5514,
+      "latency_scoring_ms": 199596,
+      "answer_cache_hit": null,
+      "error": null
+    }
+  ]
+}

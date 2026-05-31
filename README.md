@@ -155,6 +155,10 @@ CHUNK_FILTER_WARN_DROP_RATIO=0.50
 RETRIEVAL_PROCEDURAL_PENALTY_ENABLED=true
 RETRIEVAL_PROCEDURAL_PENALTY=0.015
 RETRIEVAL_PROCEDURAL_MAX_HITS=4
+RETRIEVAL_AUTHORITY_GUARDRAIL_ENABLED=true
+RETRIEVAL_NON_MUNI_MUNICIPAL_PENALTY=0.06
+RETRIEVAL_NON_MUNI_SCOPE_MATCH_BONUS=0.02
+RETRIEVAL_NON_MUNI_SCOPE_MISMATCH_PENALTY=0.03
 # Hybrid retrieval rollout (default off for safe fallback)
 RETRIEVAL_HYBRID_ENABLED=false
 RETRIEVAL_DENSE_TOP_N=20
@@ -215,7 +219,7 @@ Notes:
 - `chunk_document()` logs normalization stats (`chunks_before_filter`, `chunks_dropped`, `chunk_drop_ratio`).
 - If `chunk_drop_ratio` exceeds `CHUNK_FILTER_WARN_DROP_RATIO`, review source quality and thresholds.
 - Hybrid mode is rollback-safe: set `RETRIEVAL_HYBRID_ENABLED=false` to return to dense-only retrieval immediately.
-- As of 2026-05-31, the hybrid full-suite faithfulness gate is failing (`0.798 < 0.85`), so keep `RETRIEVAL_HYBRID_ENABLED=false` by default.
+- As of 2026-05-31 latest full run (`ragas_20260531_102544.json`), hybrid faithfulness is `0.852` (gate pass), but q1 remains unstable; keep `RETRIEVAL_HYBRID_ENABLED=false` by default until one more confirmatory full run.
 
 ---
 

@@ -29,6 +29,9 @@ PROCEDURAL_REGEX = (
     re.compile(r"\badopting and enacting supplement\b", re.IGNORECASE),
     re.compile(r"\bordinance no\.\b", re.IGNORECASE),
 )
+STATE_SCOPE_REGEX = re.compile(r"\b(texas|statewide|state law|state code)\b", re.IGNORECASE)
+FEDERAL_SCOPE_REGEX = re.compile(r"\b(federal|osha|epa|cfr|u\.?s\.?c\.?)\b", re.IGNORECASE)
+ADA_SCOPE_REGEX = re.compile(r"\b(ada|accessibility)\b", re.IGNORECASE)
 
 
 def _env_bool(name: str, default: bool) -> bool:
@@ -66,6 +69,62 @@ def _count_procedural_hits(text: str) -> int:
     return sum(len(pattern.findall(text)) for pattern in PROCEDURAL_REGEX)
 
 
+def _score_key(chunk: dict[str, Any]) -> str:
+    """Return the ranking key currently used for this chunk."""
+    return "rrf_score" if chunk.get("rrf_score") is not None else "similarity"
+
+
+def _detect_query_authority_targets(query: str) -> set[str]:
+    """Infer desired authority scope for non-municipality queries."""
+    targets: set[str] = set()
+    q = query.strip().lower()
+    if STATE_SCOPE_REGEX.search(q):
+        targets.add("state")
+    if FEDERAL_SCOPE_REGEX.search(q):
+        targets.add("federal")
+    if ADA_SCOPE_REGEX.search(q):
+        targets.update({"state", "federal"})
+    return targets
+
+
+def _apply_non_municipal_authority_guardrails(
+    chunks: list[dict[str, Any]],
+    *,
+    query: str,
+    municipality: Optional[str],
+    top_k: int,
+) -> list[dict[str, Any]]:
+    """Downrank municipal authority when query has no municipality filter."""
+    if municipality is not None:
+        return chunks[:top_k]
+    if not _env_bool("RETRIEVAL_AUTHORITY_GUARDRAIL_ENABLED", True):
+        return chunks[:top_k]
+    municipal_penalty = _env_float("RETRIEVAL_NON_MUNI_MUNICIPAL_PENALTY", 0.06)
+    scope_bonus = _env_float("RETRIEVAL_NON_MUNI_SCOPE_MATCH_BONUS", 0.02)
+    scope_mismatch = _env_float("RETRIEVAL_NON_MUNI_SCOPE_MISMATCH_PENALTY", 0.03)
+    targets = _detect_query_authority_targets(query)
+    reranked: list[dict[str, Any]] = []
+    for chunk in chunks:
+        updated = dict(chunk)
+        key = _score_key(updated)
+        raw = updated.get(key)
+        score = float(raw) if raw is not None else 0.0
+        authority = str(updated.get("authority_level") or "").lower()
+        penalty = municipal_penalty if authority == "municipal" else 0.0
+        bonus = scope_bonus if targets and authority in targets else 0.0
+        if targets and authority in {"state", "federal"} and authority not in targets:
+            penalty += scope_mismatch
+        updated[key] = max(0.0, score - penalty + bonus)
+        updated["authority_guardrail_penalty"] = penalty
+        updated["authority_guardrail_bonus"] = bonus
+        reranked.append(updated)
+    reranked.sort(
+        key=lambda c: (float(c.get("rrf_score") or 0.0), float(c.get("similarity") or 0.0)),
+        reverse=True,
+    )
+    return reranked[:top_k]
+
+
 def _apply_procedural_penalty(chunks: list[dict[str, Any]], top_k: int) -> list[dict[str, Any]]:
     """Downrank procedural-heavy chunks via similarity penalty and rerank."""
     if not _env_bool("RETRIEVAL_PROCEDURAL_PENALTY_ENABLED", True):
@@ -75,7 +134,7 @@ def _apply_procedural_penalty(chunks: list[dict[str, Any]], top_k: int) -> list[
     reranked: list[dict[str, Any]] = []
     for chunk in chunks:
         updated = dict(chunk)
-        base_key = "rrf_score" if chunk.get("rrf_score") is not None else "similarity"
+        base_key = _score_key(chunk)
         raw_score = chunk.get(base_key)
         score = float(raw_score) if raw_score is not None else 0.0
         hits = _count_procedural_hits(str(chunk.get("content", "")))
@@ -236,6 +295,12 @@ def retrieve(
         chunks = _fuse_with_rrf(dense_chunks, bm25_chunks, top_k=top_k)
     else:
         chunks = dense_chunks
+    chunks = _apply_non_municipal_authority_guardrails(
+        chunks,
+        query=query,
+        municipality=municipality,
+        top_k=top_k,
+    )
     chunks = _apply_procedural_penalty(chunks, top_k)
 
     latency_ms = int((time.perf_counter() - t0) * 1000)
