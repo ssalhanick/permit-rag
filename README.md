@@ -12,7 +12,7 @@ plus Texas state and federal regulations.
 | Week | Dates | Phase | Deliverables | Status |
 |------|-------|-------|-------------|--------|
 | 1 | May 19–25 | Foundation | Project scaffold, Docker + pgvector, harvester (13 docs), chunker + verification, embedder (nomic-embed-text-v1.5), 10 docs ingested, 7,170 chunks embedded | ✅ Done |
-| 2 | May 26–Jun 1 | Retrieval | `rag/pipeline.py` — dense retrieval via `match_chunks()`, manual retrieval quality testing with sample contractor queries | |
+| 2 | May 26–Jun 1 | Retrieval | `rag/pipeline.py` — dense retrieval + feature-flagged hybrid (dense+BM25 RRF), retrieval quality testing with contractor queries | 🔶 Active |
 | 3 | Jun 2–8 | Generation + API | `rag/generator.py` — Claude-powered answer generation with citations, `api/` — FastAPI endpoints for query + document management | |
 | 4 | Jun 9–15 | Evaluation | `evaluation/` — RAGAs integration (faithfulness, relevancy, precision, recall), build evaluation dataset (30–50 hand-written Q&A pairs) | |
 | 5 | Jun 16–22 | Tuning | Chunk size ablation (500–3000 chars), overlap ablation (0–400), top_k ablation (3–10), hybrid search experiment (HNSW + BM25 RRF) | |
@@ -76,11 +76,11 @@ permit_rag/
 ├── db/
 │   ├── schema.sql      # Postgres + pgvector schema (4 tables)
 │   └── client.py       # psycopg3 connection pool + CRUD helpers
-├── rag/                # (planned) Retrieval + generation pipeline
-├── api/                # (planned) FastAPI endpoints
-├── evaluation/         # (planned) RAGAs evaluation
-├── audit/              # (planned) Query audit logging
-├── frontend/           # (planned) Vite + React UI
+├── rag/                # Retrieval + generation pipeline (active)
+├── api/                # FastAPI endpoints (query + health live)
+├── evaluation/         # RAGAs evaluation workflows (active)
+├── audit/              # Query audit logging (scaffold)
+├── frontend/           # Vite + React UI (planned)
 ├── documents/
 │   ├── raw/            # Downloaded PDFs + HTML (gitignored)
 │   ├── metadata/       # JSON sidecar per document
@@ -201,19 +201,21 @@ py -m rag.pipeline --municipality plano --top-k 10 "What are the building permit
 py -m rag.pipeline --municipality dallas --top-k 10 "What are the fire sprinkler requirements for new construction in Dallas?"
 
 # Focused RAGAs pass then full suite
-$env:RAGAS_ANSWER_CACHE_ENABLED="false"; py -m evaluation.ragas_eval --query 0 2 4 5 --export
-$env:RAGAS_ANSWER_CACHE_PROMPT_VERSION="v4"; py -m evaluation.ragas_eval --export
+$env:RAGAS_ANSWER_CACHE_ENABLED="false"; py -m evaluation.ragas_eval --query 0 1 2 3 5 --export
+$env:RAGAS_ANSWER_CACHE_ENABLED="false"; py -m evaluation.ragas_eval --export
 
 # Hybrid retrieval validation (feature-flagged)
 $env:RETRIEVAL_HYBRID_ENABLED="true"; py -m rag.pipeline --municipality dallas --top-k 10 "What are the setback requirements for a residential fence in Dallas?"
 $env:RETRIEVAL_HYBRID_ENABLED="true"; py -m rag.pipeline --municipality dallas --top-k 10 "What are the fire sprinkler requirements for new construction in Dallas?"
-$env:RETRIEVAL_HYBRID_ENABLED="true"; $env:RAGAS_ANSWER_CACHE_ENABLED="false"; py -m evaluation.ragas_eval --query 0 5 --export
+$env:RETRIEVAL_HYBRID_ENABLED="true"; $env:RAGAS_ANSWER_CACHE_ENABLED="false"; py -m evaluation.ragas_eval --query 0 1 2 3 5 --export
+$env:RETRIEVAL_HYBRID_ENABLED="true"; $env:RAGAS_ANSWER_CACHE_ENABLED="false"; py -m evaluation.ragas_eval --export
 ```
 
 Notes:
 - `chunk_document()` logs normalization stats (`chunks_before_filter`, `chunks_dropped`, `chunk_drop_ratio`).
 - If `chunk_drop_ratio` exceeds `CHUNK_FILTER_WARN_DROP_RATIO`, review source quality and thresholds.
 - Hybrid mode is rollback-safe: set `RETRIEVAL_HYBRID_ENABLED=false` to return to dense-only retrieval immediately.
+- As of 2026-05-31, the hybrid full-suite faithfulness gate is failing (`0.798 < 0.85`), so keep `RETRIEVAL_HYBRID_ENABLED=false` by default.
 
 ---
 

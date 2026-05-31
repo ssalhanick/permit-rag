@@ -1,6 +1,6 @@
 # permit_rag — State
 
-_Updated: 2026-05-30 (hybrid dense+BM25 RRF implementation pass)_
+_Updated: 2026-05-31 (hybrid sweep validation + gate decision)_
 
 ## Phase
 
@@ -12,8 +12,8 @@ Nothing currently
 
 ## Next 3 tasks
 
-1. Run hybrid retrieval hyperparameter tuning sweep (RRF weights/top-N/penalty) to recover weak-query faithfulness (query 5) while preserving relevance gains
-2. Run full 7-query hybrid-on RAGAs pass and compare against dense-only baseline (0.855 faithfulness)
+1. Isolate and fix q1 faithfulness regression under hybrid retrieval (statewide electrical permit query)
+2. Add retrieval-time source/authority guardrails for non-municipality queries to reduce cross-jurisdiction noise
 3. Build api/routes/documents.py — document listing/status endpoints
 
 ## Module status
@@ -41,15 +41,31 @@ First-request latency ~29s (model load); steady-state 64–112ms
 Pydantic schemas: QueryRequest, QueryResponse, ChunkResponse, DiagnosticsResponse, HealthResponse, ErrorResponse
 Swagger UI: http://localhost:8000/docs
 
-## RAGAs (latest: 2026-05-30 hybrid weak-query run + 2026-05-29 full baseline)
+## RAGAs (latest: 2026-05-31 hybrid sweep + full gate check)
 
 full run summary (2026-05-29, dense-only): avg faithfulness 0.855 · avg relevancy 0.401 · avg context precision 0.534
 faithfulness gate on dense-only baseline: PASS (0.855 >= 0.85)
 per-query faithfulness: q0 0.750 · q1 0.864 · q2 0.938 · q3 1.000 · q4 0.895 · q5 0.667 · q6 0.875
-hybrid weak-query check (2026-05-30, q0+q5): avg faithfulness 0.750 · avg relevancy 0.000 · avg context precision 0.100 (below gate)
-hybrid retrieval smoke preview: q0 and q5 return high-similarity Dallas chunks, but answer faithfulness regressed in evaluator
-known weak spots: q5 remains primary outlier; hybrid ranking interaction still needs tuning before default enablement
-answer cache: observed 1 hit / 6 misses on latest full run
+hybrid tuning profile A (2026-05-30):
+- RETRIEVAL_RRF_DENSE_WEIGHT=1.4
+- RETRIEVAL_RRF_BM25_WEIGHT=0.6
+- RETRIEVAL_DENSE_TOP_N=24
+- RETRIEVAL_BM25_TOP_N=10
+- RETRIEVAL_PROCEDURAL_PENALTY_ENABLED=true
+- RETRIEVAL_PROCEDURAL_PENALTY=0.02
+- RETRIEVAL_PROCEDURAL_MAX_HITS=4
+focused run (q0,q1,q2,q3,q5; `ragas_20260530_232025.json`):
+- avg faithfulness 0.813 (vs dense-only subset baseline 0.844, delta -0.031)
+- avg relevancy 0.787
+- avg context precision 0.690
+- per-query faithfulness deltas vs dense-only: q0 -0.036 · q1 -0.511 · q2 +0.062 · q3 +0.000 · q5 +0.333
+full gate run (7-query; `ragas_20260531_003019.json`):
+- avg faithfulness 0.798 (FAIL vs 0.85 gate; delta vs dense-only -0.057)
+- avg relevancy 0.824 (delta +0.423)
+- avg context precision 0.603 (delta +0.069)
+- per-query faithfulness: q0 0.778 · q1 0.353 · q2 0.867 · q3 0.842 · q4 1.000 · q5 1.000 · q6 0.750
+key takeaway: hybrid tuning recovered weak-query targeting on q5 but introduced severe q1 grounding regression that pulls full-suite faithfulness below gate
+answer cache: disabled for tuning (`RAGAS_ANSWER_CACHE_ENABLED=false`) during subset/full validation runs
 langsmith tracing: eval-local tracing remains enabled for retrieval/generation/scoring inspection
 
 ## Docs
@@ -83,6 +99,7 @@ langsmith tracing: eval-local tracing remains enabled for retrieval/generation/s
 - Chunk size to be empirically tuned via RAGAs ablation in Week 4–5
 - tsvector GENERATED column + GIN index added to chunks table for future BM25 hybrid search
 - Hybrid search rollout remains gated: keep disabled by default until hybrid-on faithfulness returns to >= 0.85 on full suite
+- `RETRIEVAL_HYBRID_ENABLED` remains false after 2026-05-31 sweep because full hybrid faithfulness is 0.798 (< 0.85 gate)
 - Hatchling build with explicit packages list (no single-package layout)
 - psycopg-pool is a separate package from psycopg (added to pyproject.toml)
 - Schema doc_type enum expanded: added state_statute + federal_regulation
