@@ -152,3 +152,52 @@ Read `AGENTS.md`, `STATE.md`, and `journals/session_260531.md`. Validate that hy
 ## Git commit message
 
 chore(state): close out confirmatory eval, record final deltas, and approve hybrid default enablement
+
+---
+
+## Fine-tuning closeout addendum (2026-06-01)
+
+### Evaluation stability confirmation
+
+- Ran fresh full eval export after default hybrid enablement:
+  - command: `$env:RAGAS_ANSWER_CACHE_ENABLED="false"; py -m evaluation.ragas_eval --export`
+  - output: `evaluation/results/ragas_20260601_112137.json`
+- Confirmed stable/improved outcomes vs confirmatory baseline (`ragas_20260531_122639.json`):
+  - avg faithfulness: `0.894` (above `0.85` gate)
+  - q1 faithfulness: `0.933` (improved vs baseline `0.600`)
+
+### Regression guard implementation
+
+- Added lightweight eval gate script: `evaluation/eval_guard.py`
+  - fails if avg faithfulness drops below `0.85`
+  - fails if q1 faithfulness drops by more than `0.10` from baseline
+  - defaults to baseline: `evaluation/results/ragas_20260531_122639.json`
+- Added tests: `tests/test_eval_guard.py` (`3 passed`)
+- Documented guard usage in `README.md`
+
+### Supporting cleanup/docs
+
+- Removed duplicate catalog entry that caused loader failure:
+  - duplicate `doc_id`: `texas-contractor-licensing-electrical`
+- Added short metric definitions to `README.md` for:
+  - faithfulness
+  - relevancy
+  - context precision
+  - top similarity
+
+### Decision update
+
+- Active RAG fine-tuning is paused for now; retrieval/generation quality is stable under current guardrails.
+- Next implementation focus moves to API completion (admin routes + API hardening), while keeping eval guard checks as a regression gate.
+
+## Prompt for next session
+
+Read `AGENTS.md`, `STATE.md`, and `journals/session_260531.md`. Continue API completion by implementing admin routes and adding tests/docs for them. After API-impacting changes, run:
+`py -m pytest tests/test_documents_routes.py`
+`$env:RAGAS_ANSWER_CACHE_ENABLED="false"; py -m evaluation.ragas_eval --export`
+`py -m evaluation.eval_guard`
+Then record API progress and any metric deltas in `STATE.md`.
+
+## Git commit message
+
+chore(eval): add ragas regression guard and close out hybrid tuning before API phase

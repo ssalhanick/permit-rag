@@ -1,0 +1,36 @@
+{
+  "doc_id": "2023-national-electrical-code",
+  "verifications": {
+    "download": {
+      "result": "pass",
+      "detail": {
+        "raw_path": "documents\\raw\\2023-national-electrical-code.pdf",
+        "file_size_bytes": 1005229,
+        "checksum_sha256": "c33c03f8187dfd8a755e02f12ab861602b7b0bb3e1fef1f9b53158dede486678"
+      }
+    },
+    "extraction": {
+      "result": "pass",
+      "detail": {
+        "raw_chars": 57480
+      }
+    },
+    "chunking": {
+      "result": "pass",
+      "detail": {
+        "source_chars": 56342,
+        "chunk_chars": 59145,
+        "num_chunks": 51,
+        "coverage_ratio": 1.0497
+      }
+    },
+    "embedding": {
+      "result": "pass",
+      "detail": {
+        "num_chunks": 51,
+        "num_embedded": 51,
+        "embedding_dim": 768
+      }
+    }
+  }
+}

@@ -373,19 +373,19 @@
     "review_days": 180
   },
   {
-    "doc_id": "texas-contractor-licensing-plumbing",
-    "url": "https://www.tsbpe.texas.gov/licensing",
+    "doc_id": "2023-national-electrical-code",
+    "url": "/https://content.civicplus.com/api/assets/tx-plano/acb02c4a-8762-489f-b216-0c21fccc3743?cache=1800",
     "municipality": "texas",
     "authority_level": "state",
     "doc_type": "state_statute",
     "subject_tags": [
-      "licensing",
-      "plumbing",
-      "contractor",
-      "registration"
+      "electrical",
+      "residential",
+      "commercial",
+      "NEC 2023"
     ],
     "version": null,
-    "notes": "Texas State Board of Plumbing Examiners licensing",
+    "notes": "Plano City ordiance that says that it is adopting the 2023 National Electrical Code, which is also the current code for the rest of Texas cities. Would be nice to pull in the entire 900 page code pdf, but that is behind a dumb paywall.",
     "review_days": 180
   },
   {

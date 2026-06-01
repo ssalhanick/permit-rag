@@ -1,6 +1,6 @@
 # permit_rag — State
 
-_Updated: 2026-05-31 (confirmatory API/eval verification + hybrid default decision)_
+_Updated: 2026-06-01 (hybrid stability reconfirmed + eval guard added + API-next focus)_
 
 ## Phase
 
@@ -12,16 +12,16 @@ Week 2 of 9 (calendar) — Evaluation active (Phase 4 deliverables pulled forwar
 
 ## Next 3 tasks
 
-1. Monitor q1 (`electrical work in Texas`) grounding over the next two full eval runs
-2. Add explicit run-level metric assertions for export schema in eval tests
-3. Re-run full eval after next retrieval tuning change before customer-facing demos
+1. Implement API admin routes (document governance/update operations) with typed request/response schemas
+2. Add API tests for admin route success/failure paths and validation behavior
+3. Harden API for demo readiness (CORS restrictions, error shape consistency, docs refresh)
 
 ## Module status
 
-ingestion ✅ db ✅ rag 🔶 api 🔶 eval 🔶 frontend ⏳
+ingestion ✅ db ✅ rag ✅ api 🔶 eval ✅ frontend ⏳
 
-_rag note: retriever + pipeline + generator done; reranker + conflict_detector still ⏳_
-_api note: POST /query + GET /health + GET /documents + GET /documents/{doc_id} + GET /documents/status live; admin routes still ⏳_
+_rag note: hybrid tuning stabilized for current phase; reranker + conflict_detector are deferred backlog items_
+_api note: POST /query + GET /health + GET /documents + GET /documents/{doc_id} + GET /documents/status live; admin routes + hardening still ⏳_
 
 ## Ingestion verification (last run: 2026-05-25)
 
@@ -50,7 +50,7 @@ documents route implementation (2026-05-31; smoke-verified):
 - Added route tests in `tests/test_documents_routes.py` for filtering, validation, detail 404/success, and status response shape
 - Updated docs with API usage examples in `README.md` and `docs/api.md`
 
-## RAGAs (latest: 2026-05-31 hybrid guardrail rerun)
+## RAGAs (latest: 2026-06-01 post-default stability run)
 
 full run summary (2026-05-29, dense-only baseline; `ragas_20260529_222152.json`):
 - avg faithfulness 0.855 · avg relevancy 0.401 · avg context precision 0.534
@@ -85,9 +85,14 @@ confirmatory hybrid full rerun after API work (7-query; `ragas_20260531_122639.j
 - top similarity avg 0.790 (delta: +0.000); range 0.762–0.819 (unchanged)
 - per-query faithfulness: q0 0.714 · q1 0.600 · q2 0.875 · q3 1.000 · q4 0.955 · q5 1.000 · q6 0.875
 
+post-default full rerun with guard check (7-query; `ragas_20260601_112137.json`):
+- avg faithfulness 0.894 (PASS vs 0.85 gate; +0.034 vs confirmatory baseline 0.860)
+- q1 faithfulness 0.933 (delta vs baseline q1=0.600: +0.333)
+- eval guard: PASS (`py -m evaluation.eval_guard`) against baseline `ragas_20260531_122639.json`
+
 key takeaway:
-- full-suite faithfulness is stable above gate across consecutive full runs (`0.852` then `0.860`)
-- q1 remains the weakest query but improved materially (`0.438` → `0.600`) in the confirmatory run
+- full-suite faithfulness remains stable above gate across subsequent full runs (`0.852` → `0.860` → `0.894`)
+- q1 no longer shows collapse in latest run (`0.933` vs baseline `0.600`)
 - answer cache remained disabled (`RAGAS_ANSWER_CACHE_ENABLED=false`) during tuning/validation runs
 
 ## Docs
@@ -141,6 +146,7 @@ key takeaway:
 - Retrieval now supports env-gated procedural downranking (`RETRIEVAL_PROCEDURAL_PENALTY_ENABLED`) to demote boilerplate-heavy chunks
 - Retrieval now supports non-municipality authority guardrails (`RETRIEVAL_AUTHORITY_GUARDRAIL_ENABLED`) to penalize municipal noise and prefer state/federal scope alignment on statewide/federal queries
 - Document route filters are schema-validated with typed literals (`DocumentStatusType`, `AuthorityLevelType`, `DocTypeType`) so invalid filter values return API 422 before DB execution
+- Eval regression guard script added (`evaluation/eval_guard.py`) using baseline `ragas_20260531_122639.json` with fail conditions: avg faithfulness < `0.85` or q1 drop > `0.10`
 
 ## Deliverables checklist
 
@@ -158,6 +164,9 @@ key takeaway:
 - [x] Ran API smoke checks for new document routes
 - [x] Ran confirmatory hybrid full eval after API route changes
 - [x] Recorded final confirmatory metric deltas in state
+- [x] Ran post-default stability full eval (`ragas_20260601_112137.json`)
+- [x] Added lightweight eval regression guard (`evaluation/eval_guard.py`) and tests (`tests/test_eval_guard.py`)
+- [x] Validated guard run + tests (`PASS`, `3 passed`)
 
 ## Validation / verification steps
 
@@ -168,3 +177,6 @@ key takeaway:
 5. `$env:RETRIEVAL_HYBRID_ENABLED="true"; $env:RAGAS_ANSWER_CACHE_ENABLED="false"; py -m evaluation.ragas_eval --export` → `evaluation/results/ragas_20260531_102544.json`
 6. `py -m pytest tests/test_documents_routes.py` → pass (`5 passed`)
 7. `$env:RETRIEVAL_HYBRID_ENABLED="true"; $env:RAGAS_ANSWER_CACHE_ENABLED="false"; py -m evaluation.ragas_eval --export` (confirmatory run after API routes) → `evaluation/results/ragas_20260531_122639.json`
+8. `$env:RAGAS_ANSWER_CACHE_ENABLED="false"; py -m evaluation.ragas_eval --export` (post-default stability check) → `evaluation/results/ragas_20260601_112137.json`
+9. `py -m evaluation.eval_guard` → PASS (candidate `ragas_20260601_112137.json` vs baseline `ragas_20260531_122639.json`)
+10. `py -m pytest tests/test_eval_guard.py` → pass (`3 passed`)

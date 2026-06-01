@@ -245,6 +245,9 @@ py -m rag.pipeline --municipality dallas --top-k 10 "What are the fire sprinkler
 $env:RAGAS_ANSWER_CACHE_ENABLED="false"; py -m evaluation.ragas_eval --query 0 1 2 3 5 --export
 $env:RAGAS_ANSWER_CACHE_ENABLED="false"; py -m evaluation.ragas_eval --export
 
+# Regression guard against confirmatory baseline (fails on metric drift)
+py -m evaluation.eval_guard --candidate evaluation/results/ragas_20260601_010352.json
+
 # Hybrid retrieval validation (feature-flagged)
 $env:RETRIEVAL_HYBRID_ENABLED="true"; py -m rag.pipeline --municipality dallas --top-k 10 "What are the setback requirements for a residential fence in Dallas?"
 $env:RETRIEVAL_HYBRID_ENABLED="true"; py -m rag.pipeline --municipality dallas --top-k 10 "What are the fire sprinkler requirements for new construction in Dallas?"
@@ -257,6 +260,13 @@ Notes:
 - If `chunk_drop_ratio` exceeds `CHUNK_FILTER_WARN_DROP_RATIO`, review source quality and thresholds.
 - Hybrid mode is rollback-safe: set `RETRIEVAL_HYBRID_ENABLED=false` to return to dense-only retrieval immediately.
 - As of 2026-05-31 latest full run (`ragas_20260531_102544.json`), hybrid faithfulness is `0.852` (gate pass), but q1 remains unstable; keep `RETRIEVAL_HYBRID_ENABLED=false` by default until one more confirmatory full run.
+- `evaluation.eval_guard` defaults to baseline `evaluation/results/ragas_20260531_122639.json` and fails if avg faithfulness drops below `0.85` or q1 faithfulness drops by more than `0.10`.
+
+RAGAs metric definitions used in this repo:
+- **Faithfulness**: How well the answer is supported by retrieved context (higher = less hallucination).
+- **Relevancy**: How directly the answer addresses the user query.
+- **Context precision**: How much of the retrieved context is actually useful/relevant to the query.
+- **Top similarity (`top_sim`)**: Similarity score of the highest-ranked retrieved chunk for that query.
 
 ---
 
