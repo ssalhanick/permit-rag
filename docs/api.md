@@ -53,3 +53,32 @@ Returns grouped counts by `document_status` for the selected filter scope.
 ```powershell
 Invoke-RestMethod -Uri "http://localhost:8000/documents/status?municipality=dallas&authority=municipal" -Method Get
 ```
+
+### `PATCH /admin/documents/{doc_id}`
+
+Updates mutable governance metadata (`document_status`, `is_current`, `retrieval_weight`, `review_due`).
+If `API_ADMIN_TOKEN` is set, pass it as `X-Admin-Token`.
+
+```powershell
+$body = @{
+  document_status = "draft"
+  retrieval_weight = 0.55
+} | ConvertTo-Json
+
+Invoke-RestMethod -Uri "http://localhost:8000/admin/documents/dallas-building-code" `
+  -Method Patch -ContentType "application/json" -Headers @{ "X-Admin-Token" = "your-token" } -Body $body
+```
+
+### `POST /admin/documents/{doc_id}/supersede`
+
+Marks the target document as superseded by another `replacement_doc_id`.
+
+```powershell
+$body = @{
+  replacement_doc_id = "dallas-building-code-2026"
+  superseded_weight = 0.10
+} | ConvertTo-Json
+
+Invoke-RestMethod -Uri "http://localhost:8000/admin/documents/dallas-building-code-2024" `
+  -Method Post -ContentType "application/json" -Headers @{ "X-Admin-Token" = "your-token" } -Body $body
+```

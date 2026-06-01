@@ -230,6 +230,90 @@ def get_document_status_counts(
         return conn.execute(sql, params).fetchall()
 
 
+def update_document_admin_fields(
+    doc_id: str,
+    *,
+    document_status: Optional[str] = None,
+    is_current: Optional[bool] = None,
+    retrieval_weight: Optional[float] = None,
+    review_due: Optional[date] = None,
+) -> Optional[dict[str, Any]]:
+    """Update mutable governance fields for a single document by doc_id."""
+    assignments: list[str] = []
+    params: dict[str, Any] = {"doc_id": doc_id}
+
+    if document_status is not None:
+        assignments.append("document_status = %(document_status)s::document_status")
+        params["document_status"] = document_status
+    if is_current is not None:
+        assignments.append("is_current = %(is_current)s")
+        params["is_current"] = is_current
+    if retrieval_weight is not None:
+        assignments.append("retrieval_weight = %(retrieval_weight)s")
+        params["retrieval_weight"] = retrieval_weight
+    if review_due is not None:
+        assignments.append("review_due = %(review_due)s")
+        params["review_due"] = review_due
+
+    if not assignments:
+        return get_document_by_doc_id(doc_id)
+
+    sql = (
+        "UPDATE documents "
+        f"SET {', '.join(assignments)} "
+        "WHERE doc_id = %(doc_id)s "
+        "RETURNING *;"
+    )
+    with get_conn() as conn:
+        row = conn.execute(sql, params).fetchone()
+        conn.commit()
+    return row
+
+
+def supersede_document(
+    old_doc_id: str,
+    replacement_doc_id: str,
+    *,
+    superseded_weight: float = 0.1,
+) -> Optional[dict[str, Any]]:
+    """Mark old_doc_id as superseded by replacement_doc_id."""
+    if old_doc_id == replacement_doc_id:
+        raise ValueError("replacement_doc_id must differ from doc_id")
+
+    with get_conn() as conn:
+        old_row = conn.execute(
+            "SELECT id FROM documents WHERE doc_id = %(doc_id)s;",
+            {"doc_id": old_doc_id},
+        ).fetchone()
+        if old_row is None:
+            return None
+        replacement_row = conn.execute(
+            "SELECT id FROM documents WHERE doc_id = %(doc_id)s;",
+            {"doc_id": replacement_doc_id},
+        ).fetchone()
+        if replacement_row is None:
+            raise ValueError(f"Replacement document not found: {replacement_doc_id}")
+
+        updated = conn.execute(
+            """
+            UPDATE documents
+            SET document_status = 'superseded',
+                is_current = false,
+                retrieval_weight = %(superseded_weight)s,
+                superseded_by = %(replacement_id)s
+            WHERE doc_id = %(old_doc_id)s
+            RETURNING *;
+            """,
+            {
+                "superseded_weight": superseded_weight,
+                "replacement_id": replacement_row["id"],
+                "old_doc_id": old_doc_id,
+            },
+        ).fetchone()
+        conn.commit()
+    return updated
+
+
 # ════════════════════════════════════════════════
 #  CHUNKS
 # ════════════════════════════════════════════════

@@ -147,3 +147,131 @@ def test_document_status_counts_response_shape(monkeypatch) -> None:
         {"status": "active", "count": 8},
         {"status": "draft", "count": 2},
     ]
+
+
+def test_patch_admin_document_updates_metadata(monkeypatch) -> None:
+    """PATCH /admin/documents/{doc_id} applies governance metadata updates."""
+    from api.routes import admin as admin_route
+
+    captured: dict = {}
+    row = _document_row("tx-admin-doc")
+
+    def _fake_update(doc_id: str, **kwargs):
+        captured["doc_id"] = doc_id
+        captured.update(kwargs)
+        row["document_status"] = kwargs["document_status"]
+        row["retrieval_weight"] = Decimal("0.55")
+        return row
+
+    monkeypatch.setattr(
+        admin_route.db_client, "update_document_admin_fields", _fake_update
+    )
+    monkeypatch.setattr(admin_route.db_client, "count_chunks", lambda _doc_uuid: 12)
+
+    client = TestClient(app)
+    response = client.patch(
+        "/admin/documents/tx-admin-doc",
+        json={"document_status": "draft", "retrieval_weight": 0.55},
+    )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["action"] == "update_document_metadata"
+    assert body["document"]["doc_id"] == "tx-admin-doc"
+    assert body["document"]["document_status"] == "draft"
+    assert body["document"]["chunk_count"] == 12
+    assert captured == {
+        "doc_id": "tx-admin-doc",
+        "document_status": "draft",
+        "is_current": None,
+        "retrieval_weight": 0.55,
+        "review_due": None,
+    }
+
+
+def test_patch_admin_document_requires_token_when_configured(monkeypatch) -> None:
+    """PATCH /admin/documents/{doc_id} returns 403 when token is configured and missing."""
+    monkeypatch.setenv("API_ADMIN_TOKEN", "secret-token")
+    client = TestClient(app)
+    response = client.patch(
+        "/admin/documents/tx-admin-doc",
+        json={"document_status": "draft"},
+    )
+    assert response.status_code == 403
+    monkeypatch.delenv("API_ADMIN_TOKEN", raising=False)
+
+
+def test_patch_admin_document_404_when_missing(monkeypatch) -> None:
+    """PATCH /admin/documents/{doc_id} should return 404 for unknown doc_id."""
+    from api.routes import admin as admin_route
+
+    monkeypatch.setattr(
+        admin_route.db_client, "update_document_admin_fields", lambda _doc_id, **_k: None
+    )
+
+    client = TestClient(app)
+    response = client.patch(
+        "/admin/documents/missing-doc",
+        json={"document_status": "draft"},
+    )
+
+    assert response.status_code == 404
+    assert "Document not found" in response.json()["detail"]
+
+
+def test_supersede_admin_document_success(monkeypatch) -> None:
+    """POST /admin/documents/{doc_id}/supersede should mark source as superseded."""
+    from api.routes import admin as admin_route
+
+    row = _document_row("old-doc")
+    row["document_status"] = "superseded"
+    row["is_current"] = False
+    row["superseded_by"] = uuid4()
+    row["retrieval_weight"] = Decimal("0.10")
+
+    captured: dict = {}
+
+    def _fake_supersede(doc_id: str, replacement_doc_id: str, **kwargs):
+        captured["doc_id"] = doc_id
+        captured["replacement_doc_id"] = replacement_doc_id
+        captured.update(kwargs)
+        return row
+
+    monkeypatch.setattr(admin_route.db_client, "supersede_document", _fake_supersede)
+    monkeypatch.setattr(admin_route.db_client, "count_chunks", lambda _doc_uuid: 42)
+
+    client = TestClient(app)
+    response = client.post(
+        "/admin/documents/old-doc/supersede",
+        json={"replacement_doc_id": "new-doc", "superseded_weight": 0.1},
+    )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["action"] == "supersede_document"
+    assert body["document"]["document_status"] == "superseded"
+    assert body["document"]["is_current"] is False
+    assert captured == {
+        "doc_id": "old-doc",
+        "replacement_doc_id": "new-doc",
+        "superseded_weight": 0.1,
+    }
+
+
+def test_supersede_admin_document_rejects_invalid_request(monkeypatch) -> None:
+    """POST /admin/documents/{doc_id}/supersede returns 400 on invalid supersession."""
+    from api.routes import admin as admin_route
+
+    def _raise_value_error(_doc_id: str, _replacement_doc_id: str, **_kwargs):
+        raise ValueError("Replacement document not found: new-doc")
+
+    monkeypatch.setattr(admin_route.db_client, "supersede_document", _raise_value_error)
+
+    client = TestClient(app)
+    response = client.post(
+        "/admin/documents/old-doc/supersede",
+        json={"replacement_doc_id": "new-doc"},
+    )
+
+    assert response.status_code == 400
+    assert "Replacement document not found" in response.json()["detail"]

@@ -77,7 +77,7 @@ permit_rag/
 │   ├── schema.sql      # Postgres + pgvector schema (4 tables)
 │   └── client.py       # psycopg3 connection pool + CRUD helpers
 ├── rag/                # Retrieval + generation pipeline (active)
-├── api/                # FastAPI endpoints (query + documents + health)
+├── api/                # FastAPI endpoints (query + documents + admin + health)
 ├── docs/               # Supplemental docs (API usage examples)
 ├── evaluation/         # RAGAs evaluation workflows (active)
 ├── audit/              # Query audit logging (scaffold)
@@ -174,6 +174,18 @@ curl -s http://localhost:8000/documents/dallas-building-code
 
 # Status aggregation for current filter scope
 curl -s "http://localhost:8000/documents/status?municipality=dallas&authority=municipal"
+
+# Admin metadata patch (set API_ADMIN_TOKEN in env to enforce header auth)
+curl -s -X PATCH http://localhost:8000/admin/documents/dallas-building-code \
+  -H "Content-Type: application/json" \
+  -H "X-Admin-Token: ${API_ADMIN_TOKEN}" \
+  -d "{\"document_status\":\"draft\",\"retrieval_weight\":0.55}"
+
+# Admin supersession action
+curl -s -X POST http://localhost:8000/admin/documents/dallas-building-code-2024/supersede \
+  -H "Content-Type: application/json" \
+  -H "X-Admin-Token: ${API_ADMIN_TOKEN}" \
+  -d "{\"replacement_doc_id\":\"dallas-building-code-2026\",\"superseded_weight\":0.1}"
 ```
 
 ---

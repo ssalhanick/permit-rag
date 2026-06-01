@@ -192,3 +192,50 @@ class DocumentStatusResponse(BaseModel):
     counts: list[DocumentStatusCountResponse] = Field(
         description="Counts grouped by document_status."
     )
+
+
+class DocumentAdminUpdateRequest(BaseModel):
+    """Mutable governance fields for admin metadata updates."""
+
+    document_status: Optional[DocumentStatusType] = Field(
+        default=None,
+        description="Lifecycle status update.",
+    )
+    is_current: Optional[bool] = Field(
+        default=None,
+        description="Whether this revision is currently active for retrieval.",
+    )
+    retrieval_weight: Optional[float] = Field(
+        default=None,
+        ge=0.0,
+        le=1.0,
+        description="Retrieval weighting factor between 0 and 1.",
+    )
+    review_due: Optional[date] = Field(
+        default=None,
+        description="Next governance review due date.",
+    )
+
+
+class DocumentSupersedeRequest(BaseModel):
+    """Request body for superseding one document with another."""
+
+    replacement_doc_id: str = Field(
+        min_length=3,
+        max_length=200,
+        description="doc_id of the replacement document.",
+    )
+    superseded_weight: float = Field(
+        default=0.1,
+        ge=0.0,
+        le=1.0,
+        description="Retrieval weight to apply to the superseded document.",
+    )
+
+
+class DocumentAdminActionResponse(BaseModel):
+    """Admin mutation response for document governance endpoints."""
+
+    action: str = Field(description="Mutation action that was applied.")
+    message: str = Field(description="Human-readable mutation result.")
+    document: DocumentDetailResponse = Field(description="Updated document metadata.")

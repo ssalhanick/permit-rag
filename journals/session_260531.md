@@ -201,3 +201,55 @@ Then record API progress and any metric deltas in `STATE.md`.
 ## Git commit message
 
 chore(eval): add ragas regression guard and close out hybrid tuning before API phase
+
+---
+
+## API admin closeout addendum (2026-06-01)
+
+### API completion work
+
+- Implemented admin governance routes in `api/routes/admin.py`:
+  - `PATCH /admin/documents/{doc_id}` for mutable metadata updates
+  - `POST /admin/documents/{doc_id}/supersede` for lifecycle supersession
+- Added typed admin schemas in `api/schemas.py`:
+  - `DocumentAdminUpdateRequest`
+  - `DocumentSupersedeRequest`
+  - `DocumentAdminActionResponse`
+- Added DB helpers in `db/client.py`:
+  - `update_document_admin_fields()`
+  - `supersede_document()`
+- Wired admin router in `api/routes/__init__.py` and `api/main.py`.
+- Expanded route tests in `tests/test_documents_routes.py` for admin success/failure/token paths.
+- Updated API docs/examples in `README.md` and `docs/api.md` for admin endpoints.
+
+### Validation completed
+
+- `py -m pytest tests/test_documents_routes.py` -> `10 passed`
+- `$env:RAGAS_ANSWER_CACHE_ENABLED="false"; py -m evaluation.ragas_eval --export`
+  - output: `evaluation/results/ragas_20260601_120058.json`
+  - avg faithfulness: `0.889`
+  - avg relevancy: `0.838`
+  - avg context precision: `0.620`
+- `py -m evaluation.eval_guard`:
+  - candidate: `ragas_20260601_120058.json`
+  - baseline: `ragas_20260531_122639.json`
+  - result: `PASS`
+  - q1 faithfulness: `0.765` (still above baseline `0.600`)
+
+### Next session should
+
+1. Harden API CORS configuration using env-driven allowed origins (remove wildcard for non-dev use).
+2. Standardize API error payload behavior across routes.
+3. Investigate/fix psycopg pool shutdown warnings observed after eval runs.
+
+## Prompt for next session
+
+Read `AGENTS.md`, `STATE.md`, and the latest journal. Continue API hardening by tightening CORS and error handling consistency, then address eval DB pool shutdown warnings. After API-impacting changes, run:
+`py -m pytest tests/test_documents_routes.py`
+`$env:RAGAS_ANSWER_CACHE_ENABLED="false"; py -m evaluation.ragas_eval --export`
+`py -m evaluation.eval_guard`
+Then record hardening progress and any metric deltas in `STATE.md`.
+
+## Git commit message
+
+feat(api): add admin governance routes with tests/docs and verify post-change eval guard

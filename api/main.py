@@ -22,7 +22,7 @@ from dotenv import load_dotenv
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from api.routes import documents_router, query_router
+from api.routes import admin_router, documents_router, query_router
 from api.schemas import HealthResponse
 from db.client import close_pool, ping
 
@@ -75,6 +75,7 @@ app.add_middleware(
 
 app.include_router(query_router)
 app.include_router(documents_router)
+app.include_router(admin_router)
 
 
 # ── Health endpoint (lives on main app, not a router) ────────
