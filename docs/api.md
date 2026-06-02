@@ -13,6 +13,19 @@ py -m uvicorn api.main:app --reload --port 8000
 
 ## Endpoints
 
+## Runtime config notes
+
+- CORS is now env-driven:
+  - `API_CORS_ALLOW_ORIGINS` (comma-separated allowlist)
+  - `API_CORS_ALLOW_ALL=true` (dev-only wildcard override)
+- Error payload shape is normalized for API and validation errors:
+  - `{"detail": "<string>"}`
+- Admin auth uses token + optional role allowlist:
+  - `API_ADMIN_AUTH_REQUIRED=true|false` (default `true`)
+  - `API_ADMIN_TOKEN=<secret>`
+  - `API_ADMIN_ALLOWED_ROLES=admin,owner` (default `admin`)
+  - Policy: rotate `API_ADMIN_TOKEN` at least every 30 days and immediately after suspected credential exposure or team membership changes.
+
 ### `GET /health`
 
 ```powershell
@@ -57,7 +70,9 @@ Invoke-RestMethod -Uri "http://localhost:8000/documents/status?municipality=dall
 ### `PATCH /admin/documents/{doc_id}`
 
 Updates mutable governance metadata (`document_status`, `is_current`, `retrieval_weight`, `review_due`).
-If `API_ADMIN_TOKEN` is set, pass it as `X-Admin-Token`.
+When admin auth is enabled, pass:
+- `X-Admin-Token` (required)
+- `X-Admin-Role` (must be in `API_ADMIN_ALLOWED_ROLES`, default `admin`)
 
 ```powershell
 $body = @{
@@ -66,7 +81,8 @@ $body = @{
 } | ConvertTo-Json
 
 Invoke-RestMethod -Uri "http://localhost:8000/admin/documents/dallas-building-code" `
-  -Method Patch -ContentType "application/json" -Headers @{ "X-Admin-Token" = "your-token" } -Body $body
+  -Method Patch -ContentType "application/json" `
+  -Headers @{ "X-Admin-Token" = "your-token"; "X-Admin-Role" = "admin" } -Body $body
 ```
 
 ### `POST /admin/documents/{doc_id}/supersede`
@@ -80,5 +96,6 @@ $body = @{
 } | ConvertTo-Json
 
 Invoke-RestMethod -Uri "http://localhost:8000/admin/documents/dallas-building-code-2024" `
-  -Method Post -ContentType "application/json" -Headers @{ "X-Admin-Token" = "your-token" } -Body $body
+  -Method Post -ContentType "application/json" `
+  -Headers @{ "X-Admin-Token" = "your-token"; "X-Admin-Role" = "admin" } -Body $body
 ```

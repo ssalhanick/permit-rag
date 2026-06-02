@@ -179,14 +179,29 @@ curl -s "http://localhost:8000/documents/status?municipality=dallas&authority=mu
 curl -s -X PATCH http://localhost:8000/admin/documents/dallas-building-code \
   -H "Content-Type: application/json" \
   -H "X-Admin-Token: ${API_ADMIN_TOKEN}" \
+  -H "X-Admin-Role: admin" \
   -d "{\"document_status\":\"draft\",\"retrieval_weight\":0.55}"
 
 # Admin supersession action
 curl -s -X POST http://localhost:8000/admin/documents/dallas-building-code-2024/supersede \
   -H "Content-Type: application/json" \
   -H "X-Admin-Token: ${API_ADMIN_TOKEN}" \
+  -H "X-Admin-Role: admin" \
   -d "{\"replacement_doc_id\":\"dallas-building-code-2026\",\"superseded_weight\":0.1}"
 ```
+
+Admin runtime security/env flags:
+- `API_ADMIN_AUTH_REQUIRED=true|false` (default `true`)
+- `API_ADMIN_TOKEN=<secret>`
+- `API_ADMIN_ALLOWED_ROLES=admin,owner` (default `admin`)
+- Admin token policy: rotate `API_ADMIN_TOKEN` every 30 days and on any suspected secret exposure or admin roster change.
+
+CORS/env flags:
+- `API_CORS_ALLOW_ORIGINS=http://localhost:3000,http://127.0.0.1:5173`
+- `API_CORS_ALLOW_ALL=true` (dev-only wildcard override)
+
+API errors (including validation) are normalized as:
+- `{"detail": "<string>"}`
 
 ---
 

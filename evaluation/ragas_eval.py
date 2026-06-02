@@ -43,6 +43,7 @@ from ragas.metrics import (
     LLMContextPrecisionWithoutReference,
 )
 
+from db.client import close_pool
 from rag.retriever import RetrievalResult, retrieve
 from rag.llm_provider import get_provider_capabilities
 
@@ -1104,13 +1105,16 @@ if __name__ == "__main__":
         format="%(asctime)s [%(levelname)s] %(name)s — %(message)s",
     )
 
-    results = run_evaluation(
-        query_indices=args.query,
-        retrieval_only=args.retrieval_only,
-    )
-
-    if args.export:
-        export_results(
-            results,
-            run_command=_build_cli_command(sys.argv),
+    try:
+        results = run_evaluation(
+            query_indices=args.query,
+            retrieval_only=args.retrieval_only,
         )
+
+        if args.export:
+            export_results(
+                results,
+                run_command=_build_cli_command(sys.argv),
+            )
+    finally:
+        close_pool()

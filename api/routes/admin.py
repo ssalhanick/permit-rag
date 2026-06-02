@@ -26,13 +26,28 @@ log = logging.getLogger(__name__)
 router = APIRouter(prefix="/admin/documents", tags=["admin"])
 
 
-def _require_admin_token(x_admin_token: Optional[str]) -> None:
-    """Validate optional admin token if API_ADMIN_TOKEN is configured."""
-    configured = os.environ.get("API_ADMIN_TOKEN")
-    if not configured:
+def _require_admin_auth(x_admin_token: Optional[str], x_admin_role: Optional[str]) -> None:
+    """Enforce token + role checks for admin routes when enabled."""
+    required = os.environ.get("API_ADMIN_AUTH_REQUIRED", "true").strip().lower()
+    auth_required = required in {"1", "true", "yes", "on"}
+    if not auth_required:
         return
-    if x_admin_token != configured:
+
+    configured_token = os.environ.get("API_ADMIN_TOKEN", "").strip()
+    if not configured_token:
+        raise HTTPException(
+            status_code=503,
+            detail="Admin auth is enabled but API_ADMIN_TOKEN is not configured.",
+        )
+    if x_admin_token != configured_token:
         raise HTTPException(status_code=403, detail="Invalid admin token.")
+
+    raw_roles = os.environ.get("API_ADMIN_ALLOWED_ROLES", "admin")
+    allowed_roles = {value.strip().lower() for value in raw_roles.split(",") if value.strip()}
+    if allowed_roles:
+        role = (x_admin_role or "").strip().lower()
+        if role not in allowed_roles:
+            raise HTTPException(status_code=403, detail="Insufficient admin role.")
 
 
 def _to_document_summary(row: dict) -> DocumentSummaryResponse:
@@ -74,6 +89,7 @@ def _to_document_detail(row: dict) -> DocumentDetailResponse:
     response_model=DocumentAdminActionResponse,
     responses={
         403: {"model": ErrorResponse, "description": "Invalid admin token"},
+        503: {"model": ErrorResponse, "description": "Admin auth misconfiguration"},
         404: {"model": ErrorResponse, "description": "Document not found"},
         500: {"model": ErrorResponse, "description": "Admin update failure"},
     },
@@ -83,9 +99,10 @@ def patch_document_admin(
     doc_id: str,
     body: DocumentAdminUpdateRequest,
     x_admin_token: Optional[str] = Header(default=None),
+    x_admin_role: Optional[str] = Header(default=None),
 ) -> DocumentAdminActionResponse:
     """Patch mutable governance fields for an existing document."""
-    _require_admin_token(x_admin_token)
+    _require_admin_auth(x_admin_token, x_admin_role)
     try:
         updated = db_client.update_document_admin_fields(doc_id, **body.model_dump())
     except Exception as exc:
@@ -107,6 +124,7 @@ def patch_document_admin(
     responses={
         400: {"model": ErrorResponse, "description": "Invalid supersession request"},
         403: {"model": ErrorResponse, "description": "Invalid admin token"},
+        503: {"model": ErrorResponse, "description": "Admin auth misconfiguration"},
         404: {"model": ErrorResponse, "description": "Document not found"},
         500: {"model": ErrorResponse, "description": "Supersession failure"},
     },
@@ -116,9 +134,10 @@ def supersede_document_admin(
     doc_id: str,
     body: DocumentSupersedeRequest,
     x_admin_token: Optional[str] = Header(default=None),
+    x_admin_role: Optional[str] = Header(default=None),
 ) -> DocumentAdminActionResponse:
     """Supersede doc_id using replacement_doc_id and downweight old retrieval."""
-    _require_admin_token(x_admin_token)
+    _require_admin_auth(x_admin_token, x_admin_role)
     try:
         updated = db_client.supersede_document(
             doc_id,

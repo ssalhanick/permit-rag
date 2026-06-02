@@ -9,9 +9,18 @@ from datetime import date, datetime, timezone
 from decimal import Decimal
 from uuid import uuid4
 
+import pytest
 from fastapi.testclient import TestClient
 
 from api.main import app
+
+
+@pytest.fixture(autouse=True)
+def _admin_auth_defaults(monkeypatch) -> None:
+    """Default tests to admin auth disabled unless explicitly enabled."""
+    monkeypatch.setenv("API_ADMIN_AUTH_REQUIRED", "false")
+    monkeypatch.delenv("API_ADMIN_TOKEN", raising=False)
+    monkeypatch.delenv("API_ADMIN_ALLOWED_ROLES", raising=False)
 
 
 def _document_row(doc_id: str = "dallas-building-code") -> dict:
@@ -79,6 +88,7 @@ def test_list_documents_rejects_invalid_authority_filter() -> None:
     client = TestClient(app)
     response = client.get("/documents", params={"authority": "city"})
     assert response.status_code == 422
+    assert isinstance(response.json().get("detail"), str)
 
 
 def test_get_document_detail_returns_chunk_count(monkeypatch) -> None:
@@ -191,6 +201,7 @@ def test_patch_admin_document_updates_metadata(monkeypatch) -> None:
 
 def test_patch_admin_document_requires_token_when_configured(monkeypatch) -> None:
     """PATCH /admin/documents/{doc_id} returns 403 when token is configured and missing."""
+    monkeypatch.setenv("API_ADMIN_AUTH_REQUIRED", "true")
     monkeypatch.setenv("API_ADMIN_TOKEN", "secret-token")
     client = TestClient(app)
     response = client.patch(
@@ -199,6 +210,45 @@ def test_patch_admin_document_requires_token_when_configured(monkeypatch) -> Non
     )
     assert response.status_code == 403
     monkeypatch.delenv("API_ADMIN_TOKEN", raising=False)
+
+
+def test_patch_admin_document_requires_allowed_role(monkeypatch) -> None:
+    """PATCH /admin/documents/{doc_id} enforces configured admin role allowlist."""
+    monkeypatch.setenv("API_ADMIN_AUTH_REQUIRED", "true")
+    monkeypatch.setenv("API_ADMIN_TOKEN", "secret-token")
+    monkeypatch.setenv("API_ADMIN_ALLOWED_ROLES", "admin,owner")
+    client = TestClient(app)
+    response = client.patch(
+        "/admin/documents/tx-admin-doc",
+        json={"document_status": "draft"},
+        headers={"X-Admin-Token": "secret-token", "X-Admin-Role": "viewer"},
+    )
+    assert response.status_code == 403
+    assert "Insufficient admin role" in response.json()["detail"]
+
+
+def test_patch_admin_document_allows_valid_role(monkeypatch) -> None:
+    """PATCH /admin/documents/{doc_id} passes with valid token + role headers."""
+    from api.routes import admin as admin_route
+
+    monkeypatch.setenv("API_ADMIN_AUTH_REQUIRED", "true")
+    monkeypatch.setenv("API_ADMIN_TOKEN", "secret-token")
+    monkeypatch.setenv("API_ADMIN_ALLOWED_ROLES", "admin,owner")
+    monkeypatch.setattr(
+        admin_route.db_client,
+        "update_document_admin_fields",
+        lambda _doc_id, **_k: _document_row("tx-admin-doc"),
+    )
+    monkeypatch.setattr(admin_route.db_client, "count_chunks", lambda _doc_uuid: 9)
+
+    client = TestClient(app)
+    response = client.patch(
+        "/admin/documents/tx-admin-doc",
+        json={"document_status": "draft"},
+        headers={"X-Admin-Token": "secret-token", "X-Admin-Role": "admin"},
+    )
+    assert response.status_code == 200
+    assert response.json()["document"]["doc_id"] == "tx-admin-doc"
 
 
 def test_patch_admin_document_404_when_missing(monkeypatch) -> None:
