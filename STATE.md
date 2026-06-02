@@ -1,6 +1,6 @@
 # permit_rag — State
 
-_Updated: 2026-06-01 (admin API routes completed + post-change eval/guard verified)_
+_Updated: 2026-06-02 (compacted for context efficiency; dated history moved to journals)_
 
 ## Phase
 
@@ -23,175 +23,58 @@ ingestion ✅ db ✅ rag ✅ api 🔶 eval ✅ frontend ⏳
 _rag note: hybrid tuning stabilized for current phase; reranker + conflict_detector are deferred backlog items_
 _api note: POST /query + GET /health + GET /documents + GET /documents/{doc_id} + GET /documents/status + PATCH /admin/documents/{doc_id} + POST /admin/documents/{doc_id}/supersede live; hardening still ⏳_
 
-## Ingestion verification (last run: 2026-05-25)
+## Current operational snapshot
 
-download ✅ extraction ✅ chunking ✅ embedding ✅
+- Ingestion pipeline health (last full check): download ✅ extraction ✅ chunking ✅ embedding ✅
+- Vector DB: Postgres + pgvector (`chunks.embedding vector(768)`)
+- API live routes:
+  - `POST /query`, `POST /query/answer`, `GET /health`
+  - `GET /documents`, `GET /documents/{doc_id}`, `GET /documents/status`
+  - `PATCH /admin/documents/{doc_id}`, `POST /admin/documents/{doc_id}/supersede`
+- Docs: `README.md` + `docs/api.md` reflect current API surface.
 
-## Retrieval baseline (2026-05-26, dense-only, 7 test queries)
+## Quality gates (current)
 
-good 6 · weak 1 · miss 0 · avg latency 1455ms (incl. model load)
-top_sim range: 0.704–0.814 · mean_sim range: 0.704–0.793
-weak = Plano (1 chunk in DB — data coverage, not retrieval quality)
+- Latest full eval: `evaluation/results/ragas_20260601_120058.json`
+  - avg faithfulness `0.889` (PASS vs `0.85`)
+  - avg relevancy `0.838`
+  - avg context precision `0.620`
+  - q1 faithfulness `0.765` (above baseline `0.600`)
+- Eval guard: PASS (`py -m evaluation.eval_guard`) against baseline `ragas_20260531_122639.json`
+- Answer cache policy for eval: keep `RAGAS_ANSWER_CACHE_ENABLED=false`
+- Dated run-by-run metrics/deltas live in journals (latest: `journals/session_260531.md` addenda)
 
-## API baseline (2026-05-26, tested via Swagger UI)
+## Docs status
 
-GET /health → {"status":"healthy","database":true,"version":"0.1.0"}
-POST /query → 200 OK, 5 chunks, top_sim 0.762, 2 unique docs (dallas fence query)
-First-request latency ~29s (model load); steady-state 64–112ms
-Pydantic schemas: QueryRequest, QueryResponse, ChunkResponse, DiagnosticsResponse, HealthResponse, ErrorResponse
-Swagger UI: http://localhost:8000/docs
+- 13 active · 0 superseded · 0 overdue (last harvest summary: 2026-05-22)
+- 10 docs ingested · 7,170 chunks · 7,170 embeddings
 
-documents route implementation (2026-05-31; smoke-verified):
-- Added `api/routes/documents.py` with:
-  - `GET /documents` (filters: `municipality`, `status`, `authority`, `doc_type`)
-  - `GET /documents/{doc_id}` (detail + chunk_count)
-  - `GET /documents/status` (grouped status counts with optional filters)
-- Added document response schemas in `api/schemas.py` (summary/detail/status models with typed literals)
-- Added route tests in `tests/test_documents_routes.py` for filtering, validation, detail 404/success, and status response shape
-- Updated docs with API usage examples in `README.md` and `docs/api.md`
+## Active decisions (high-signal only)
 
-## RAGAs (latest: 2026-06-01 post-admin-route validation run)
+- Dev vector stack: Dockerized Postgres + pgvector; prod target remains Supabase/RDS Postgres.
+- Retrieval: hybrid dense+BM25 is enabled by default, with env toggle for rollback.
+- Guardrail policy: eval gate requires avg faithfulness >= `0.85`; q1 regression guard enforced by `evaluation/eval_guard.py`.
+- API architecture: FastAPI with lifespan startup/shutdown, typed schemas, and dedicated admin governance routes.
+- Governance: documents are never deleted; lifecycle is `active/superseded/repealed/needs_ocr/draft`.
+- Security note: admin routes currently use optional shared header token (`API_ADMIN_TOKEN`) and need stronger auth/RBAC.
+- Production TODO: tighten CORS from wildcard to env-driven allowlist.
 
-full run summary (2026-05-29, dense-only baseline; `ragas_20260529_222152.json`):
-- avg faithfulness 0.855 · avg relevancy 0.401 · avg context precision 0.534
-- per-query faithfulness: q0 0.750 · q1 0.864 · q2 0.938 · q3 1.000 · q4 0.895 · q5 0.667 · q6 0.875
+## Deliverables checklist (current phase)
 
-hybrid tuning profile A:
-- `RETRIEVAL_RRF_DENSE_WEIGHT=1.4`
-- `RETRIEVAL_RRF_BM25_WEIGHT=0.6`
-- `RETRIEVAL_DENSE_TOP_N=24`
-- `RETRIEVAL_BM25_TOP_N=10`
-- `RETRIEVAL_PROCEDURAL_PENALTY_ENABLED=true`
-- `RETRIEVAL_PROCEDURAL_PENALTY=0.02`
-- `RETRIEVAL_PROCEDURAL_MAX_HITS=4`
-- plus non-municipality authority guardrails (`RETRIEVAL_AUTHORITY_GUARDRAIL_*`)
+- [x] Implemented document read routes (`/documents`, `/documents/{doc_id}`, `/documents/status`)
+- [x] Implemented admin governance routes (`PATCH /admin/documents/{doc_id}`, `POST /admin/documents/{doc_id}/supersede`)
+- [x] Added tests for route behavior and validation (`tests/test_documents_routes.py`)
+- [x] Added eval regression guard + tests (`evaluation/eval_guard.py`, `tests/test_eval_guard.py`)
+- [x] Re-validated post-admin API quality (`ragas_20260601_120058.json`, guard PASS)
+- [ ] Tighten CORS and normalize error responses for demo readiness
+- [ ] Replace optional admin token with stronger auth/RBAC approach
+- [ ] Resolve psycopg pool shutdown warnings after evaluation runs
 
-hybrid subset rerun (q0,q1,q2,q3,q5; `ragas_20260531_094718.json`):
-- avg faithfulness 0.784 (delta vs prior hybrid subset 0.813: -0.029)
-- avg relevancy 0.778
-- avg context precision 0.663
-- q1 faithfulness 0.588 (improved vs prior hybrid subset q1=0.353, but still below baseline)
+## Validation / verification steps (canonical)
 
-hybrid full rerun (7-query; `ragas_20260531_102544.json`):
-- avg faithfulness 0.852 (PASS vs 0.85 gate; +0.054 vs prior hybrid full 0.798; -0.003 vs dense baseline 0.855)
-- avg relevancy 0.832 (+0.008 vs prior hybrid full; +0.431 vs dense baseline)
-- avg context precision 0.621 (+0.018 vs prior hybrid full; +0.087 vs dense baseline)
-- per-query faithfulness: q0 0.778 · q1 0.438 · q2 0.947 · q3 1.000 · q4 1.000 · q5 1.000 · q6 0.800
+1. `py -m pytest tests/test_documents_routes.py` (latest: `10 passed`)
+2. `py -m pytest tests/test_eval_guard.py` (latest: `3 passed`)
+3. `$env:RAGAS_ANSWER_CACHE_ENABLED="false"; py -m evaluation.ragas_eval --export`
+4. `py -m evaluation.eval_guard`
 
-confirmatory hybrid full rerun after API work (7-query; `ragas_20260531_122639.json`):
-- avg faithfulness 0.860 (delta vs `ragas_20260531_102544.json`: +0.008)
-- avg relevancy 0.838 (delta: +0.006)
-- avg context precision 0.669 (delta: +0.049)
-- top similarity avg 0.790 (delta: +0.000); range 0.762–0.819 (unchanged)
-- per-query faithfulness: q0 0.714 · q1 0.600 · q2 0.875 · q3 1.000 · q4 0.955 · q5 1.000 · q6 0.875
-
-post-default full rerun with guard check (7-query; `ragas_20260601_112137.json`):
-- avg faithfulness 0.894 (PASS vs 0.85 gate; +0.034 vs confirmatory baseline 0.860)
-- q1 faithfulness 0.933 (delta vs baseline q1=0.600: +0.333)
-- eval guard: PASS (`py -m evaluation.eval_guard`) against baseline `ragas_20260531_122639.json`
-
-post-admin-route full rerun with guard check (7-query; `ragas_20260601_120058.json`):
-- avg faithfulness 0.889 (PASS vs 0.85 gate; delta vs `ragas_20260601_112137.json`: -0.005)
-- avg relevancy 0.838 (delta: +0.000)
-- avg context precision 0.620 (delta: -0.018)
-- q1 faithfulness 0.765 (delta vs `ragas_20260601_112137.json` q1=0.933: -0.168; still +0.165 vs baseline q1=0.600)
-- eval guard: PASS (`py -m evaluation.eval_guard`) with candidate `ragas_20260601_120058.json`
-
-key takeaway:
-- full-suite faithfulness remains stable above gate across subsequent full runs (`0.852` → `0.860` → `0.894` → `0.889`)
-- q1 remains above regression baseline (`0.765` vs baseline `0.600`) and guard continues to pass
-- answer cache remained disabled (`RAGAS_ANSWER_CACHE_ENABLED=false`) during tuning/validation runs
-
-## Docs
-
-13 active · 0 superseded · 0 overdue · last harvest 2026-05-22
-10 pass chunking · 3 fail extraction (Municode redirect pages)
-10 docs ingested · 7,170 chunks · 7,170 embeddings (100% coverage)
-
-## Decisions
-
-- Local Postgres 18 + pgvector for dev; Supabase or RDS for production deploy
-- psycopg3 (direct driver) over Supabase SDK — no vendor lock-in, portable to any Postgres host
-- Docker Compose for local Postgres + pgvector (pgvector/pgvector:pg17 image)
-- Docker mapped to port 5433 to avoid conflict with local Windows Postgres on 5432
-- FastAPI over Flask (async support, auto OpenAPI docs)
-- Vite + React over Next.js (simpler for MVP, deploys free on Vercel)
-- Claude API for generation; nomic-embed-text-v1.5 for embeddings (local, free)
-- nomic-embed-text-v1.5 over Voyage-3: no API key, no cost, 768-dim, local inference
-- Hybrid search implemented behind `RETRIEVAL_HYBRID_ENABLED` with dense+BM25 RRF fusion and rollback-safe env toggle
-- Dallas + Fort Worth use amlegal not Municode (codelibrary.amlegal.com)
-- Plano, McKinney, Frisco confirmed on Municode
-- up.codes added for Fort Worth amendment tracking
-- Citations must reference publisher + date, never imply direct city authority
-- verification.py runs at every ingestion stage — no silent failures
-- Scanned PDFs flagged as needs_ocr, not ingested until OCR run
-- Verification results written to registry.json per document
-- Dallas amlegal export requires manual PDF download (bot protection)
-- Dallas code split into 4 documents: charter + 3 ordinance volumes
-- Chunking: 1500 chars / 200 overlap, RecursiveCharacterTextSplitter
-- No tokenization/lemmatization — dense embedding models handle semantics internally
-- Chunk size to be empirically tuned via RAGAs ablation in Week 4–5
-- tsvector GENERATED column + GIN index added to chunks table for future BM25 hybrid search
-- Hybrid search rollout gate: require full-suite avg faithfulness >= 0.85 and no severe single-query grounding collapse before default enablement
-- `RETRIEVAL_HYBRID_ENABLED` can be default-enabled after confirmatory run (`0.860` faithfulness, `0.838` relevancy, `0.669` context precision); keep env toggle for fast rollback if q1 regresses
-- Hatchling build with explicit packages list (no single-package layout)
-- psycopg-pool is a separate package from psycopg (added to pyproject.toml)
-- Schema doc_type enum expanded: added state_statute + federal_regulation
-- Schema vector column: 768-dim (nomic) not 1024-dim (voyage)
-- Local Windows Postgres 16+18 services disabled — Docker is sole DB for dev
-- Dense retrieval quality remains acceptable, but hybrid now shows consistent full-suite gains and is approved for default enablement
-- API CORS set to allow_origins=["*"] for local dev — must tighten for production
-- Generator system prompt enforces [doc_id, chunk N] citation format — regex extraction in _extract_citations()
-- Lifespan pattern (not @app.on_event) for startup/shutdown — compatible with FastAPI 0.111+
-- RAGAs relevancy embedding adapter now uses LangchainEmbeddingsWrapper composition (not subclassing HuggingfaceEmbeddings)
-- Preferred eval dependency path is langchain-huggingface with langchain_community fallback import
-- Eval answer cache strategy: generation-only cache with strict key (query + retrieval fingerprint + model + prompt version)
-- LLM provider capability layer added (`LLM_PROVIDER` + `supports_prompt_caching`) so prompt caching is optional and Anthropic-specific
-- Anthropic prompt caching uses explicit system-block breakpoints (`cache_control`) gated by provider capability + env flag
-- LangSmith tracing scope is eval-local only (gated by `LANGCHAIN_TRACING_V2` + `LANGSMITH_API_KEY`) with full payload capture for prompt/metric debugging
-- Ingestion normalization is now env-gated (`CHUNK_NORMALIZATION_ENABLED`) with procedural line stripping + balanced chunk filtering
-- Retrieval now supports env-gated procedural downranking (`RETRIEVAL_PROCEDURAL_PENALTY_ENABLED`) to demote boilerplate-heavy chunks
-- Retrieval now supports non-municipality authority guardrails (`RETRIEVAL_AUTHORITY_GUARDRAIL_ENABLED`) to penalize municipal noise and prefer state/federal scope alignment on statewide/federal queries
-- Document route filters are schema-validated with typed literals (`DocumentStatusType`, `AuthorityLevelType`, `DocTypeType`) so invalid filter values return API 422 before DB execution
-- Eval regression guard script added (`evaluation/eval_guard.py`) using baseline `ragas_20260531_122639.json` with fail conditions: avg faithfulness < `0.85` or q1 drop > `0.10`
-- Admin governance routes are implemented under `/admin/documents` with optional header token gate (`API_ADMIN_TOKEN`): metadata patch + supersession action
-
-## Deliverables checklist
-
-- [x] Investigated q1 faithfulness collapse under hybrid retrieval
-- [x] Added retrieval-time authority/source guardrails for non-municipality queries
-- [x] Ran `rag.pipeline` previews for q1 and q5 under hybrid mode
-- [x] Ran `py -m evaluation.ragas_eval --query 0 1 2 3 5 --export`
-- [x] Ran `py -m evaluation.ragas_eval --export` (full 7-query)
-- [x] Recorded metric deltas and rollout decision in state
-- [x] Added export support for `most_relevant_chunk_id` and `most_relevant_doc_id` in eval output
-- [x] Implemented `api/routes/documents.py` list/detail/status endpoints
-- [x] Added API document response models and filter typing in `api/schemas.py`
-- [x] Added `tests/test_documents_routes.py` coverage for route behavior and response shape
-- [x] Updated API usage docs in `README.md` and `docs/api.md`
-- [x] Ran API smoke checks for new document routes
-- [x] Ran confirmatory hybrid full eval after API route changes
-- [x] Recorded final confirmatory metric deltas in state
-- [x] Ran post-default stability full eval (`ragas_20260601_112137.json`)
-- [x] Added lightweight eval regression guard (`evaluation/eval_guard.py`) and tests (`tests/test_eval_guard.py`)
-- [x] Validated guard run + tests (`PASS`, `3 passed`)
-- [x] Implemented admin governance routes (`api/routes/admin.py`) for metadata patch + supersession
-- [x] Added admin request/response schemas and DB helpers for governance mutations
-- [x] Extended document route tests to include admin success/failure/token validation (`10 passed`)
-- [x] Re-ran post-admin API eval + guard (`ragas_20260601_120058.json`, guard PASS)
-
-## Validation / verification steps
-
-1. `py -m pytest tests/test_retriever.py` → pass (`6 passed`)
-2. `$env:RETRIEVAL_HYBRID_ENABLED="true"; py -m rag.pipeline --top-k 10 "Do I need a permit for electrical work in Texas?"`
-3. `$env:RETRIEVAL_HYBRID_ENABLED="true"; py -m rag.pipeline --municipality dallas --top-k 10 "What are the fire sprinkler requirements for new construction in Dallas?"`
-4. `$env:RETRIEVAL_HYBRID_ENABLED="true"; $env:RAGAS_ANSWER_CACHE_ENABLED="false"; py -m evaluation.ragas_eval --query 0 1 2 3 5 --export` → `evaluation/results/ragas_20260531_094718.json`
-5. `$env:RETRIEVAL_HYBRID_ENABLED="true"; $env:RAGAS_ANSWER_CACHE_ENABLED="false"; py -m evaluation.ragas_eval --export` → `evaluation/results/ragas_20260531_102544.json`
-6. `py -m pytest tests/test_documents_routes.py` → pass (`5 passed`)
-7. `$env:RETRIEVAL_HYBRID_ENABLED="true"; $env:RAGAS_ANSWER_CACHE_ENABLED="false"; py -m evaluation.ragas_eval --export` (confirmatory run after API routes) → `evaluation/results/ragas_20260531_122639.json`
-8. `$env:RAGAS_ANSWER_CACHE_ENABLED="false"; py -m evaluation.ragas_eval --export` (post-default stability check) → `evaluation/results/ragas_20260601_112137.json`
-9. `py -m evaluation.eval_guard` → PASS (candidate `ragas_20260601_112137.json` vs baseline `ragas_20260531_122639.json`)
-10. `py -m pytest tests/test_eval_guard.py` → pass (`3 passed`)
-11. `py -m pytest tests/test_documents_routes.py` → pass (`10 passed`) after admin route additions
-12. `$env:RAGAS_ANSWER_CACHE_ENABLED="false"; py -m evaluation.ragas_eval --export` → `evaluation/results/ragas_20260601_120058.json`
-13. `py -m evaluation.eval_guard` → PASS (candidate `ragas_20260601_120058.json` vs baseline `ragas_20260531_122639.json`)
+For older run logs, command-by-command history, and dated deltas, use journal entries (`journals/session_260531.md` + subsequent sessions).
