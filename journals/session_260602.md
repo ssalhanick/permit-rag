@@ -76,18 +76,51 @@ Complete remaining API hardening deliverables (CORS restrictions, uniform error 
 - `py -m pytest tests/test_documents_routes.py` -> `12 passed`
 - `$env:RAGAS_ANSWER_CACHE_ENABLED="false"; py -m evaluation.ragas_eval --export` -> latest stable pass at `ragas_20260602_151539.json` (`avg faithfulness 0.899`)
 - `py -m evaluation.eval_guard` -> PASS for `ragas_20260602_151539.json`
+- Frontend smoke test:
+  - Vite build succeeded (`npm run build`)
+  - UI flow works (`ask -> answer -> citations -> source chunk viewer`)
+  - Added browser debug panel; captured `Failed to fetch` root cause as API offline (`WinError 10061`)
+
+### Frontend + observability addendum (same date)
+
+- Frontend milestone expanded:
+  - Added chat history panel
+  - Added citation-click source chunk viewer
+  - Added 7 quick-test question buttons (matches eval query set)
+  - Improved answer readability with preserved line breaks and answer card styling
+- Debug improvements:
+  - Added in-browser health probe (`GET /health`) button
+  - Added request log panel with request IDs, status, and elapsed time
+  - Added clearer guidance when network/CORS failures occur
+- API tracing improvements:
+  - Added LangSmith tracing in `POST /query/answer`
+  - Each run now includes `X-Client-Session-Id` + `X-Client-Request-Id`
+  - Retrieval/generation spans included with latencies, citation count, and source doc IDs
+- Regression test status after tracing updates:
+  - `tests/test_api_main.py` -> `5 passed`
+  - `tests/test_documents_routes.py` -> `12 passed`
+  - `ragas_eval` + `eval_guard` re-run still pending capture for this exact API revision
 
 ---
 
+### Post-tracing eval verification (captured)
+
+- `$env:RAGAS_ANSWER_CACHE_ENABLED="false"; py -m evaluation.ragas_eval --export`
+  - exported: `evaluation/results/ragas_20260602_214048.json`
+  - avg faithfulness `0.893` (PASS), avg relevancy `0.694`, avg context precision `0.624`
+- `py -m evaluation.eval_guard`
+  - candidate `ragas_20260602_214048.json` -> PASS
+  - q1 faithfulness `0.882` vs baseline `0.600` (no regression fail)
+
 ## Next session should
 
-1. Keep monitoring eval variability (run at least one confirmatory full eval when significant API/retrieval changes land).
-2. Start frontend scaffold work (first milestone still pending in module status).
-3. Preserve compact `STATE.md` discipline and keep dated metric deltas in journal entries.
+1. Build frontend document browser (`GET /documents`, `GET /documents/status`) with filter controls.
+2. Add one-click quick-test auto-submit and compact diagnostics/readability polish.
+3. Keep LangSmith session tracing visible/usable in UI and confirm logs remain clean.
 
 ## Prompt for next session
 
-Read `AGENTS.md`, `STATE.md`, and `journals/session_260602.md`. Begin frontend module kickoff (skeleton + first interaction flow), and after any retrieval/API-touching changes run:
+Read `AGENTS.md`, `STATE.md`, and `journals/session_260602.md`. Continue frontend phase (document browser + testing ergonomics) and keep observability tight. Before closing session, run:
 `py -m pytest tests/test_api_main.py`
 `py -m pytest tests/test_documents_routes.py`
 `$env:RAGAS_ANSWER_CACHE_ENABLED="false"; py -m evaluation.ragas_eval --export`
