@@ -1,0 +1,55 @@
+feat(sprint1): schema hardening, AHJ disclaimer, chunk lifecycle, source tier, DB roles
+
+## Summary
+Implements all five Sprint 1 tasks from the RECOMMENDATIONS.md implementation plan.
+No breaking changes to existing retrieval behavior — all new columns have safe defaults
+and existing chunks/documents are backfilled automatically.
+
+## Changes
+
+### Task 1 — AHJ Disclaimer (api/)
+- `api/schemas.py`: Add `AHJDisclaimer` model (text + learn_more_url); add to `AnswerResponse`
+- `api/routes/query.py`: Add static `_AHJ_DEPT_URLS` dict for 10 DFW jurisdictions;
+  `_build_ahj_disclaimer()` helper; populate `ahj_disclaimer` on `POST /query/answer`
+- `ChunkResponse` gains `source_tier: int` field (default 1)
+
+### Task 2 — content_hash on chunks (db/)
+- `db/migrations/002_chunk_content_hash.sql`: ALTER TABLE + index
+- `db/client.py`: `insert_chunks()` now computes SHA-256 of content and writes to
+  `content_hash` column automatically (hashlib — no new dependency)
+
+### Task 3 — Chunk-level status (db/)
+- `db/migrations/003_chunk_status.sql`: ALTER TABLE adds `status document_status DEFAULT 'active'` + index
+- Enables individual chunks within an active document to be independently superseded
+
+### Task 4 — Postgres roles (db/)
+- `db/init/02_roles.sql`: Creates `corpus_writer` (ingestion writes) and `app_reader`
+  (API reads + query_log insert) with least-privilege grants
+- `docker-compose.yml`: Mounts `./db/init` into initdb.d for first-boot execution
+- `.env.example`: Documents `CORPUS_WRITER_URL` and `APP_READER_URL`; includes
+  Supabase migration path note (service_role / anon RLS pattern)
+
+### Task 5 — source_tier on documents (db/)
+- `db/migrations/004_source_tier.sql`: ALTER TABLE adds `source_tier INT DEFAULT 1
+  CHECK (IN (1,2,3))` + index; backfills existing rows as Tier 1
+- `db/client.py`: `insert_document()` accepts `source_tier` param (default 1)
+- `db/migrations/005_match_chunks_update.sql`: DROP + CREATE of `match_chunks()` SQL
+  function — adds `c.status = 'active'` filter, `ORDER BY d.source_tier ASC`,
+  and new return columns: chunk_status, source_tier, ingested_at, retrieval_weight
+
+### Schema (db/schema.sql)
+- Canonical schema updated to match all migrations (source of truth for fresh volumes)
+
+## DB state after this commit
+Applied to Docker dev DB (permit_rag_db):
+  - Migration 002: ALTER TABLE + index ✅
+  - Migration 003: ALTER TABLE + index ✅
+  - Migration 004: ALTER TABLE + index (UPDATE 0 — default backfill) ✅
+  - Migration 005: DROP FUNCTION + CREATE FUNCTION ✅
+  - Roles: corpus_writer + app_reader created with grants ✅
+
+## No action required
+- Existing chunks and documents are unaffected (safe defaults)
+- Retrieval quality metrics unchanged — chunk status filter only excludes 'superseded'
+  chunks, which do not exist yet
+- All existing tests should pass without modification

@@ -1,27 +1,28 @@
 # permit_rag — State
 
-_Updated: 2026-06-03 (post-tracing eval+guard reconfirmed PASS; frontend phase active)_
+_Updated: 2026-06-03 (Sprint 1 complete — schema hardening, AHJ disclaimer, chunk status, source_tier, content_hash, DB roles)_
 
 ## Phase
 
-Phase transition: API+eval hardening complete; frontend module is now active focus
+Sprint 1 complete. Schema hardening + API baseline done. Sprint 2 next: jurisdictions table + provenance reranker.
 
 ## Blocked on
 
 - None.
 
-## Next 3 tasks
+## Next 3 tasks (Sprint 2)
 
-1. Add frontend document browser against `GET /documents` and `GET /documents/status`
-2. Add one-click quick test auto-submit + optional per-query timing chart in UI
-3. Polish frontend UX for testing speed (one-click quick-test submit + compact diagnostics view)
+1. Create `jurisdictions` table + seed 10 DFW jurisdictions with AHJ dept URLs
+2. Replace static `_AHJ_DEPT_URLS` dict in `api/routes/query.py` with live DB lookup
+3. Implement `provenance_weight()` + `rerank()` in `rag/reranker.py`, wire into pipeline
 
 ## Module status
 
 ingestion ✅ db ✅ rag ✅ api ✅ eval ✅ frontend 🔧
 
-_rag note: hybrid tuning stabilized for current phase; reranker + conflict_detector are deferred backlog items_
-_api note: core + documents + admin routes live; CORS/error-shape/auth hardening complete with dedicated route/app-level tests._
+_db note: Sprint 1 migrations applied — `content_hash` + `status` on chunks, `source_tier` on documents, `match_chunks()` updated (chunk status filter + tier ordering + new return cols). Roles `corpus_writer`/`app_reader` live on Docker dev DB._
+_rag note: reranker + conflict_detector are Sprint 2/3 backlog items._
+_api note: `POST /query/answer` now returns `ahj_disclaimer` wrapper (text + learn_more_url). `ChunkResponse` includes `source_tier`. AHJ URL map is static for now — replaced by jurisdictions table in Sprint 2._
 _frontend note: kickoff now includes first flow + chat history + citation-linked source chunk viewer + quick-test buttons + debug panel._
 _tracing note: `POST /query/answer` now captures LangSmith runs with `X-Client-Session-Id` and `X-Client-Request-Id` metadata._
 
@@ -29,8 +30,10 @@ _tracing note: `POST /query/answer` now captures LangSmith runs with `X-Client-S
 
 - Ingestion pipeline health (last full check): download ✅ extraction ✅ chunking ✅ embedding ✅
 - Vector DB: Postgres + pgvector (`chunks.embedding vector(768)`)
+- Schema additions (Sprint 1): `chunks.content_hash`, `chunks.status`, `documents.source_tier`
+- DB roles: `corpus_writer` (ingestion writes), `app_reader` (API reads + query_log insert)
 - API live routes:
-  - `POST /query`, `POST /query/answer`, `GET /health`
+  - `POST /query`, `POST /query/answer` (+ `ahj_disclaimer`), `GET /health`
   - `GET /documents`, `GET /documents/{doc_id}`, `GET /documents/status`
   - `PATCH /admin/documents/{doc_id}`, `POST /admin/documents/{doc_id}/supersede`
 - Docs: `README.md` + `docs/api.md` reflect current API surface.
@@ -62,10 +65,12 @@ _tracing note: `POST /query/answer` now captures LangSmith runs with `X-Client-S
 - Retrieval: hybrid dense+BM25 is enabled by default, with env toggle for rollback.
 - Guardrail policy: eval gate requires avg faithfulness >= `0.85`; q1 regression guard enforced by `evaluation/eval_guard.py`.
 - API architecture: FastAPI with lifespan startup/shutdown, typed schemas, and dedicated admin governance routes.
-- Governance: documents are never deleted; lifecycle is `active/superseded/repealed/needs_ocr/draft`.
+- Governance: documents are never deleted; lifecycle is `active/superseded/repealed/needs_ocr/draft`. Chunks now have independent `status` lifecycle.
 - Security baseline: admin routes enforce auth by default (`API_ADMIN_AUTH_REQUIRED=true`) with token + role allowlist (`API_ADMIN_ALLOWED_ROLES`).
+- DB role policy: ingestion connects via `CORPUS_WRITER_URL`; API reads via `APP_READER_URL`. Rotate passwords before any shared deployment. Supabase migration: replace with service_role / anon RLS pattern (see `db/init/02_roles.sql` comments).
 - Admin token policy: rotate `API_ADMIN_TOKEN` at least every 30 days and after suspected secret exposure or admin roster change.
 - CORS policy: env-driven allowlist via `API_CORS_ALLOW_ORIGINS`; wildcard only via explicit dev override `API_CORS_ALLOW_ALL=true`.
+- AHJ disclaimer: static URL dict in `api/routes/query.py` is a placeholder — replaced by `jurisdictions` table lookup in Sprint 2 (Task 7).
 
 ## Deliverables checklist (current phase)
 
@@ -85,6 +90,13 @@ _tracing note: `POST /query/answer` now captures LangSmith runs with `X-Client-S
 - [x] Added seven quick-test question buttons for repeatable manual testing
 - [x] Added frontend debug panel (health probe + request log + clearer network/CORS error hints)
 - [x] Added API-level LangSmith tracing for `/query/answer` with session/request IDs
+
+### Sprint 1 — Schema Hardening (2026-06-03)
+- [x] Task 1: `AHJDisclaimer` model + `ahj_disclaimer` field on `POST /query/answer` (text + learn_more_url per municipality)
+- [x] Task 2: `chunks.content_hash` column + index (migration 002)
+- [x] Task 3: `chunks.status` column + index (migration 003) — chunk-level lifecycle independent of document status
+- [x] Task 4: `corpus_writer` + `app_reader` Postgres roles on Docker dev DB (`db/init/02_roles.sql`); `CORPUS_WRITER_URL` + `APP_READER_URL` in `.env.example`
+- [x] Task 5: `documents.source_tier` column + index (migration 004); `insert_document` + `insert_chunks` updated; `match_chunks()` updated (migration 005: chunk status filter, tier ordering, new return cols)
 
 ## Validation / verification steps (canonical)
 

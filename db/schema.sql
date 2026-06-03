@@ -77,6 +77,9 @@ create table documents (
     checksum_sha256 text,
     source_etag     text,
     local_path      text,                            -- relative to documents/raw/
+    -- Sprint 1 addition
+    source_tier     integer not null default 1
+                        constraint chk_source_tier check (source_tier in (1, 2, 3)),
     ingested_at     timestamptz not null default now(),
     updated_at      timestamptz not null default now(),
 
@@ -90,6 +93,7 @@ create table documents (
 create index idx_documents_municipality on documents (municipality);
 create index idx_documents_status on documents (document_status);
 create index idx_documents_doc_id on documents (doc_id);
+create index idx_documents_source_tier on documents (source_tier); -- Sprint 1: tier-based ordering
 
 -- ─────────────────────────────────────────────────────────
 -- 3. Chunks — text segments with embeddings
@@ -105,6 +109,9 @@ create table chunks (
     embedding       vector(768),                     -- nomic-embed-text-v1.5 = 768 dims
     search_vector   tsvector generated always as      -- BM25 hybrid search (Week 4-5 ablation)
                     (to_tsvector('english', content)) stored,
+    -- Sprint 1 additions
+    content_hash    text,                            -- SHA-256 of content; change detection
+    status          document_status not null default 'active', -- chunk-level lifecycle
     created_at      timestamptz not null default now(),
 
     constraint unique_chunk_per_doc unique (document_id, chunk_index)
@@ -119,6 +126,8 @@ create index idx_chunks_embedding on chunks
 create index idx_chunks_search on chunks using gin (search_vector);
 
 create index idx_chunks_document_id on chunks (document_id);
+create index idx_chunks_status on chunks (status);          -- Sprint 1: chunk-level status filter
+create index idx_chunks_content_hash on chunks (content_hash); -- Sprint 1: change detection
 
 -- ─────────────────────────────────────────────────────────
 -- 4. Ingestion verification log
@@ -209,6 +218,10 @@ returns table (
     authority_level authority_level,
     doc_type        doc_type,
     document_status document_status,
+    chunk_status    document_status,  -- Sprint 1: chunk-level status
+    source_tier     integer,          -- Sprint 1: corpus tier
+    ingested_at     timestamptz,      -- Sprint 1: for provenance age calc
+    retrieval_weight numeric,         -- Sprint 1: document-level weight
     similarity      float
 )
 language sql stable
@@ -223,12 +236,19 @@ as $$
         d.authority_level,
         d.doc_type,
         d.document_status,
+        c.status          as chunk_status,
+        d.source_tier,
+        d.ingested_at,
+        d.retrieval_weight,
         1 - (c.embedding <=> query_embedding) as similarity
     from chunks c
     join documents d on d.id = c.document_id
     where d.document_status = 'active'
       and d.is_current = true
+      and c.status = 'active'          -- Sprint 1: exclude superseded chunks
       and (filter_municipality is null or d.municipality = filter_municipality)
-    order by c.embedding <=> query_embedding
+    order by
+        d.source_tier asc,             -- Sprint 1: corpus (Tier 1) first
+        c.embedding <=> query_embedding
     limit match_count;
 $$;

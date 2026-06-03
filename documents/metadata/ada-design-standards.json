@@ -50,6 +50,14 @@
         "num_chunks": 5,
         "coverage_ratio": 1.0053
       }
+    },
+    "embedding": {
+      "result": "pass",
+      "detail": {
+        "num_chunks": 5,
+        "num_embedded": 5,
+        "embedding_dim": 768
+      }
     }
   }
 }

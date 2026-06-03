@@ -80,6 +80,7 @@ class ChunkResponse(BaseModel):
     authority_level: str = Field(description="Authority level (municipal/state/federal).")
     doc_type: str = Field(description="Document type.")
     document_status: str = Field(description="Document status (active/superseded/repealed).")
+    source_tier: int = Field(default=1, description="Source tier: 1=corpus, 2=user ordinance upload, 3=project doc.")
     similarity: float = Field(description="Cosine similarity to the query (0–1).")
 
 
@@ -113,6 +114,21 @@ class HealthResponse(BaseModel):
     version: str = Field(description="API version string.")
 
 
+class AHJDisclaimer(BaseModel):
+    """Authority Having Jurisdiction disclaimer attached to generated answers."""
+
+    text: str = Field(
+        description=(
+            "Disclaimer text reminding the user that this tool surfaces the written "
+            "ordinance and that the AHJ (city building department) has final authority."
+        )
+    )
+    learn_more_url: Optional[str] = Field(
+        default=None,
+        description="URL to the building department's permit portal for the resolved jurisdiction.",
+    )
+
+
 class CitationResponse(BaseModel):
     """A single citation extracted from the generated answer."""
 
@@ -137,6 +153,12 @@ class AnswerResponse(BaseModel):
     num_chunks: int = Field(description="Number of chunks sent to the generator.")
     chunks: list[ChunkResponse] = Field(description="Retrieved chunks used as context.")
     diagnostics: DiagnosticsResponse = Field(description="Retrieval quality diagnostics.")
+    ahj_disclaimer: AHJDisclaimer = Field(
+        description=(
+            "Authority Having Jurisdiction disclaimer. Always present. Informs the user "
+            "that the AHJ (city building department) has final authority over permit decisions."
+        )
+    )
 
 
 class ErrorResponse(BaseModel):

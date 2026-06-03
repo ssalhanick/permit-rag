@@ -85,6 +85,7 @@ def insert_document(
     checksum_sha256: Optional[str] = None,
     source_etag: Optional[str] = None,
     local_path: Optional[str] = None,
+    source_tier: int = 1,  # Sprint 1: 1=corpus, 2=user ordinance, 3=project doc
 ) -> dict[str, Any]:
     """
     Insert a document row. Returns the full row as a dict.
@@ -97,7 +98,7 @@ def insert_document(
             doc_id, source_url, municipality, authority_level,
             doc_type, subject_tags, effective_date, document_status,
             is_current, retrieval_weight, review_due,
-            checksum_sha256, source_etag, local_path
+            checksum_sha256, source_etag, local_path, source_tier
         ) VALUES (
             %(doc_id)s, %(source_url)s, %(municipality)s,
             %(authority_level)s::authority_level,
@@ -105,7 +106,8 @@ def insert_document(
             %(subject_tags)s,
             %(effective_date)s, %(document_status)s::document_status,
             %(is_current)s, %(retrieval_weight)s, %(review_due)s,
-            %(checksum_sha256)s, %(source_etag)s, %(local_path)s
+            %(checksum_sha256)s, %(source_etag)s, %(local_path)s,
+            %(source_tier)s
         )
         ON CONFLICT (doc_id) DO UPDATE SET
             source_url       = EXCLUDED.source_url,
@@ -120,7 +122,8 @@ def insert_document(
             review_due       = EXCLUDED.review_due,
             checksum_sha256  = EXCLUDED.checksum_sha256,
             source_etag      = EXCLUDED.source_etag,
-            local_path       = EXCLUDED.local_path
+            local_path       = EXCLUDED.local_path,
+            source_tier      = EXCLUDED.source_tier
         RETURNING *;
     """
     params = {
@@ -138,6 +141,7 @@ def insert_document(
         "checksum_sha256": checksum_sha256,
         "source_etag": source_etag,
         "local_path": local_path,
+        "source_tier": source_tier,  # Sprint 1
     }
     with get_conn() as conn:
         row = conn.execute(sql, params).fetchone()
@@ -338,25 +342,31 @@ def insert_chunks(
     sql = """
         INSERT INTO chunks
             (document_id, chunk_index, content, char_count,
-             page_start, page_end)
+             page_start, page_end, content_hash)
         VALUES
             (%(document_id)s, %(chunk_index)s, %(content)s,
-             %(char_count)s, %(page_start)s, %(page_end)s)
+             %(char_count)s, %(page_start)s, %(page_end)s,
+             %(content_hash)s)
         ON CONFLICT (document_id, chunk_index) DO UPDATE SET
-            content    = EXCLUDED.content,
-            char_count = EXCLUDED.char_count,
-            page_start = EXCLUDED.page_start,
-            page_end   = EXCLUDED.page_end;
+            content      = EXCLUDED.content,
+            char_count   = EXCLUDED.char_count,
+            page_start   = EXCLUDED.page_start,
+            page_end     = EXCLUDED.page_end,
+            content_hash = EXCLUDED.content_hash;
     """
     rows: list[dict[str, Any]] = []
     for c in chunks:
+        import hashlib
+        content = c["content"]
         rows.append({
             "document_id": document_id,
             "chunk_index": c["chunk_index"],
-            "content": c["content"],
+            "content": content,
             "char_count": c["char_count"],
             "page_start": c.get("page_start"),
             "page_end": c.get("page_end"),
+            # Sprint 1: compute SHA-256 hash for change detection
+            "content_hash": c.get("content_hash") or hashlib.sha256(content.encode()).hexdigest(),
         })
 
     with get_conn() as conn:
@@ -411,7 +421,8 @@ def match_chunks(
     Dense vector similarity search via the match_chunks() SQL function.
 
     Calls the pgvector cosine-distance search defined in db/schema.sql.
-    Returns up to *top_k* chunks ordered by descending similarity.
+    Returns up to *top_k* chunks ordered by source_tier ASC then descending
+    similarity (corpus chunks surface before user-uploaded on equal score).
 
     Args:
         query_embedding: 768-dim float vector (nomic-embed-text query).
@@ -422,7 +433,8 @@ def match_chunks(
     Returns:
         List of dicts with keys: id, document_id, doc_id, content,
         chunk_index, municipality, authority_level, doc_type,
-        document_status, similarity.
+        document_status, chunk_status, source_tier, ingested_at,
+        retrieval_weight, similarity.
     """
     sql = """
         SELECT * FROM match_chunks(

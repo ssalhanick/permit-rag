@@ -24,17 +24,128 @@ plus Texas state and federal regulations.
 
 ---
 
-## Setup
+## Local Development Setup
 
-```bash
+### Prerequisites
+
+- Python 3.11+
+- [Docker Desktop](https://www.docker.com/products/docker-desktop/) (running)
+- Node.js 18+ and npm (for the frontend)
+
+---
+
+### Step 1 — Python environment
+
+```powershell
 python -m venv .venv
 .\.venv\Scripts\Activate.ps1          # Windows PowerShell
 pip install -e ".[dev]"
-pip install sentence-transformers einops  # for local embeddings
+pip install sentence-transformers einops   # local embedding model
 ```
 
-Copy `.env.example` → `.env` and fill in your credentials.
+---
 
+### Step 2 — Environment variables
+
+```powershell
+Copy-Item .env.example .env
+```
+
+Open `.env` and fill in at minimum:
+
+| Variable | What to set |
+|---|---|
+| `DATABASE_URL` | `postgresql://postgres:<your-password>@localhost:5433/permit_rag` |
+| `ANTHROPIC_API_KEY` | Your Anthropic API key (`sk-ant-...`) |
+| `CORPUS_WRITER_URL` | `postgresql://corpus_writer:changeme_rotate_corpus@localhost:5433/permit_rag` |
+| `APP_READER_URL` | `postgresql://app_reader:changeme_rotate_reader@localhost:5433/permit_rag` |
+
+All other variables have working defaults for local dev.
+
+---
+
+### Step 3 — Start the database
+
+```powershell
+docker compose up -d
+```
+
+This starts a local Postgres 17 + pgvector container on **port 5433**. The schema
+(`db/schema.sql`) and roles (`db/init/02_roles.sql`) are applied automatically on
+first boot.
+
+Verify it is running:
+
+```powershell
+docker ps   # should show permit_rag_db as Up
+```
+
+> **If the volume already exists** and you want to apply new migrations manually:
+> ```powershell
+> Get-Content db/migrations/002_chunk_content_hash.sql | docker exec -i permit_rag_db psql -U postgres -d permit_rag
+> Get-Content db/migrations/003_chunk_status.sql       | docker exec -i permit_rag_db psql -U postgres -d permit_rag
+> Get-Content db/migrations/004_source_tier.sql        | docker exec -i permit_rag_db psql -U postgres -d permit_rag
+> Get-Content db/migrations/005_match_chunks_update.sql | docker exec -i permit_rag_db psql -U postgres -d permit_rag
+> Get-Content db/init/02_roles.sql                     | docker exec -i permit_rag_db psql -U postgres -d permit_rag
+> ```
+
+---
+
+### Step 4 — (First time only) Ingest documents
+
+Skip this if the DB already has data (`chunks` table is populated).
+
+```powershell
+# Download source documents
+py -m ingestion.harvester harvest
+
+# Chunk + insert into DB
+py -m scripts.ingest_documents
+
+# Embed all chunks locally (takes a few minutes — runs nomic-embed-text-v1.5)
+py -m ingestion.embedder
+```
+
+---
+
+### Step 5 — Start the API
+
+```powershell
+py -m uvicorn api.main:app --reload --port 8000
+```
+
+- Swagger UI: `http://localhost:8000/docs`
+- Health check: `http://localhost:8000/health`
+
+---
+
+### Step 6 — Start the frontend
+
+Open a **second terminal** (keep the API running in the first):
+
+```powershell
+cd frontend
+npm install       # first time only
+npm run dev
+```
+
+Open the URL Vite prints — usually `http://localhost:5173`.
+
+---
+
+### Everyday startup (after first-time setup)
+
+```powershell
+# Terminal 1 — DB (if not already running)
+docker compose up -d
+
+# Terminal 2 — API
+py -m uvicorn api.main:app --reload --port 8000
+
+# Terminal 3 — Frontend
+cd frontend
+npm run dev
+```
 
 ---
 

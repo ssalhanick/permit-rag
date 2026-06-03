@@ -17,6 +17,7 @@ from typing import Any
 from fastapi import APIRouter, HTTPException, Request
 
 from api.schemas import (
+    AHJDisclaimer,
     AnswerResponse,
     ChunkResponse,
     CitationResponse,
@@ -32,6 +33,36 @@ log = logging.getLogger(__name__)
 router = APIRouter(tags=["query"])
 MIN_GROUNDED_CHUNKS = int(os.environ.get("RAG_GUARD_MIN_CHUNKS", "3"))
 MIN_GROUNDED_TOP_SIM = float(os.environ.get("RAG_GUARD_MIN_TOP_SIM", "0.74"))
+
+# Sprint 1 — Task 1: Static AHJ disclaimer + dept portal URLs.
+# Keyed by municipality string (matches documents.municipality).
+# Task 7 will replace this with a live DB lookup against the jurisdictions table.
+_AHJ_DISCLAIMER_TEXT = (
+    "Results are based on published ordinance text and may not reflect current "
+    "interpretive policy, variance precedents, or informal guidance from the "
+    "Authority Having Jurisdiction (AHJ). The AHJ — your city's building department "
+    "— has final authority over all permit decisions. Always verify requirements "
+    "with the relevant department before proceeding. This tool is a research aid, "
+    "not a substitute for professional review."
+)
+_AHJ_DEPT_URLS: dict[str, str] = {
+    "dallas":       "https://dallascityhall.com/departments/sustainabledevelopment/Pages/default.aspx",
+    "plano":        "https://www.plano.gov/266/Building-Inspections",
+    "fort-worth":   "https://www.fortworthtexas.gov/departments/development-services",
+    "arlington":    "https://www.arlingtontx.gov/city_hall/departments/development_services",
+    "frisco":       "https://www.friscotexas.gov/1059/Building-Inspections",
+    "mckinney":     "https://www.mckinneytexas.org/160/Development-Services",
+    "irving":       "https://www.cityofirving.org/501/Building-Inspections",
+    "garland":      "https://www.garlandtx.gov/897/Building-Inspection",
+    "denton":       "https://www.cityofdenton.com/en-us/government/departments/development-services",
+    "allen":        "https://www.cityofallen.org/162/Building-Inspections",
+}
+
+
+def _build_ahj_disclaimer(municipality: str | None) -> AHJDisclaimer:
+    """Return the AHJ disclaimer with the dept URL for the resolved municipality."""
+    url = _AHJ_DEPT_URLS.get((municipality or "").lower())
+    return AHJDisclaimer(text=_AHJ_DISCLAIMER_TEXT, learn_more_url=url)
 
 
 def _langsmith_enabled() -> bool:
@@ -123,6 +154,7 @@ def query_chunks(body: QueryRequest) -> QueryResponse:
             authority_level=chunk["authority_level"],
             doc_type=chunk["doc_type"],
             document_status=chunk["document_status"],
+            source_tier=chunk.get("source_tier", 1),
             similarity=chunk["similarity"],
         )
         for chunk in result.chunks
@@ -292,6 +324,7 @@ def query_answer(body: QueryRequest, request: Request) -> AnswerResponse:
             authority_level=chunk["authority_level"],
             doc_type=chunk["doc_type"],
             document_status=chunk["document_status"],
+            source_tier=chunk.get("source_tier", 1),
             similarity=chunk["similarity"],
         )
         for chunk in result.chunks
@@ -327,6 +360,7 @@ def query_answer(body: QueryRequest, request: Request) -> AnswerResponse:
         num_chunks=gen.chunk_count,
         chunks=chunks,
         diagnostics=diagnostics,
+        ahj_disclaimer=_build_ahj_disclaimer(body.municipality),
     )
     _end_trace(
         root_trace,
