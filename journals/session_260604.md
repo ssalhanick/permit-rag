@@ -39,17 +39,56 @@ Finish Sprint 3 tasks:
 - Branch pushed by user.
 - `STATE.md` updated for Sprint 3 completion and next tasks.
 
+## Sprint 4 kickoff addendum (same day)
+
+### Scope handled
+
+- A1: GIS foundation plan only (no risky DB change)
+- B1: Frontend document browser
+- B2: Upload flow UX polish
+- C1: Regression checks for multi-permit + citations
+
+### Completed in this addendum
+
+- Added planning docs:
+  - `implementation_plan.md`
+  - `docs/postgis_migration_checklist.md`
+- Added frontend document browser route:
+  - `frontend/src/DocumentBrowserPage.jsx`
+  - `frontend/src/main.jsx` (`/documents`)
+  - `frontend/src/Nav.jsx` (`Documents` link)
+  - `frontend/src/api.js` (`fetchDocuments`, `fetchDocumentStatus`)
+  - `frontend/src/styles.css` (browser table/filter styles)
+- Polished upload UX:
+  - `frontend/src/UploadPage.jsx` (readiness blockers, status banners, clearer errors)
+  - `frontend/src/uploadUtils.js` (helper functions)
+  - `frontend/src/uploadUtils.test.js` (new tests)
+- Added frontend helper tests:
+  - `frontend/src/api.test.js`
+- Added backend regressions:
+  - `tests/test_query_answer_route.py`
+  - `tests/test_permit_classifier.py` (multi-scope regression case)
+- Fixed frontend test environment issue:
+  - `frontend/src/api.js` now uses `import.meta.env?.VITE_API_BASE_URL` for Node test compatibility.
+
+### Validation outcomes (addendum)
+
+- Frontend tests: pass (user confirmed)
+- Backend targeted regressions: pass (user confirmed)
+  - `24 passed in 0.09s`
+  - `26 passed in 0.35s`
+
 ## Next session should
 
-1. Continue Sprint 4 prep (GIS foundation plan + PostGIS migration checklist).
-2. Finish frontend document browser/upload flow polish.
-3. Run focused regression/eval checks for multi-permit response quality/citations.
+1. Review and approve PostGIS go/no-go checklist before any DB extension/image change.
+2. Run manual UX pass on `/documents` and `/upload` against live API.
+3. Run targeted multi-permit eval notes (beyond unit tests) and capture any citation-grounding drift.
 
 ## Prompt for next session
 
-Read `AGENTS.md`, `STATE.md`, and `journals/session_260604.md`. Continue Sprint 4 prep and frontend polish. Confirm query path still returns accurate `permit_types` with citations for multi-scope queries, and capture any regressions in tests/eval notes.
+Read `AGENTS.md`, `STATE.md`, and `journals/session_260604.md`. Sprint 4 kickoff is complete for A1/B1/B2/C1. Next: execute a manual UX QA pass for `/documents` and `/upload`, then run/record a focused multi-permit eval pass with citation-grounding observations. Do not run risky PostGIS DB changes until checklist gates are explicitly approved.
 
 ## Git commit message
 
-docs(state): record sprint 3 completion and add session_260604 journal
+feat(frontend+tests): add document browser, upload UX polish, and query-answer citation regressions
 

@@ -1,29 +1,29 @@
 # permit_rag — State
 
-_Updated: 2026-06-04 (Sprint 3 complete — change detection supersession + multi-permit classifier + tests passing)_
+_Updated: 2026-06-04 (Sprint 4 kickoff complete — GIS checklist + frontend browser/upload polish + citation regressions)_
 
 ## Phase
 
-Sprint 3 complete. Sprint 4 next: GIS foundation (PostGIS + boundary loading plan) and frontend/browser hardening.
+Sprint 4 in progress. Safe foundation and UI hardening landed; DB GIS migration execution remains pending by design.
 
 ## Blocked on
 
 - None.
 
-## Next 3 tasks (Sprint 4 prep)
+## Next 3 tasks
 
-1. Define GIS rollout scope and migration plan (`postgis/postgis` image swap + extension init checklist)
-2. Build frontend document browser + upload flow polish and validate against new routes
-3. Add a targeted eval/regression run for multi-permit classifier behavior and grouped citations
+1. Review and approve PostGIS checklist gates before any extension/image change
+2. Run full UX pass on browser/upload against live API data and capture issues
+3. Run targeted eval pass for multi-permit answer quality/citation grounding
 
 ## Module status
 
-ingestion ✅ db ✅ rag ✅ api ✅ eval ✅ frontend 🔧
+ingestion ✅ db ✅ rag ✅ api ✅ eval ✅ frontend ✅
 
 _db note: Sprint 1 migrations applied — `content_hash` + `status` on chunks, `source_tier` on documents, `match_chunks()` updated (chunk status filter + tier ordering + new return cols). Roles `corpus_writer`/`app_reader` live on Docker dev DB._
 _rag note: multi-permit classifier is live (`rag/permit_classifier.py`) and wired into `POST /query/answer`; conflict detector remains backlog._
 _api note: `POST /query/answer` now returns `ahj_disclaimer` wrapper (text + learn_more_url) and `permit_types`. `ChunkResponse` includes `source_tier`._
-_frontend note: kickoff now includes first flow + chat history + citation-linked source chunk viewer + quick-test buttons + debug panel._
+_frontend note: query flow + document browser route (`/documents`) + upload UX blockers/status guidance are now in place. API helper tests and upload utility tests added under `frontend/src/*.test.js`._
 _tracing note: `POST /query/answer` now captures LangSmith runs with `X-Client-Session-Id` and `X-Client-Request-Id` metadata._
 
 ## Current operational snapshot
@@ -109,6 +109,13 @@ _tracing note: `POST /query/answer` now captures LangSmith runs with `X-Client-S
 - [x] Task 11: Multi-permit classifier implemented and wired (`rag/permit_classifier.py`, `api/routes/query.py`, `api/schemas.py`)
 - [x] Added/ran tests: `tests/test_governance.py`, `tests/test_permit_classifier.py` (latest combined: `35 passed`)
 
+### Sprint 4 — Kickoff (2026-06-04)
+- [x] Task A1: Added GIS migration planning artifacts only (no risky DB change): `implementation_plan.md`, `docs/postgis_migration_checklist.md`
+- [x] Task B1: Added frontend document browser route and API helpers (`frontend/src/DocumentBrowserPage.jsx`, `frontend/src/api.js`, `frontend/src/main.jsx`, `frontend/src/Nav.jsx`, `frontend/src/styles.css`)
+- [x] Task B2: Polished upload flow UX with readiness blockers/status feedback and error mapping (`frontend/src/UploadPage.jsx`, `frontend/src/uploadUtils.js`)
+- [x] Task B1/B2 tests: `frontend/src/api.test.js`, `frontend/src/uploadUtils.test.js`
+- [x] Task C1: Added multi-permit + citation regression tests (`tests/test_query_answer_route.py`, `tests/test_permit_classifier.py`)
+
 ## Validation / verification steps (canonical)
 
 1. `py -m pytest tests/test_governance.py tests/test_permit_classifier.py -v 2>&1` (latest: `35 passed`)
@@ -117,5 +124,7 @@ _tracing note: `POST /query/answer` now captures LangSmith runs with `X-Client-S
 4. `py -m pytest tests/test_api_main.py` (latest: `5 passed`)
 5. `$env:RAGAS_ANSWER_CACHE_ENABLED="false"; py -m evaluation.ragas_eval --export` (latest: `ragas_20260602_214048.json`, PASS)
 6. `py -m evaluation.eval_guard` (latest: PASS on `ragas_20260602_214048.json`)
+7. `cd frontend; npm run test` (latest: pass after `import.meta.env` Node-safe fallback)
+8. `py -m pytest tests/test_query_answer_route.py tests/test_permit_classifier.py -v` (latest user-reported: `24 passed` then `26 passed` across targeted runs)
 
 For older run logs, command-by-command history, and dated deltas, use journal entries (`journals/session_260531.md` + subsequent sessions).

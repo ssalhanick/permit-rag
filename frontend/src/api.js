@@ -1,5 +1,5 @@
 const DEFAULT_BASE_URL = "http://localhost:8000";
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || DEFAULT_BASE_URL;
+const API_BASE_URL = import.meta.env?.VITE_API_BASE_URL || DEFAULT_BASE_URL;
 
 function safeJsonParse(text) {
   if (!text) {
@@ -57,6 +57,36 @@ export async function fetchAnswer(payload, headers = {}) {
     body: payload,
     headers,
   });
+  return result;
+}
+
+function buildDocumentQuery(filters = {}) {
+  const params = new URLSearchParams();
+  if (filters.municipality) {
+    params.set("municipality", filters.municipality.trim().toLowerCase());
+  }
+  if (filters.status) {
+    params.set("status", filters.status);
+  }
+  if (filters.authority) {
+    params.set("authority", filters.authority);
+  }
+  if (filters.doc_type) {
+    params.set("doc_type", filters.doc_type);
+  }
+  const query = params.toString();
+  return query ? `?${query}` : "";
+}
+
+export async function fetchDocuments(filters = {}, headers = {}) {
+  const query = buildDocumentQuery(filters);
+  const result = await requestJson(`/documents${query}`, { headers });
+  return result;
+}
+
+export async function fetchDocumentStatus(filters = {}, headers = {}) {
+  const query = buildDocumentQuery(filters);
+  const result = await requestJson(`/documents/status${query}`, { headers });
   return result;
 }
 

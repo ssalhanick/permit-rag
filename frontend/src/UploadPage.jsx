@@ -1,5 +1,6 @@
 import React, { useState } from "react";
 import { API_BASE_URL } from "./api.js";
+import { formatUploadError, getUploadBlockers, suggestDocIdFromFilename } from "./uploadUtils.js";
 
 const AUTHORITY_LEVELS = ["municipal", "state", "federal", "regional"];
 const DOC_TYPES = [
@@ -51,23 +52,20 @@ export default function UploadPage() {
   const handleFileChange = (e) => {
     const f = e.target.files?.[0] || null;
     setFile(f);
-    // Auto-suggest doc_id from filename if field is empty
     if (f && !form.doc_id) {
-      const suggested = f.name
-        .replace(/\.[^/.]+$/, "")        // strip extension
-        .toLowerCase()
-        .replace(/[^a-z0-9]+/g, "-")     // non-alnum → hyphen
-        .replace(/^-+|-+$/g, "");        // trim leading/trailing hyphens
+      const suggested = suggestDocIdFromFilename(f.name);
       setForm((prev) => ({ ...prev, doc_id: suggested }));
     }
   };
 
-  const canSubmit =
-    file &&
-    form.doc_id.trim() &&
-    form.municipality.trim() &&
-    adminToken.trim() &&
-    status !== "loading";
+  const blockers = getUploadBlockers({
+    file,
+    docId: form.doc_id,
+    municipality: form.municipality,
+    adminToken,
+    status,
+  });
+  const canSubmit = blockers.length === 0;
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -100,7 +98,7 @@ export default function UploadPage() {
       setResult(data);
       setStatus("success");
     } catch (err) {
-      setError(err.message || "Upload failed.");
+      setError(formatUploadError(err.message));
       setStatus("error");
     }
   };
@@ -123,6 +121,16 @@ export default function UploadPage() {
           The file will be chunked and embedded in the background.
           All fields are required for proper metadata tagging.
         </p>
+
+        {status === "loading" ? (
+          <div className="upload-status upload-status-loading">
+            Upload in progress. Keep this page open until response returns.
+          </div>
+        ) : null}
+
+        {status === "error" && error ? (
+          <div className="upload-status upload-status-error">{error}</div>
+        ) : null}
 
         {status === "success" && result ? (
           <div className="upload-success">
@@ -169,6 +177,7 @@ export default function UploadPage() {
                   Selected: <strong>{file.name}</strong> ({(file.size / 1024).toFixed(1)} KB)
                 </p>
               )}
+              {!file ? <p className="field-hint">Accepted: .pdf, .html, .htm</p> : null}
             </fieldset>
 
             {/* ── Identity ── */}
@@ -295,9 +304,23 @@ export default function UploadPage() {
                 placeholder="Your API_ADMIN_TOKEN value"
                 required
               />
+              <p className="field-hint">
+                Token is sent only as request header to `{API_BASE_URL}`.
+              </p>
             </fieldset>
 
-            {error && <p className="error">{error}</p>}
+            {blockers.length ? (
+              <div className="upload-checklist">
+                <strong>Before upload:</strong>
+                <ul>
+                  {blockers.map((item) => (
+                    <li key={item}>{item}</li>
+                  ))}
+                </ul>
+              </div>
+            ) : (
+              <p className="upload-ready">Ready to upload.</p>
+            )}
 
             <div className="upload-actions">
               <button type="submit" disabled={!canSubmit}>

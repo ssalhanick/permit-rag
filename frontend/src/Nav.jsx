@@ -19,6 +19,12 @@ export default function Nav() {
         >
           Upload Document
         </NavLink>
+        <NavLink
+          to="/documents"
+          className={({ isActive }) => "nav-link" + (isActive ? " nav-link-active" : "")}
+        >
+          Documents
+        </NavLink>
       </div>
     </nav>
   );

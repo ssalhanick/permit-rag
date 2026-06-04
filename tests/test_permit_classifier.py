@@ -113,6 +113,17 @@ def test_classify_returns_sorted():
     assert result == sorted(result)
 
 
+def test_classify_keyword_multi_scope_regression():
+    """Regression: mixed-scope residential remodel should keep key permit types."""
+    result = classify_permit_types(
+        "garage conversion with electrical rewire and new bathroom plumbing",
+        use_nli=False,
+    )
+    assert "building" in result
+    assert "electrical" in result
+    assert "plumbing" in result
+
+
 def test_classify_empty_string():
     result = classify_permit_types("", use_nli=False)
     assert result == ["building"]

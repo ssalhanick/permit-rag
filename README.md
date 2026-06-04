@@ -131,6 +131,11 @@ npm run dev
 
 Open the URL Vite prints — usually `http://localhost:5173`.
 
+Current frontend routes:
+- `/` — query flow with answer, citations, source chunk viewer, and debug logs
+- `/documents` — document browser with filters and status summary
+- `/upload` — admin upload flow with readiness checks and error guidance
+
 ---
 
 ### Everyday startup (after first-time setup)
@@ -192,7 +197,7 @@ permit_rag/
 ├── docs/               # Supplemental docs (API usage examples)
 ├── evaluation/         # RAGAs evaluation workflows (active)
 ├── audit/              # Query audit logging (scaffold)
-├── frontend/           # Vite + React UI (planned)
+├── frontend/           # Vite + React UI (query + documents + upload)
 ├── documents/
 │   ├── raw/            # Downloaded PDFs + HTML (gitignored)
 │   ├── metadata/       # JSON sidecar per document
