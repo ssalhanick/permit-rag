@@ -328,6 +328,26 @@ function App() {
           <h2>Answer</h2>
           <div className="answer-text">{activeAnswer.answer}</div>
 
+          {activeAnswer.ahj_disclaimer && (
+            <aside className="ahj-disclaimer">
+              <span className="ahj-disclaimer-icon">⚠️</span>
+              <div className="ahj-disclaimer-body">
+                <strong>Important — Authority Having Jurisdiction (AHJ)</strong>
+                <p>{activeAnswer.ahj_disclaimer.text}</p>
+                {activeAnswer.ahj_disclaimer.learn_more_url && (
+                  <a
+                    href={activeAnswer.ahj_disclaimer.learn_more_url}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="ahj-disclaimer-link"
+                  >
+                    Verify with your building department →
+                  </a>
+                )}
+              </div>
+            </aside>
+          )}
+
           <h3>Citations</h3>
           <ul className="citation-list">
             {(activeAnswer.citations || []).map((citation) => {
@@ -370,14 +390,19 @@ function App() {
                 const active = activeSourceChunk
                   ? `${activeSourceChunk.doc_id}-${activeSourceChunk.chunk_index}` === chunkKey
                   : false;
+                const isFiltered = chunk.filtered_out === true;
                 return (
                   <li key={chunkKey}>
                     <button
                       type="button"
-                      className={`source-item ${active ? "source-item-active" : ""}`}
+                      className={[
+                        "source-item",
+                        active ? "source-item-active" : "",
+                        isFiltered ? "source-item-filtered" : "",
+                      ].filter(Boolean).join(" ")}
                       onClick={() => setActiveSourceKey(chunkKey)}
                     >
-                      [{chunk.doc_id}, chunk {chunk.chunk_index}] ({chunk.similarity?.toFixed(3)})
+                      [{chunk.doc_id}, chunk {chunk.chunk_index}] ({(chunk.reranked_score ?? chunk.similarity)?.toFixed(3)})
                     </button>
                   </li>
                 );

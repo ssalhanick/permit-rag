@@ -4,6 +4,52 @@
   background: #f3f4f6;
 }
 
+/* ── Site nav ────────────────────────────────────────────── */
+
+.site-nav {
+  display: flex;
+  align-items: center;
+  gap: 24px;
+  background: #1e293b;
+  padding: 0 20px;
+  height: 48px;
+  position: sticky;
+  top: 0;
+  z-index: 100;
+}
+
+.site-nav-brand {
+  font-weight: 700;
+  font-size: 1rem;
+  color: #f1f5f9;
+  letter-spacing: 0.02em;
+}
+
+.site-nav-links {
+  display: flex;
+  gap: 4px;
+}
+
+.nav-link {
+  color: #94a3b8;
+  text-decoration: none;
+  font-size: 0.9rem;
+  padding: 6px 12px;
+  border-radius: 6px;
+  transition: background 0.15s, color 0.15s;
+}
+
+.nav-link:hover {
+  background: #334155;
+  color: #f1f5f9;
+}
+
+.nav-link-active {
+  background: #2563eb;
+  color: #fff;
+}
+
+
 * {
   box-sizing: border-box;
 }
@@ -219,4 +265,148 @@ button:disabled {
   .source-grid {
     grid-template-columns: 1fr;
   }
+}
+
+/* ── AHJ Disclaimer ─────────────────────────────────────── */
+
+.ahj-disclaimer {
+  display: flex;
+  gap: 12px;
+  align-items: flex-start;
+  background: #fffbeb;
+  border: 1px solid #f59e0b;
+  border-left: 4px solid #f59e0b;
+  border-radius: 8px;
+  padding: 12px 14px;
+  margin: 14px 0 4px;
+}
+
+.ahj-disclaimer-icon {
+  font-size: 1.2rem;
+  line-height: 1.4;
+  flex-shrink: 0;
+}
+
+.ahj-disclaimer-body {
+  flex: 1;
+}
+
+.ahj-disclaimer-body strong {
+  display: block;
+  font-size: 0.9rem;
+  margin-bottom: 4px;
+  color: #92400e;
+}
+
+.ahj-disclaimer-body p {
+  margin: 0 0 8px;
+  font-size: 0.875rem;
+  color: #78350f;
+  line-height: 1.5;
+}
+
+.ahj-disclaimer-link {
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: #b45309;
+  text-decoration: underline;
+}
+
+.ahj-disclaimer-link:hover {
+  color: #92400e;
+}
+
+/* ── Filtered (greyed-out) source chunks ─────────────────── */
+
+.source-item-filtered {
+  opacity: 0.42;
+  border-style: dashed;
+  border-color: #cbd5e1;
+  color: #94a3b8;
+}
+
+.source-item-filtered::after {
+  content: " · filtered";
+  font-size: 0.75rem;
+  color: #94a3b8;
+}
+
+/* ── Upload page ─────────────────────────────────────────── */
+
+.upload-form {
+  max-width: 680px;
+}
+
+.upload-fieldset {
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  padding: 14px 16px 10px;
+  margin-bottom: 12px;
+}
+
+.upload-fieldset legend {
+  font-weight: 600;
+  font-size: 0.85rem;
+  color: #475569;
+  padding: 0 6px;
+}
+
+.upload-fieldset label {
+  display: block;
+  margin-top: 10px;
+  margin-bottom: 3px;
+}
+
+.upload-fieldset input,
+.upload-fieldset select {
+  width: 100%;
+  padding: 8px 10px;
+  border: 1px solid #cbd5e1;
+  border-radius: 6px;
+}
+
+.upload-file-name {
+  margin-top: 6px;
+  font-size: 0.875rem;
+}
+
+.field-hint {
+  font-weight: 400;
+  color: #64748b;
+  font-size: 0.8rem;
+}
+
+.upload-actions {
+  display: flex;
+  gap: 10px;
+  margin-top: 4px;
+}
+
+.upload-success {
+  background: #f0fdf4;
+  border: 1px solid #bbf7d0;
+  border-radius: 8px;
+  padding: 16px;
+}
+
+.upload-success h2 {
+  margin-top: 0;
+  color: #15803d;
+}
+
+.result-dl {
+  display: grid;
+  grid-template-columns: max-content 1fr;
+  gap: 4px 16px;
+  margin: 12px 0;
+  font-size: 0.9rem;
+}
+
+.result-dl dt {
+  font-weight: 600;
+  color: #475569;
+}
+
+.result-dl dd {
+  margin: 0;
 }

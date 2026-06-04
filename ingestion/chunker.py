@@ -35,10 +35,10 @@ RAW_DIR = Path("documents/raw")
 
 PROCEDURAL_PATTERNS: tuple[str, ...] = (
     r"\bduly passed and approved\b",
-    r"\battest:\b",
+    r"\battest:",
     r"\bapproved as to form\b",
     r"\badopting and enacting supplement\b",
-    r"\bordinance no\.\b",
+    r"\bordinance no\.",
 )
 REQUIREMENT_PATTERNS: tuple[str, ...] = (
     r"\bshall\b",

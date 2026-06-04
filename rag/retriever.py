@@ -24,10 +24,10 @@ from typing import Any, Optional
 log = logging.getLogger(__name__)
 PROCEDURAL_REGEX = (
     re.compile(r"\bduly passed and approved\b", re.IGNORECASE),
-    re.compile(r"\battest:\b", re.IGNORECASE),
+    re.compile(r"\battest:", re.IGNORECASE),
     re.compile(r"\bapproved as to form\b", re.IGNORECASE),
     re.compile(r"\badopting and enacting supplement\b", re.IGNORECASE),
-    re.compile(r"\bordinance no\.\b", re.IGNORECASE),
+    re.compile(r"\bordinance no\.", re.IGNORECASE),
 )
 STATE_SCOPE_REGEX = re.compile(r"\b(texas|statewide|state law|state code)\b", re.IGNORECASE)
 FEDERAL_SCOPE_REGEX = re.compile(r"\b(federal|osha|epa|cfr|u\.?s\.?c\.?)\b", re.IGNORECASE)
@@ -212,21 +212,36 @@ class RetrievalResult:
 
     @property
     def top_similarity(self) -> float:
-        """Highest similarity score, or 0.0 if empty."""
+        """Highest RAW cosine similarity across all chunks (pre-rerank), or 0.0."""
         if not self.chunks:
             return 0.0
-        top = self.chunks[0].get("similarity")
-        return float(top) if top is not None else 0.0
+        # Use raw_similarity if reranker has run, else fall back to similarity
+        sims = [
+            float(c.get("raw_similarity") or c.get("similarity") or 0.0)
+            for c in self.chunks
+        ]
+        return max(sims) if sims else 0.0
 
     @property
     def mean_similarity(self) -> float:
-        """Average similarity across returned chunks."""
+        """Average RAW cosine similarity across all chunks (pre-rerank)."""
         if not self.chunks:
             return 0.0
-        sims = [float(c["similarity"]) for c in self.chunks if c.get("similarity") is not None]
-        if not sims:
-            return 0.0
-        return sum(sims) / len(sims)
+        sims = [
+            float(c.get("raw_similarity") or c.get("similarity") or 0.0)
+            for c in self.chunks
+        ]
+        return sum(sims) / len(sims) if sims else 0.0
+
+    @property
+    def filtered_chunks(self) -> list[dict[str, Any]]:
+        """Chunks marked filtered_out=True by the reranker."""
+        return [c for c in self.chunks if c.get("filtered_out")]
+
+    @property
+    def passing_chunks(self) -> list[dict[str, Any]]:
+        """Chunks that passed the reranker filter (filtered_out=False or absent)."""
+        return [c for c in self.chunks if not c.get("filtered_out")]
 
     @property
     def unique_documents(self) -> list[str]:
@@ -302,6 +317,10 @@ def retrieve(
         top_k=top_k,
     )
     chunks = _apply_procedural_penalty(chunks, top_k)
+
+    # Sprint 2: provenance-weighted reranking
+    from rag.reranker import rerank
+    chunks = rerank(chunks)
 
     latency_ms = int((time.perf_counter() - t0) * 1000)
 
