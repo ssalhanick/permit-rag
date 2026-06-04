@@ -26,6 +26,7 @@ from api.schemas import (
     QueryRequest,
     QueryResponse,
 )
+from db.client import get_jurisdiction
 from rag.retriever import retrieve
 
 log = logging.getLogger(__name__)
@@ -34,9 +35,6 @@ router = APIRouter(tags=["query"])
 MIN_GROUNDED_CHUNKS = int(os.environ.get("RAG_GUARD_MIN_CHUNKS", "3"))
 MIN_GROUNDED_TOP_SIM = float(os.environ.get("RAG_GUARD_MIN_TOP_SIM", "0.74"))
 
-# Sprint 1 — Task 1: Static AHJ disclaimer + dept portal URLs.
-# Keyed by municipality string (matches documents.municipality).
-# Task 7 will replace this with a live DB lookup against the jurisdictions table.
 _AHJ_DISCLAIMER_TEXT = (
     "Results are based on published ordinance text and may not reflect current "
     "interpretive policy, variance precedents, or informal guidance from the "
@@ -45,24 +43,22 @@ _AHJ_DISCLAIMER_TEXT = (
     "with the relevant department before proceeding. This tool is a research aid, "
     "not a substitute for professional review."
 )
-_AHJ_DEPT_URLS: dict[str, str] = {
-    "dallas":       "https://dallascityhall.com/departments/sustainabledevelopment/Pages/default.aspx",
-    "plano":        "https://www.plano.gov/266/Building-Inspections",
-    "fort-worth":   "https://www.fortworthtexas.gov/departments/development-services",
-    "arlington":    "https://www.arlingtontx.gov/city_hall/departments/development_services",
-    "frisco":       "https://www.friscotexas.gov/1059/Building-Inspections",
-    "mckinney":     "https://www.mckinneytexas.org/160/Development-Services",
-    "irving":       "https://www.cityofirving.org/501/Building-Inspections",
-    "garland":      "https://www.garlandtx.gov/897/Building-Inspection",
-    "denton":       "https://www.cityofdenton.com/en-us/government/departments/development-services",
-    "allen":        "https://www.cityofallen.org/162/Building-Inspections",
-}
 
 
 def _build_ahj_disclaimer(municipality: str | None) -> AHJDisclaimer:
-    """Return the AHJ disclaimer with the dept URL for the resolved municipality."""
-    url = _AHJ_DEPT_URLS.get((municipality or "").lower())
-    return AHJDisclaimer(text=_AHJ_DISCLAIMER_TEXT, learn_more_url=url)
+    """
+    Return the AHJ disclaimer, pulling the dept portal URL from the jurisdictions
+    table. Falls back gracefully if the municipality is unknown or DB is unreachable.
+    """
+    learn_more_url: str | None = None
+    if municipality:
+        try:
+            row = get_jurisdiction(municipality.lower())
+            if row:
+                learn_more_url = row.get("dept_url")
+        except Exception:
+            pass  # non-fatal — disclaimer text still shown without link
+    return AHJDisclaimer(text=_AHJ_DISCLAIMER_TEXT, learn_more_url=learn_more_url)
 
 
 def _langsmith_enabled() -> bool:
@@ -155,7 +151,11 @@ def query_chunks(body: QueryRequest) -> QueryResponse:
             doc_type=chunk["doc_type"],
             document_status=chunk["document_status"],
             source_tier=chunk.get("source_tier", 1),
-            similarity=chunk["similarity"],
+            similarity=chunk.get("raw_similarity") or chunk["similarity"],
+            raw_similarity=chunk.get("raw_similarity", chunk["similarity"]),
+            reranked_score=chunk.get("reranked_score", chunk["similarity"]),
+            provenance_weight=chunk.get("provenance_weight", 1.0),
+            filtered_out=chunk.get("filtered_out", False),
         )
         for chunk in result.chunks
     ]
@@ -197,11 +197,21 @@ def query_chunks(body: QueryRequest) -> QueryResponse:
 def query_answer(body: QueryRequest, request: Request) -> AnswerResponse:
     """Retrieve chunks and generate a cited answer via Claude."""
     from rag.generator import generate_answer
+    from rag.permit_classifier import classify_permit_types
 
     started_at = time.perf_counter()
     session_id = request.headers.get("X-Client-Session-Id", "").strip() or "unknown"
     request_id = request.headers.get("X-Client-Request-Id", "").strip() or f"api-{int(time.time() * 1000)}"
     tracing_on = _langsmith_enabled()
+
+    # Sprint 3 Task 11: classify permit types (non-blocking)
+    try:
+        permit_types = classify_permit_types(body.query)
+        log.info("permit_types detected: %s", permit_types)
+    except Exception as exc:
+        log.warning("permit_classifier failed (%s) — defaulting to []", exc)
+        permit_types = []
+
     root_trace = _start_trace(
         name="api_query_answer",
         run_type="chain",
@@ -325,7 +335,11 @@ def query_answer(body: QueryRequest, request: Request) -> AnswerResponse:
             doc_type=chunk["doc_type"],
             document_status=chunk["document_status"],
             source_tier=chunk.get("source_tier", 1),
-            similarity=chunk["similarity"],
+            similarity=chunk.get("raw_similarity") or chunk["similarity"],
+            raw_similarity=chunk.get("raw_similarity", chunk["similarity"]),
+            reranked_score=chunk.get("reranked_score", chunk["similarity"]),
+            provenance_weight=chunk.get("provenance_weight", 1.0),
+            filtered_out=chunk.get("filtered_out", False),
         )
         for chunk in result.chunks
     ]
@@ -360,6 +374,7 @@ def query_answer(body: QueryRequest, request: Request) -> AnswerResponse:
         num_chunks=gen.chunk_count,
         chunks=chunks,
         diagnostics=diagnostics,
+        permit_types=permit_types,
         ahj_disclaimer=_build_ahj_disclaimer(body.municipality),
     )
     _end_trace(

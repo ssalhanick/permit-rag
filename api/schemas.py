@@ -81,7 +81,12 @@ class ChunkResponse(BaseModel):
     doc_type: str = Field(description="Document type.")
     document_status: str = Field(description="Document status (active/superseded/repealed).")
     source_tier: int = Field(default=1, description="Source tier: 1=corpus, 2=user ordinance upload, 3=project doc.")
-    similarity: float = Field(description="Cosine similarity to the query (0–1).")
+    # Sprint 2 reranker fields
+    similarity: float = Field(description="Raw cosine similarity to the query (0-1). Same as raw_similarity.")
+    raw_similarity: float = Field(default=0.0, description="Raw cosine similarity from pgvector before provenance reranking.")
+    reranked_score: float = Field(default=0.0, description="Final score after provenance weighting (raw_similarity x provenance_weight).")
+    provenance_weight: float = Field(default=1.0, description="Provenance multiplier (retrieval_weight x tier_factor).")
+    filtered_out: bool = Field(default=False, description="True if filtered by reranker threshold. Shown greyed-out in UI.")
 
 
 class DiagnosticsResponse(BaseModel):
@@ -153,6 +158,15 @@ class AnswerResponse(BaseModel):
     num_chunks: int = Field(description="Number of chunks sent to the generator.")
     chunks: list[ChunkResponse] = Field(description="Retrieved chunks used as context.")
     diagnostics: DiagnosticsResponse = Field(description="Retrieval quality diagnostics.")
+    # Sprint 3 — Task 11: multi-permit classifier
+    permit_types: list[str] = Field(
+        default_factory=list,
+        description=(
+            "Detected permit type(s) for this query "
+            "(e.g. ['building', 'electrical', 'plumbing']). "
+            "Populated by the zero-shot NLI classifier with keyword fallback."
+        ),
+    )
     ahj_disclaimer: AHJDisclaimer = Field(
         description=(
             "Authority Having Jurisdiction disclaimer. Always present. Informs the user "

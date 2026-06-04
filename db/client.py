@@ -66,6 +66,37 @@ def get_conn() -> Generator[psycopg.Connection, None, None]:
 
 
 # ════════════════════════════════════════════════
+#  JURISDICTIONS
+# ════════════════════════════════════════════════
+
+def get_jurisdiction(municipality_id: str) -> Optional[dict[str, Any]]:
+    """
+    Fetch a jurisdiction row by its id (matches documents.municipality).
+
+    Returns the full row dict (id, name, level, parent_id, dept_name, dept_url)
+    or None if not found.
+    """
+    sql = "SELECT * FROM jurisdictions WHERE id = %s;"
+    with get_conn() as conn:
+        return conn.execute(sql, (municipality_id,)).fetchone()
+
+
+def list_jurisdictions(
+    *,
+    level: Optional[str] = None,
+) -> list[dict[str, Any]]:
+    """List all jurisdictions, optionally filtered by level."""
+    if level:
+        sql = "SELECT * FROM jurisdictions WHERE level = %s ORDER BY level, id;"
+        with get_conn() as conn:
+            return conn.execute(sql, (level,)).fetchall()
+    with get_conn() as conn:
+        return conn.execute(
+            "SELECT * FROM jurisdictions ORDER BY level, id;"
+        ).fetchall()
+
+
+# ════════════════════════════════════════════════
 #  DOCUMENTS
 # ════════════════════════════════════════════════
 
