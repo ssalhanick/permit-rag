@@ -1,28 +1,28 @@
 # permit_rag — State
 
-_Updated: 2026-06-03 (Sprint 1 complete — schema hardening, AHJ disclaimer, chunk status, source_tier, content_hash, DB roles)_
+_Updated: 2026-06-04 (Sprint 3 complete — change detection supersession + multi-permit classifier + tests passing)_
 
 ## Phase
 
-Sprint 1 complete. Schema hardening + API baseline done. Sprint 2 next: jurisdictions table + provenance reranker.
+Sprint 3 complete. Sprint 4 next: GIS foundation (PostGIS + boundary loading plan) and frontend/browser hardening.
 
 ## Blocked on
 
 - None.
 
-## Next 3 tasks (Sprint 2)
+## Next 3 tasks (Sprint 4 prep)
 
-1. Create `jurisdictions` table + seed 10 DFW jurisdictions with AHJ dept URLs
-2. Replace static `_AHJ_DEPT_URLS` dict in `api/routes/query.py` with live DB lookup
-3. Implement `provenance_weight()` + `rerank()` in `rag/reranker.py`, wire into pipeline
+1. Define GIS rollout scope and migration plan (`postgis/postgis` image swap + extension init checklist)
+2. Build frontend document browser + upload flow polish and validate against new routes
+3. Add a targeted eval/regression run for multi-permit classifier behavior and grouped citations
 
 ## Module status
 
 ingestion ✅ db ✅ rag ✅ api ✅ eval ✅ frontend 🔧
 
 _db note: Sprint 1 migrations applied — `content_hash` + `status` on chunks, `source_tier` on documents, `match_chunks()` updated (chunk status filter + tier ordering + new return cols). Roles `corpus_writer`/`app_reader` live on Docker dev DB._
-_rag note: reranker + conflict_detector are Sprint 2/3 backlog items._
-_api note: `POST /query/answer` now returns `ahj_disclaimer` wrapper (text + learn_more_url). `ChunkResponse` includes `source_tier`. AHJ URL map is static for now — replaced by jurisdictions table in Sprint 2._
+_rag note: multi-permit classifier is live (`rag/permit_classifier.py`) and wired into `POST /query/answer`; conflict detector remains backlog._
+_api note: `POST /query/answer` now returns `ahj_disclaimer` wrapper (text + learn_more_url) and `permit_types`. `ChunkResponse` includes `source_tier`._
 _frontend note: kickoff now includes first flow + chat history + citation-linked source chunk viewer + quick-test buttons + debug panel._
 _tracing note: `POST /query/answer` now captures LangSmith runs with `X-Client-Session-Id` and `X-Client-Request-Id` metadata._
 
@@ -98,12 +98,24 @@ _tracing note: `POST /query/answer` now captures LangSmith runs with `X-Client-S
 - [x] Task 4: `corpus_writer` + `app_reader` Postgres roles on Docker dev DB (`db/init/02_roles.sql`); `CORPUS_WRITER_URL` + `APP_READER_URL` in `.env.example`
 - [x] Task 5: `documents.source_tier` column + index (migration 004); `insert_document` + `insert_chunks` updated; `match_chunks()` updated (migration 005: chunk status filter, tier ordering, new return cols)
 
+### Sprint 2 — Jurisdictions + Reranker (completed)
+- [x] Jurisdictions table + seed added (`db/migrations/006_jurisdictions.sql`, `db/seeds/jurisdictions.sql`)
+- [x] Query route updated to use jurisdiction-aware disclaimer URL pathing
+- [x] Provenance/reranker updates landed (`rag/reranker.py`, retrieval wiring)
+
+### Sprint 3 — Change Detection + Classifier (2026-06-04)
+- [x] Task 9: Document-level change detection and supersession flow implemented (`ingestion/governance.py`)
+- [x] Task 9: DB helpers validated for supersession/chunk lifecycle paths (`db/client.py`)
+- [x] Task 11: Multi-permit classifier implemented and wired (`rag/permit_classifier.py`, `api/routes/query.py`, `api/schemas.py`)
+- [x] Added/ran tests: `tests/test_governance.py`, `tests/test_permit_classifier.py` (latest combined: `35 passed`)
+
 ## Validation / verification steps (canonical)
 
-1. `py -m pytest tests/test_documents_routes.py` (latest: `12 passed`)
-2. `py -m pytest tests/test_eval_guard.py` (latest: `3 passed`)
-3. `py -m pytest tests/test_api_main.py` (latest: `5 passed`)
-4. `$env:RAGAS_ANSWER_CACHE_ENABLED="false"; py -m evaluation.ragas_eval --export` (latest: `ragas_20260602_214048.json`, PASS)
-5. `py -m evaluation.eval_guard` (latest: PASS on `ragas_20260602_214048.json`)
+1. `py -m pytest tests/test_governance.py tests/test_permit_classifier.py -v 2>&1` (latest: `35 passed`)
+2. `py -m pytest tests/test_documents_routes.py` (latest: `12 passed`)
+3. `py -m pytest tests/test_eval_guard.py` (latest: `3 passed`)
+4. `py -m pytest tests/test_api_main.py` (latest: `5 passed`)
+5. `$env:RAGAS_ANSWER_CACHE_ENABLED="false"; py -m evaluation.ragas_eval --export` (latest: `ragas_20260602_214048.json`, PASS)
+6. `py -m evaluation.eval_guard` (latest: PASS on `ragas_20260602_214048.json`)
 
 For older run logs, command-by-command history, and dated deltas, use journal entries (`journals/session_260531.md` + subsequent sessions).
