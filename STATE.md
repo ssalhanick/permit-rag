@@ -1,10 +1,10 @@
 # permit_rag — State
 
-_Updated: 2026-06-04 (Sprint 4 hardening complete — upload reliability + purge controls + QA pass)_
+_Updated: 2026-06-04 (Sprint 4 hardening complete + Task 14A extension validation passed)_
 
 ## Phase
 
-Sprint 4 hardening mostly complete. GIS planning/checklist done, frontend QA pass done, upload/purge governance path added. PostGIS execution remains pending by design.
+Sprint 4 hardening mostly complete. GIS planning/checklist done, frontend QA pass done, upload/purge governance path added. Task 14A extension validation passed (`postgis` + `vector` present), but current PostGIS install is not yet durable across container rebuild.
 
 ## Blocked on
 
@@ -12,8 +12,8 @@ Sprint 4 hardening mostly complete. GIS planning/checklist done, frontend QA pas
 
 ## Next 3 tasks
 
-1. Review and approve PostGIS checklist gates before any extension/image change
-2. Run targeted eval pass for multi-permit answer quality/citation grounding and record deltas
+1. Make Task 14A durable: move from in-container package install to Docker image build path
+2. Execute Task 14B pilot boundary load and validate geometry/index/query checks
 3. Add purge audit log trail (`who`, `role`, `doc_id`, `source_tier`, timestamp)
 
 ## Module status
@@ -29,7 +29,7 @@ _tracing note: `POST /query/answer` now captures LangSmith runs with `X-Client-S
 ## Current operational snapshot
 
 - Ingestion pipeline health (last full check): download ✅ extraction ✅ chunking ✅ embedding ✅
-- Vector DB: Postgres + pgvector (`chunks.embedding vector(768)`)
+- Vector DB: Postgres + pgvector (`chunks.embedding vector(768)`), plus PostGIS extension enabled in current dev container
 - Schema additions (Sprint 1): `chunks.content_hash`, `chunks.status`, `documents.source_tier`
 - DB roles: `corpus_writer` (ingestion writes), `app_reader` (API reads + query_log insert)
 - API live routes:
@@ -119,6 +119,9 @@ _tracing note: `POST /query/answer` now captures LangSmith runs with `X-Client-S
 - [x] Upload reliability hardening: fixed background upload chunk/insert/embed order; added HTML retry path and PDF-vs-HTML failure status handling (`api/routes/upload.py`, `tests/test_upload_route.py`)
 - [x] Offboarding purge path: added purge endpoint + reusable script (`api/routes/admin.py`, `scripts/purge_project_uploads.py`) with role-tier controls (`API_PURGE_ANY_TIER_ROLES`)
 - [x] Frontend/manual QA pass completed with checklist updates (`docs/sprint4_qa_checklist.md`)
+- [x] Task 14A extension validation: confirmed `postgis` and `vector` extensions active; API `/health` recovered to healthy
+- [ ] Task 14A durability: replace ephemeral in-container PostGIS package install with durable Docker build/image approach
+- [ ] Task 14B pilot: load first municipal boundary layer and run geometry + point-in-polygon validation
 
 ## Validation / verification steps (canonical)
 
@@ -132,5 +135,7 @@ _tracing note: `POST /query/answer` now captures LangSmith runs with `X-Client-S
 8. `py -m pytest tests/test_query_answer_route.py tests/test_permit_classifier.py -v` (latest user-reported: `24 passed` then `26 passed` across targeted runs)
 9. `py -m pytest tests/test_upload_route.py -v` (latest: pass after upload reliability fixes)
 10. `py -m pytest tests/test_documents_routes.py tests/test_purge_project_uploads_script.py -v` (latest: pass after purge tier controls)
+11. `Invoke-RestMethod -Uri "http://localhost:8000/health" -Method Get` (latest: `healthy`, `database=True` after enabling PostGIS)
+12. `docker exec permit_rag_db psql -U postgres -d permit_rag -c "SELECT extname FROM pg_extension WHERE extname IN ('postgis','vector') ORDER BY extname;"` (latest: both extensions present)
 
 For older run logs, command-by-command history, and dated deltas, use journal entries (`journals/session_260531.md` + subsequent sessions).

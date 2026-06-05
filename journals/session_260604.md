@@ -111,17 +111,39 @@ Finish Sprint 3 tasks:
   - tests: `tests/test_purge_project_uploads_script.py`
 - Added docs TOC in README for files under `docs/`.
 
+## Sprint 4 GIS execution addendum (late same day)
+
+### Scope handled
+
+- Began Task 14A execution from approved PostGIS checklist
+- Verified extension state and API health after PostGIS enable
+
+### Completed in this addendum
+
+- Confirmed baseline issue:
+  - `vector` extension present, `postgis` missing on default `pgvector/pgvector:pg17` container
+- Enabled PostGIS in running dev container and validated:
+  - `SELECT extname ...` returned both `postgis` and `vector`
+  - API health check returned `healthy`, `database=True`
+- Created Task 14A/B execution checklist:
+  - `docs/task14ab_execution_checklist.md`
+
+### Important note
+
+- Current PostGIS enablement is ephemeral (installed in running container).
+- Next session must make this durable via Docker build/image path before Task 14B pilot data load.
+
 ## Next session should
 
-1. Review and approve PostGIS go/no-go checklist before any DB extension/image change.
-2. Run targeted multi-permit eval notes (beyond unit tests) and capture citation-grounding drift.
+1. Make Task 14A durable via Docker image/build update (PostGIS + pgvector together after rebuild).
+2. Execute Task 14B pilot boundary load and run geometry/index/point-in-polygon checks.
 3. Add purge audit log trail (`who`, `role`, `doc_id`, `source_tier`, timestamp) and tests.
 
 ## Prompt for next session
 
-Read `AGENTS.md`, `STATE.md`, and `journals/session_260604.md`. Sprint 4 hardening is complete for upload reliability, purge role tiers, and frontend QA. Next: run/record a focused multi-permit eval pass with citation-grounding observations, then add purge audit logging. Do not run risky PostGIS DB changes until checklist gates are explicitly approved.
+Read `AGENTS.md`, `STATE.md`, and `journals/session_260604.md`. Task 14A extension validation passed (`postgis` + `vector` active and API healthy), but PostGIS install is currently ephemeral in-container. First, make PostGIS durable via Docker image/build path. Then execute Task 14B pilot boundary load with geometry and point-in-polygon validation. After GIS pilot, continue purge audit logging and targeted eval notes.
 
 ## Git commit message
 
-feat(admin+upload): harden upload flow and add tiered purge tooling/docs
+chore(gis): validate task14a postgis extensions and record durable-next steps
 
