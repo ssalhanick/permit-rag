@@ -47,9 +47,9 @@ Commands:
 
 ### 1.4 App regression smoke
 
-- [ ] API starts
-- [ ] `/health` returns healthy
-- [ ] one retrieval query succeeds
+- [x] API starts
+- [x] `/health` returns healthy
+- [x] one retrieval query succeeds
 
 Commands:
 
@@ -117,7 +117,7 @@ Rollback commands:
 ## 4) Exit Criteria
 
 - [x] PostGIS + pgvector both present
-- [ ] API retrieval path still passes smoke checks
+- [x] API retrieval path still passes smoke checks
 - [x] one boundary layer loaded and queryable
 - [x] rollback tested or rollback commands validated
 - [x] `STATE.md` and journal updated with outcomes

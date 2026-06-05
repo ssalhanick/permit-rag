@@ -101,8 +101,8 @@ Actual notes:
 
 - [x] Record boundary load result (`municipal_boundaries` row count)
 - [x] Record point-in-polygon result for Dallas sample point
-- [ ] Re-run one Dallas retrieval query and record top similarity
-- [ ] Note whether GIS pilot changed retrieval behavior (expected: no change in current phase)
+- [x] Re-run one Dallas retrieval query and record top similarity
+- [x] Note whether GIS pilot changed retrieval behavior (expected: no change in current phase)
 
 Notes:
 - 2026-06-04: Durable PostGIS Docker build path landed and validated.
@@ -111,6 +111,10 @@ Notes:
   - Geometry check: `dallas | 4326 | MULTIPOLYGON | t`
   - Spatial indexes present: `idx_municipal_boundaries_geom`, `idx_municipal_boundaries_jurisdiction`
   - Point-in-polygon sample (`-96.7970, 32.7767`) resolved to `dallas`
+- 2026-06-04 retrieval smoke after GIS pilot:
+  - Query: `What are building permit requirements in Dallas?`
+  - `num_results=5`, `top_similarity=0.8020008206367493`, `mean_similarity=0.7910454318402472`
+  - Behavior: no regression observed in retrieval path after GIS pilot.
 
 ## 5) Fast Command Checks
 
@@ -127,4 +131,4 @@ Run backend regressions:
 - [x ] QA pass complete
 - [ ] Bugs captured (if any) with repro steps
     - when importing a new document, the chunking seems to time out and the embedding doesn't work
-- [ ] `STATE.md` updated if scope or blockers changed
+- [x] `STATE.md` updated if scope or blockers changed

@@ -188,12 +188,27 @@ chore(gis): validate task14a postgis extensions and record durable-next steps
     - geometry validation: `dallas | 4326 | MULTIPOLYGON | t`
     - indexes on `municipal_boundaries`: `idx_municipal_boundaries_geom`, `idx_municipal_boundaries_jurisdiction` (+ PK/unique)
     - point-in-polygon sample check returned `dallas`
+  - API/retrieval smoke checks:
+    - `/health` -> `healthy`, `database=True`, version `0.1.0`
+    - `/query` Dallas smoke -> `num_results=5`, `top_similarity=0.8020008206367493`, `mean_similarity=0.7910454318402472`
+  - Purge audit check:
+    - Applied `db/migrations/009_purge_audit_log.sql` on current DB (`CREATE TABLE`, `CREATE INDEX`, `CREATE INDEX`)
+    - `SELECT ... FROM purge_audit_log ...` now succeeds (`0 rows`, expected before first purge event)
+  - Purge audit event check:
+    - `py -m scripts.purge_project_uploads --doc-id "mansfieldtx-tx-2" --admin-role owner --admin-user sprint4-audit-check` -> `All purge calls succeeded.`
+    - `purge_audit_log` row recorded with:
+      - `doc_id=mansfieldtx-tx-2`
+      - `actor_identity=sprint4-audit-chec` (as submitted)
+      - `actor_role=owner`
+      - `source_tier=2`
+      - `deleted_chunk_count=88`
+      - `local_file_deleted=true`
 
 ### Next session should
 
-1. Run API smoke after DB rebuild (`/health` + one retrieval query) and record output in checklist.
-2. Add targeted eval notes tied to GIS pilot outcomes (top similarity + behavior delta note).
-3. Verify `purge_audit_log` row insertion from one purge call.
+1. Finalize Sprint 4 closeout notes and sign-off.
+2. Decide whether to re-upload/restore `mansfieldtx-tx-2` after audit validation purge.
+3. Prepare next-session handoff prompt.
 
 ## Prompt for next session
 
@@ -201,4 +216,4 @@ Read `AGENTS.md`, `STATE.md`, and `journals/session_260604.md`. Task 14A durabil
 
 ## Git commit message
 
-feat(gis): make postgis durable and add purge audit trail
+chore(sprint4): verify purge audit event after task14a/14b completion

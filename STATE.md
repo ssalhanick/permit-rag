@@ -1,10 +1,10 @@
 # permit_rag — State
 
-_Updated: 2026-06-04 (Task 14A durable + Task 14B pilot GIS validation passed)_
+_Updated: 2026-06-04 (Task 14A/14B passed; purge audit event verified)_
 
 ## Phase
 
-Sprint 4 hardening mostly complete. GIS planning/checklist done, frontend QA pass done, upload/purge governance path added. Task 14A is now durable via Docker build path (pgvector + PostGIS image + extension init SQL). Task 14B pilot GIS validation passed (extensions, geometry validity, spatial index, point-in-polygon).
+Sprint 4 hardening mostly complete. GIS planning/checklist done, frontend QA pass done, upload/purge governance path added. Task 14A is now durable via Docker build path (pgvector + PostGIS image + extension init SQL). Task 14B pilot GIS validation passed (extensions, geometry validity, spatial index, point-in-polygon), retrieval smoke is healthy, and purge audit logging is verified with a live row insert.
 
 ## Blocked on
 
@@ -12,9 +12,9 @@ Sprint 4 hardening mostly complete. GIS planning/checklist done, frontend QA pas
 
 ## Next 3 tasks
 
-1. Run API smoke after durable DB rebuild (`/health` + one retrieval query)
-2. Close targeted eval notes after GIS pilot (record top similarity + behavior delta note)
-3. Validate purge audit rows in DB after one purge operation
+1. Final closeout sweep on docs/checklists for Sprint 4
+2. Confirm replacement plan for purged test document (`mansfieldtx-tx-2`) if needed
+3. Start next scoped sprint task after Sprint 4 closeout sign-off
 
 ## Module status
 
@@ -142,5 +142,10 @@ _tracing note: `POST /query/answer` now captures LangSmith runs with `X-Client-S
 14. `docker exec permit_rag_db psql -U postgres -d permit_rag -c "SELECT jurisdiction_id, ST_SRID(geom) AS srid, GeometryType(geom) AS geom_type, ST_IsValid(geom) AS is_valid FROM municipal_boundaries;"` (latest: `dallas | 4326 | MULTIPOLYGON | t`)
 15. `docker exec permit_rag_db psql -U postgres -d permit_rag -c "SELECT indexname FROM pg_indexes WHERE tablename='municipal_boundaries' ORDER BY indexname;"` (latest includes GiST geom + jurisdiction indexes)
 16. `docker exec permit_rag_db psql -U postgres -d permit_rag -c "SELECT jurisdiction_id FROM municipal_boundaries WHERE ST_Contains(geom, ST_SetSRID(ST_MakePoint(-96.7970, 32.7767), 4326));"` (latest: `dallas`)
+17. `Invoke-RestMethod -Uri "http://localhost:8000/health" -Method Get` (latest: `healthy`, `database=True`)
+18. `Invoke-RestMethod -Uri "http://localhost:8000/query" -Method Post -ContentType "application/json" -Body '{"query":"What are building permit requirements in Dallas?","top_k":5,"municipality":"dallas"}'` (latest: `num_results=5`, `top_similarity=0.8020`)
+19. `Get-Content db/migrations/009_purge_audit_log.sql | docker exec -i permit_rag_db psql -U postgres -d permit_rag` (latest: `CREATE TABLE`, `CREATE INDEX`, `CREATE INDEX`)
+20. `docker exec permit_rag_db psql -U postgres -d permit_rag -c "SELECT id, doc_id, actor_identity, actor_role, source_tier, created_at FROM purge_audit_log ORDER BY created_at DESC LIMIT 5;"` (latest: table query succeeds, `0 rows` before first purge event)
+21. `docker exec permit_rag_db psql -U postgres -d permit_rag -c "SELECT doc_id, actor_identity, actor_role, source_tier, deleted_chunk_count, local_file_deleted, created_at FROM purge_audit_log ORDER BY created_at DESC LIMIT 5;"` (latest: audit row present for `mansfieldtx-tx-2`, role `owner`, tier `2`, deleted chunks `88`)
 
 For older run logs, command-by-command history, and dated deltas, use journal entries (`journals/session_260531.md` + subsequent sessions).
