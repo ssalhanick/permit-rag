@@ -213,6 +213,20 @@ permit_rag/
 
 ---
 
+## Docs Table of Contents
+
+Project docs in `docs/`:
+
+| File | Purpose |
+|---|---|
+| `docs/api.md` | API endpoint usage, auth headers, and runtime config notes |
+| `docs/offboarding_runbook.md` | User offboarding purge procedure (single + bulk) and verification |
+| `docs/postgis_migration_checklist.md` | Sprint 4 GIS/PostGIS rollout checklist (planning-only gates) |
+| `docs/task14ab_execution_checklist.md` | Step-by-step execution/rollback checklist for Task 14A/14B |
+| `docs/sprint4_qa_checklist.md` | Frontend + citation regression QA checklist and sign-off flow |
+
+---
+
 ## Commands
 
 ```bash
@@ -254,6 +268,15 @@ py -m ingestion.embedder --force
 
 # Chunk + verify all documents (no DB insert)
 py -m scripts.run_chunk_verify
+
+# Create an API Token
+py -c "import secrets; print(secrets.token_urlsafe(32))"
+
+# Purge one uploaded project document (requires admin token/role)
+py -m scripts.purge_project_uploads --doc-id "<doc_id>" --admin-role owner
+
+# Purge many docs listed in a text file (one doc_id per line)
+py -m scripts.purge_project_uploads --doc-id-file "docs_to_purge.txt" --admin-role owner
 ```
 
 ---
@@ -304,12 +327,18 @@ curl -s -X POST http://localhost:8000/admin/documents/dallas-building-code-2024/
   -H "X-Admin-Token: ${API_ADMIN_TOKEN}" \
   -H "X-Admin-Role: admin" \
   -d "{\"replacement_doc_id\":\"dallas-building-code-2026\",\"superseded_weight\":0.1}"
+
+# Admin purge action (deletes chunks/vectors + local raw file, keeps repealed tombstone row)
+curl -s -X POST http://localhost:8000/admin/documents/project-doc-1/purge-project-upload \
+  -H "X-Admin-Token: ${API_ADMIN_TOKEN}" \
+  -H "X-Admin-Role: owner"
 ```
 
 Admin runtime security/env flags:
 - `API_ADMIN_AUTH_REQUIRED=true|false` (default `true`)
 - `API_ADMIN_TOKEN=<secret>`
 - `API_ADMIN_ALLOWED_ROLES=admin,owner` (default `admin`)
+- `API_PURGE_ANY_TIER_ROLES=owner` (roles allowed to purge non-project tiers)
 - Admin token policy: rotate `API_ADMIN_TOKEN` every 30 days and on any suspected secret exposure or admin roster change.
 
 CORS/env flags:

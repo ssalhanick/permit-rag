@@ -78,17 +78,50 @@ Finish Sprint 3 tasks:
   - `24 passed in 0.09s`
   - `26 passed in 0.35s`
 
+## Sprint 4 hardening addendum (later same day)
+
+### Scope handled
+
+- Upload reliability fixes for PDF/HTML background processing
+- QA checklist clarification and completion pass
+- Offboarding purge path (chunks/vectors/raw file purge) with role tiers
+- Reusable purge script with env token loading
+- Docs updates (`README.md`, `docs/api.md`, `STATE.md`)
+
+### Completed in this addendum
+
+- Fixed upload background processing order:
+  - chunk by `doc_id` -> insert chunks -> embed -> activate
+  - file: `api/routes/upload.py`
+- Added HTML-specific resilience:
+  - retry chunking once with procedural filter disabled when first pass yields zero chunks
+  - failure status split: PDF -> `needs_ocr`, HTML -> `draft`
+  - tests: `tests/test_upload_route.py`
+- Added admin purge endpoint:
+  - `POST /admin/documents/{doc_id}/purge-project-upload`
+  - deletes chunks (and vectors), deletes local raw file under `documents/raw`, tombstones metadata
+  - file: `api/routes/admin.py`
+- Added purge role tiering:
+  - normal admin can purge project uploads (`source_tier=3`)
+  - elevated role (`API_PURGE_ANY_TIER_ROLES`) can purge any source tier
+- Added reusable script:
+  - `scripts/purge_project_uploads.py`
+  - supports `--doc-id` and `--doc-id-file`
+  - auto-loads `API_ADMIN_TOKEN` from `.env` via `load_dotenv()`
+  - tests: `tests/test_purge_project_uploads_script.py`
+- Added docs TOC in README for files under `docs/`.
+
 ## Next session should
 
 1. Review and approve PostGIS go/no-go checklist before any DB extension/image change.
-2. Run manual UX pass on `/documents` and `/upload` against live API.
-3. Run targeted multi-permit eval notes (beyond unit tests) and capture any citation-grounding drift.
+2. Run targeted multi-permit eval notes (beyond unit tests) and capture citation-grounding drift.
+3. Add purge audit log trail (`who`, `role`, `doc_id`, `source_tier`, timestamp) and tests.
 
 ## Prompt for next session
 
-Read `AGENTS.md`, `STATE.md`, and `journals/session_260604.md`. Sprint 4 kickoff is complete for A1/B1/B2/C1. Next: execute a manual UX QA pass for `/documents` and `/upload`, then run/record a focused multi-permit eval pass with citation-grounding observations. Do not run risky PostGIS DB changes until checklist gates are explicitly approved.
+Read `AGENTS.md`, `STATE.md`, and `journals/session_260604.md`. Sprint 4 hardening is complete for upload reliability, purge role tiers, and frontend QA. Next: run/record a focused multi-permit eval pass with citation-grounding observations, then add purge audit logging. Do not run risky PostGIS DB changes until checklist gates are explicitly approved.
 
 ## Git commit message
 
-feat(frontend+tests): add document browser, upload UX polish, and query-answer citation regressions
+feat(admin+upload): harden upload flow and add tiered purge tooling/docs
 

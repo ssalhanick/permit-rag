@@ -24,6 +24,7 @@ py -m uvicorn api.main:app --reload --port 8000
   - `API_ADMIN_AUTH_REQUIRED=true|false` (default `true`)
   - `API_ADMIN_TOKEN=<secret>`
   - `API_ADMIN_ALLOWED_ROLES=admin,owner` (default `admin`)
+  - `API_PURGE_ANY_TIER_ROLES=owner` (elevated roles for non-project-tier purge)
   - Policy: rotate `API_ADMIN_TOKEN` at least every 30 days and immediately after suspected credential exposure or team membership changes.
 
 ### `GET /health`
@@ -95,7 +96,27 @@ $body = @{
   superseded_weight = 0.10
 } | ConvertTo-Json
 
-Invoke-RestMethod -Uri "http://localhost:8000/admin/documents/dallas-building-code-2024" `
+Invoke-RestMethod -Uri "http://localhost:8000/admin/documents/dallas-building-code-2024/supersede" `
   -Method Post -ContentType "application/json" `
   -Headers @{ "X-Admin-Token" = "your-token"; "X-Admin-Role" = "admin" } -Body $body
+```
+
+### `POST /admin/documents/{doc_id}/purge-project-upload`
+
+Purges document content for offboarding and cleanup:
+- Deletes all chunk rows (removes vectors from pgvector)
+- Deletes local raw file when path is under `documents/raw`
+- Keeps document row as governance tombstone (`repealed`, `is_current=false`, `retrieval_weight=0.0`)
+
+Tier rules:
+- `source_tier=3` (project uploads): allowed for normal admin roles
+- `source_tier!=3`: requires elevated role from `API_PURGE_ANY_TIER_ROLES`
+
+Runbook:
+- See `docs/offboarding_runbook.md` for end-to-end offboarding flow and verification checklist.
+
+```powershell
+Invoke-RestMethod -Uri "http://localhost:8000/admin/documents/project-doc-1/purge-project-upload" `
+  -Method Post `
+  -Headers @{ "X-Admin-Token" = "your-token"; "X-Admin-Role" = "owner" }
 ```

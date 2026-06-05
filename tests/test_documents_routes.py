@@ -44,6 +44,7 @@ def _document_row(doc_id: str = "dallas-building-code") -> dict:
         "ingested_at": datetime(2026, 5, 1, 12, 0, tzinfo=timezone.utc),
         "updated_at": datetime(2026, 5, 2, 12, 0, tzinfo=timezone.utc),
         "superseded_by": None,
+        "source_tier": 1,
     }
 
 
@@ -325,3 +326,92 @@ def test_supersede_admin_document_rejects_invalid_request(monkeypatch) -> None:
 
     assert response.status_code == 400
     assert "Replacement document not found" in response.json()["detail"]
+
+
+def test_purge_project_upload_success(monkeypatch) -> None:
+    """POST /admin/documents/{doc_id}/purge-project-upload removes chunks and tombstones row."""
+    from api.routes import admin as admin_route
+
+    row = _document_row("project-doc-1")
+    row["source_tier"] = 3
+    row["local_path"] = "documents/raw/project-doc-1.html"
+    updated_row = dict(row)
+    updated_row["document_status"] = "repealed"
+    updated_row["is_current"] = False
+    updated_row["retrieval_weight"] = Decimal("0.00")
+    captured: dict = {}
+
+    monkeypatch.setattr(admin_route.db_client, "get_document_by_doc_id", lambda doc_id: row if doc_id == "project-doc-1" else None)
+    monkeypatch.setattr(
+        admin_route.db_client,
+        "delete_chunks_for_document",
+        lambda _doc_uuid: 17,
+    )
+    monkeypatch.setattr(admin_route, "_remove_local_raw_file", lambda _path: True)
+    monkeypatch.setattr(
+        admin_route.db_client,
+        "update_document_admin_fields",
+        lambda doc_id, **kwargs: captured.update({"doc_id": doc_id, **kwargs}) or updated_row,
+    )
+    monkeypatch.setattr(admin_route.db_client, "count_chunks", lambda _doc_uuid: 0)
+
+    client = TestClient(app)
+    response = client.post("/admin/documents/project-doc-1/purge-project-upload")
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["action"] == "purge_project_upload"
+    assert body["document"]["document_status"] == "repealed"
+    assert body["document"]["chunk_count"] == 0
+    assert captured == {
+        "doc_id": "project-doc-1",
+        "document_status": "repealed",
+        "is_current": False,
+        "retrieval_weight": 0.0,
+    }
+
+
+def test_purge_project_upload_rejects_non_project_tier(monkeypatch) -> None:
+    """Purge route should require elevated role for non-project tiers."""
+    from api.routes import admin as admin_route
+
+    row = _document_row("city-code-doc")
+    row["source_tier"] = 1
+    monkeypatch.setattr(admin_route.db_client, "get_document_by_doc_id", lambda _doc_id: row)
+
+    client = TestClient(app)
+    response = client.post("/admin/documents/city-code-doc/purge-project-upload")
+
+    assert response.status_code == 403
+    assert "requires elevated role" in response.json()["detail"]
+
+
+def test_purge_project_upload_allows_non_project_tier_with_elevated_role(monkeypatch) -> None:
+    """Non-tier-3 purge should pass when caller has elevated purge role."""
+    from api.routes import admin as admin_route
+
+    row = _document_row("city-code-doc")
+    row["source_tier"] = 1
+    updated_row = dict(row)
+    updated_row["document_status"] = "repealed"
+    updated_row["is_current"] = False
+    updated_row["retrieval_weight"] = Decimal("0.00")
+    monkeypatch.setenv("API_PURGE_ANY_TIER_ROLES", "owner,superadmin")
+    monkeypatch.setattr(admin_route.db_client, "get_document_by_doc_id", lambda _doc_id: row)
+    monkeypatch.setattr(admin_route.db_client, "delete_chunks_for_document", lambda _doc_uuid: 3)
+    monkeypatch.setattr(admin_route, "_remove_local_raw_file", lambda _path: True)
+    monkeypatch.setattr(
+        admin_route.db_client,
+        "update_document_admin_fields",
+        lambda _doc_id, **_kwargs: updated_row,
+    )
+    monkeypatch.setattr(admin_route.db_client, "count_chunks", lambda _doc_uuid: 0)
+
+    client = TestClient(app)
+    response = client.post(
+        "/admin/documents/city-code-doc/purge-project-upload",
+        headers={"X-Admin-Role": "owner"},
+    )
+
+    assert response.status_code == 200
+    assert response.json()["action"] == "purge_project_upload"

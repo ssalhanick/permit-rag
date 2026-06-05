@@ -1,10 +1,10 @@
 # permit_rag — State
 
-_Updated: 2026-06-04 (Sprint 4 kickoff complete — GIS checklist + frontend browser/upload polish + citation regressions)_
+_Updated: 2026-06-04 (Sprint 4 hardening complete — upload reliability + purge controls + QA pass)_
 
 ## Phase
 
-Sprint 4 in progress. Safe foundation and UI hardening landed; DB GIS migration execution remains pending by design.
+Sprint 4 hardening mostly complete. GIS planning/checklist done, frontend QA pass done, upload/purge governance path added. PostGIS execution remains pending by design.
 
 ## Blocked on
 
@@ -13,8 +13,8 @@ Sprint 4 in progress. Safe foundation and UI hardening landed; DB GIS migration 
 ## Next 3 tasks
 
 1. Review and approve PostGIS checklist gates before any extension/image change
-2. Run full UX pass on browser/upload against live API data and capture issues
-3. Run targeted eval pass for multi-permit answer quality/citation grounding
+2. Run targeted eval pass for multi-permit answer quality/citation grounding and record deltas
+3. Add purge audit log trail (`who`, `role`, `doc_id`, `source_tier`, timestamp)
 
 ## Module status
 
@@ -22,7 +22,7 @@ ingestion ✅ db ✅ rag ✅ api ✅ eval ✅ frontend ✅
 
 _db note: Sprint 1 migrations applied — `content_hash` + `status` on chunks, `source_tier` on documents, `match_chunks()` updated (chunk status filter + tier ordering + new return cols). Roles `corpus_writer`/`app_reader` live on Docker dev DB._
 _rag note: multi-permit classifier is live (`rag/permit_classifier.py`) and wired into `POST /query/answer`; conflict detector remains backlog._
-_api note: `POST /query/answer` now returns `ahj_disclaimer` wrapper (text + learn_more_url) and `permit_types`. `ChunkResponse` includes `source_tier`._
+_api note: `POST /query/answer` returns `ahj_disclaimer` + `permit_types`. Upload flow now chunks/inserts/embeds reliably and retries HTML chunking without procedural filter when first-pass chunks are empty. New admin purge route supports project uploads and elevated-role any-tier purge._
 _frontend note: query flow + document browser route (`/documents`) + upload UX blockers/status guidance are now in place. API helper tests and upload utility tests added under `frontend/src/*.test.js`._
 _tracing note: `POST /query/answer` now captures LangSmith runs with `X-Client-Session-Id` and `X-Client-Request-Id` metadata._
 
@@ -35,7 +35,7 @@ _tracing note: `POST /query/answer` now captures LangSmith runs with `X-Client-S
 - API live routes:
   - `POST /query`, `POST /query/answer` (+ `ahj_disclaimer`), `GET /health`
   - `GET /documents`, `GET /documents/{doc_id}`, `GET /documents/status`
-  - `PATCH /admin/documents/{doc_id}`, `POST /admin/documents/{doc_id}/supersede`
+  - `PATCH /admin/documents/{doc_id}`, `POST /admin/documents/{doc_id}/supersede`, `POST /admin/documents/{doc_id}/purge-project-upload`
 - Docs: `README.md` + `docs/api.md` reflect current API surface.
 
 ## Quality gates (current)
@@ -67,6 +67,7 @@ _tracing note: `POST /query/answer` now captures LangSmith runs with `X-Client-S
 - API architecture: FastAPI with lifespan startup/shutdown, typed schemas, and dedicated admin governance routes.
 - Governance: documents are never deleted; lifecycle is `active/superseded/repealed/needs_ocr/draft`. Chunks now have independent `status` lifecycle.
 - Security baseline: admin routes enforce auth by default (`API_ADMIN_AUTH_REQUIRED=true`) with token + role allowlist (`API_ADMIN_ALLOWED_ROLES`).
+- Purge tier policy: `source_tier=3` purge available to normal admin role; non-project tiers require elevated role in `API_PURGE_ANY_TIER_ROLES`.
 - DB role policy: ingestion connects via `CORPUS_WRITER_URL`; API reads via `APP_READER_URL`. Rotate passwords before any shared deployment. Supabase migration: replace with service_role / anon RLS pattern (see `db/init/02_roles.sql` comments).
 - Admin token policy: rotate `API_ADMIN_TOKEN` at least every 30 days and after suspected secret exposure or admin roster change.
 - CORS policy: env-driven allowlist via `API_CORS_ALLOW_ORIGINS`; wildcard only via explicit dev override `API_CORS_ALLOW_ALL=true`.
@@ -115,6 +116,9 @@ _tracing note: `POST /query/answer` now captures LangSmith runs with `X-Client-S
 - [x] Task B2: Polished upload flow UX with readiness blockers/status feedback and error mapping (`frontend/src/UploadPage.jsx`, `frontend/src/uploadUtils.js`)
 - [x] Task B1/B2 tests: `frontend/src/api.test.js`, `frontend/src/uploadUtils.test.js`
 - [x] Task C1: Added multi-permit + citation regression tests (`tests/test_query_answer_route.py`, `tests/test_permit_classifier.py`)
+- [x] Upload reliability hardening: fixed background upload chunk/insert/embed order; added HTML retry path and PDF-vs-HTML failure status handling (`api/routes/upload.py`, `tests/test_upload_route.py`)
+- [x] Offboarding purge path: added purge endpoint + reusable script (`api/routes/admin.py`, `scripts/purge_project_uploads.py`) with role-tier controls (`API_PURGE_ANY_TIER_ROLES`)
+- [x] Frontend/manual QA pass completed with checklist updates (`docs/sprint4_qa_checklist.md`)
 
 ## Validation / verification steps (canonical)
 
@@ -126,5 +130,7 @@ _tracing note: `POST /query/answer` now captures LangSmith runs with `X-Client-S
 6. `py -m evaluation.eval_guard` (latest: PASS on `ragas_20260602_214048.json`)
 7. `cd frontend; npm run test` (latest: pass after `import.meta.env` Node-safe fallback)
 8. `py -m pytest tests/test_query_answer_route.py tests/test_permit_classifier.py -v` (latest user-reported: `24 passed` then `26 passed` across targeted runs)
+9. `py -m pytest tests/test_upload_route.py -v` (latest: pass after upload reliability fixes)
+10. `py -m pytest tests/test_documents_routes.py tests/test_purge_project_uploads_script.py -v` (latest: pass after purge tier controls)
 
 For older run logs, command-by-command history, and dated deltas, use journal entries (`journals/session_260531.md` + subsequent sessions).

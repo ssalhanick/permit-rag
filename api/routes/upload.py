@@ -24,9 +24,43 @@ from typing import Annotated, Optional
 from fastapi import APIRouter, BackgroundTasks, Depends, File, Form, HTTPException, UploadFile
 from fastapi.security import APIKeyHeader
 from pydantic import BaseModel
+from db.client import (
+    delete_chunks_for_document,
+    insert_chunks,
+    insert_document,
+    update_document_admin_fields,
+)
+from ingestion.chunker import chunk_document
+from ingestion.embedder import embed_document
 
 log = logging.getLogger(__name__)
 router = APIRouter(prefix="/admin/documents", tags=["admin-upload"])
+
+
+def _is_html_path(local_path: str) -> bool:
+    """Return true when local_path is an HTML file."""
+    suffix = Path(local_path).suffix.lower()
+    return suffix in {".html", ".htm"}
+
+
+def _retry_chunk_html_without_filter(doc_id: str, local_path: str) -> dict:
+    """Retry chunking once for HTML with procedural filter disabled."""
+    if not _is_html_path(local_path):
+        return chunk_document(doc_id)
+    prior = os.environ.get("CHUNK_PROCEDURAL_FILTER_ENABLED")
+    try:
+        os.environ["CHUNK_PROCEDURAL_FILTER_ENABLED"] = "false"
+        return chunk_document(doc_id)
+    finally:
+        if prior is None:
+            os.environ.pop("CHUNK_PROCEDURAL_FILTER_ENABLED", None)
+        else:
+            os.environ["CHUNK_PROCEDURAL_FILTER_ENABLED"] = prior
+
+
+def _failure_status(local_path: str) -> str:
+    """Map processing failures to document lifecycle status by file type."""
+    return "needs_ocr" if Path(local_path).suffix.lower() == ".pdf" else "draft"
 
 # ── Auth (reuses existing admin token logic) ─────────────────
 
@@ -62,10 +96,6 @@ def _process_upload(
     Run in background: insert document row, chunk, and embed.
     Sets document_status = 'active' on success, 'needs_ocr' on failure.
     """
-    from db.client import get_document_by_doc_id, insert_document, update_document_admin_fields
-    from ingestion.chunker import chunk_document
-    from ingestion.embedder import embed_document_chunks
-
     log.info("Background processing started for doc_id=%s", doc_id)
     try:
         checksum = hashlib.sha256(Path(local_path).read_bytes()).hexdigest()
@@ -76,21 +106,34 @@ def _process_upload(
             authority_level=authority_level,
             doc_type=doc_type,
             subject_tags=subject_tags,
-            document_status="active",
+            document_status="draft",
             checksum_sha256=checksum,
             local_path=local_path,
             source_tier=source_tier,
         )
         document_uuid = doc_row["id"]
-        chunks = chunk_document(local_path, doc_id=doc_id)
-        embed_document_chunks(document_uuid, chunks)
+        chunk_result = chunk_document(doc_id)
+        chunks = chunk_result["chunks"]
+        if not chunks and _is_html_path(local_path):
+            log.warning("No chunks from HTML on first pass; retrying without procedural filter: %s", doc_id)
+            chunk_result = _retry_chunk_html_without_filter(doc_id, local_path)
+            chunks = chunk_result["chunks"]
+        if not chunks:
+            raise RuntimeError(f"No chunks produced for doc_id={doc_id}")
+        delete_chunks_for_document(document_uuid)
+        inserted = insert_chunks(document_uuid, chunks)
+        embed_result = embed_document(doc_id, force=True)
+        update_document_admin_fields(doc_id, document_status="active")
         log.info(
-            "Upload processing complete: doc_id=%s chunks=%d", doc_id, len(chunks)
+            "Upload processing complete: doc_id=%s chunks=%d embedded_new=%s",
+            doc_id,
+            inserted,
+            embed_result.get("num_new"),
         )
     except Exception as exc:
         log.exception("Upload processing failed for doc_id=%s: %s", doc_id, exc)
         try:
-            update_document_admin_fields(doc_id, document_status="needs_ocr")
+            update_document_admin_fields(doc_id, document_status=_failure_status(local_path))
         except Exception:
             pass
 
@@ -203,7 +246,7 @@ async def upload_document(
         status="processing",
         message=(
             f"File '{file.filename}' accepted. Chunking and embedding running in background. "
-            f"Poll GET /documents/{doc_id} to check status."
+            f"Poll GET /documents/{doc_id} until document_status is active or needs_ocr."
         ),
         local_path=local_path,
     )

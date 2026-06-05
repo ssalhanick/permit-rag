@@ -1,0 +1,13 @@
+{
+  "doc_id": "mansfieldtx-tx-1",
+  "verifications": {
+    "embedding": {
+      "result": "pass",
+      "detail": {
+        "num_chunks": 1,
+        "num_embedded": 1,
+        "embedding_dim": 768
+      }
+    }
+  }
+}
