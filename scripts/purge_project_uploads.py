@@ -44,7 +44,13 @@ def resolve_admin_token(cli_token: str | None) -> str:
     return token
 
 
-def build_purge_request(api_base_url: str, doc_id: str, token: str, role: str) -> Request:
+def build_purge_request(
+    api_base_url: str,
+    doc_id: str,
+    token: str,
+    role: str,
+    admin_user: str,
+) -> Request:
     """Build HTTP request object for purge endpoint."""
     endpoint = f"{api_base_url.rstrip('/')}/admin/documents/{doc_id}/purge-project-upload"
     return Request(
@@ -53,13 +59,20 @@ def build_purge_request(api_base_url: str, doc_id: str, token: str, role: str) -
         headers={
             "X-Admin-Token": token,
             "X-Admin-Role": role,
+            "X-Admin-User": admin_user,
         },
     )
 
 
-def purge_one(api_base_url: str, doc_id: str, token: str, role: str) -> tuple[bool, str]:
+def purge_one(
+    api_base_url: str,
+    doc_id: str,
+    token: str,
+    role: str,
+    admin_user: str,
+) -> tuple[bool, str]:
     """Call purge endpoint once and return success flag plus message."""
-    request = build_purge_request(api_base_url, doc_id, token, role)
+    request = build_purge_request(api_base_url, doc_id, token, role, admin_user)
     try:
         with urlopen(request, timeout=30) as response:
             payload = json.loads(response.read().decode("utf-8"))
@@ -75,11 +88,17 @@ def purge_one(api_base_url: str, doc_id: str, token: str, role: str) -> tuple[bo
         return False, f"Network error: {exc.reason}"
 
 
-def run_purge(api_base_url: str, doc_ids: Iterable[str], token: str, role: str) -> int:
+def run_purge(
+    api_base_url: str,
+    doc_ids: Iterable[str],
+    token: str,
+    role: str,
+    admin_user: str,
+) -> int:
     """Run purge for all doc_ids and return process exit code."""
     failures: list[tuple[str, str]] = []
     for doc_id in doc_ids:
-        ok, message = purge_one(api_base_url, doc_id, token, role)
+        ok, message = purge_one(api_base_url, doc_id, token, role, admin_user)
         marker = "OK" if ok else "FAIL"
         print(f"[{marker}] {doc_id} -> {message}")
         if not ok:
@@ -102,6 +121,11 @@ def parse_args() -> argparse.Namespace:
         "--admin-role",
         default=os.environ.get("API_PURGE_ADMIN_ROLE") or os.environ.get("API_ADMIN_ROLE", "admin"),
     )
+    parser.add_argument(
+        "--admin-user",
+        default=os.environ.get("API_PURGE_ADMIN_USER", "script"),
+        help="Audit identity for purge log entries.",
+    )
     return parser.parse_args()
 
 
@@ -114,7 +138,7 @@ def main() -> int:
         print("No doc_ids provided. Use --doc-id or --doc-id-file.")
         return 2
     token = resolve_admin_token(args.admin_token)
-    return run_purge(args.api_base_url, doc_ids, token, args.admin_role)
+    return run_purge(args.api_base_url, doc_ids, token, args.admin_role, args.admin_user)
 
 
 if __name__ == "__main__":

@@ -15,6 +15,7 @@ Scope:
 - API is running
 - `API_ADMIN_TOKEN` is configured
 - Caller has valid `X-Admin-Role`
+- Caller identity should be set in `X-Admin-User` (or `--admin-user` in script)
 - For non-project tiers (`source_tier != 3`), role must be in `API_PURGE_ANY_TIER_ROLES`
 
 ## 2) Identify Candidate Documents
@@ -36,11 +37,11 @@ project-doc-2
 
 ### Method A — Single doc (API)
 
-`curl -s -X POST "http://localhost:8000/admin/documents/<doc_id>/purge-project-upload" -H "X-Admin-Token: <API_ADMIN_TOKEN>" -H "X-Admin-Role: owner"`
+`curl -s -X POST "http://localhost:8000/admin/documents/<doc_id>/purge-project-upload" -H "X-Admin-Token: <API_ADMIN_TOKEN>" -H "X-Admin-Role: owner" -H "X-Admin-User: <operator-id>"`
 
 ### Method B — Bulk script (recommended)
 
-`py -m scripts.purge_project_uploads --doc-id-file "docs_to_purge.txt" --admin-role owner`
+`py -m scripts.purge_project_uploads --doc-id-file "docs_to_purge.txt" --admin-role owner --admin-user offboarding-runbook`
 
 ## 4) Verification
 

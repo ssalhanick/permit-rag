@@ -49,4 +49,5 @@ GRANT SELECT ON ALL TABLES IN SCHEMA public TO app_reader;
 
 -- Allow app_reader to write the query audit log (structured audit trail)
 GRANT INSERT ON query_log TO app_reader;
+GRANT INSERT ON purge_audit_log TO app_reader;
 GRANT USAGE ON ALL SEQUENCES IN SCHEMA public TO app_reader;

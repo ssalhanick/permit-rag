@@ -36,8 +36,9 @@ def test_resolve_admin_token_raises_when_empty(monkeypatch: pytest.MonkeyPatch) 
 
 def test_build_purge_request_contains_headers() -> None:
     """Request should target purge endpoint with auth headers."""
-    request = build_purge_request("http://localhost:8000/", "doc-1", "tkn", "admin")
+    request = build_purge_request("http://localhost:8000/", "doc-1", "tkn", "admin", "alice")
     assert request.get_method() == "POST"
     assert request.full_url.endswith("/admin/documents/doc-1/purge-project-upload")
     assert request.headers["X-admin-token"] == "tkn"
     assert request.headers["X-admin-role"] == "admin"
+    assert request.headers["X-admin-user"] == "alice"

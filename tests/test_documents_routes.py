@@ -340,6 +340,7 @@ def test_purge_project_upload_success(monkeypatch) -> None:
     updated_row["is_current"] = False
     updated_row["retrieval_weight"] = Decimal("0.00")
     captured: dict = {}
+    captured_audit: dict = {}
 
     monkeypatch.setattr(admin_route.db_client, "get_document_by_doc_id", lambda doc_id: row if doc_id == "project-doc-1" else None)
     monkeypatch.setattr(
@@ -353,10 +354,18 @@ def test_purge_project_upload_success(monkeypatch) -> None:
         "update_document_admin_fields",
         lambda doc_id, **kwargs: captured.update({"doc_id": doc_id, **kwargs}) or updated_row,
     )
+    monkeypatch.setattr(
+        admin_route.db_client,
+        "insert_purge_audit_log",
+        lambda **kwargs: captured_audit.update(kwargs) or {"id": uuid4()},
+    )
     monkeypatch.setattr(admin_route.db_client, "count_chunks", lambda _doc_uuid: 0)
 
     client = TestClient(app)
-    response = client.post("/admin/documents/project-doc-1/purge-project-upload")
+    response = client.post(
+        "/admin/documents/project-doc-1/purge-project-upload",
+        headers={"X-Admin-Role": "owner", "X-Admin-User": "qa-user"},
+    )
 
     assert response.status_code == 200
     body = response.json()
@@ -368,6 +377,15 @@ def test_purge_project_upload_success(monkeypatch) -> None:
         "document_status": "repealed",
         "is_current": False,
         "retrieval_weight": 0.0,
+    }
+    assert captured_audit == {
+        "doc_id": "project-doc-1",
+        "document_id": row["id"],
+        "actor_identity": "qa-user",
+        "actor_role": "owner",
+        "source_tier": 3,
+        "deleted_chunk_count": 17,
+        "local_file_deleted": True,
     }
 
 
@@ -404,6 +422,11 @@ def test_purge_project_upload_allows_non_project_tier_with_elevated_role(monkeyp
         admin_route.db_client,
         "update_document_admin_fields",
         lambda _doc_id, **_kwargs: updated_row,
+    )
+    monkeypatch.setattr(
+        admin_route.db_client,
+        "insert_purge_audit_log",
+        lambda **_kwargs: {"id": uuid4()},
     )
     monkeypatch.setattr(admin_route.db_client, "count_chunks", lambda _doc_uuid: 0)
 

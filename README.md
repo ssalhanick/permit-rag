@@ -70,8 +70,8 @@ All other variables have working defaults for local dev.
 docker compose up -d
 ```
 
-This starts a local Postgres 17 + pgvector container on **port 5433**. The schema
-(`db/schema.sql`) and roles (`db/init/02_roles.sql`) are applied automatically on
+This starts a local Postgres 17 + pgvector + PostGIS container on **port 5433**. The schema
+(`db/schema.sql`) and init SQL (`db/init/*.sql`) are applied automatically on
 first boot.
 
 Verify it is running:
@@ -86,6 +86,10 @@ docker ps   # should show permit_rag_db as Up
 > Get-Content db/migrations/003_chunk_status.sql       | docker exec -i permit_rag_db psql -U postgres -d permit_rag
 > Get-Content db/migrations/004_source_tier.sql        | docker exec -i permit_rag_db psql -U postgres -d permit_rag
 > Get-Content db/migrations/005_match_chunks_update.sql | docker exec -i permit_rag_db psql -U postgres -d permit_rag
+> Get-Content db/migrations/006_jurisdictions.sql      | docker exec -i permit_rag_db psql -U postgres -d permit_rag
+> Get-Content db/migrations/007_postgis_extension.sql  | docker exec -i permit_rag_db psql -U postgres -d permit_rag
+> Get-Content db/migrations/008_municipal_boundaries_pilot.sql | docker exec -i permit_rag_db psql -U postgres -d permit_rag
+> Get-Content db/migrations/009_purge_audit_log.sql    | docker exec -i permit_rag_db psql -U postgres -d permit_rag
 > Get-Content db/init/02_roles.sql                     | docker exec -i permit_rag_db psql -U postgres -d permit_rag
 > ```
 

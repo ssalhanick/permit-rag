@@ -147,3 +147,58 @@ Read `AGENTS.md`, `STATE.md`, and `journals/session_260604.md`. Task 14A extensi
 
 chore(gis): validate task14a postgis extensions and record durable-next steps
 
+## Sprint 4 durability + audit addendum (same session)
+
+### Scope handled
+
+- Made Task 14A durable in Docker image/build path
+- Staged Task 14B pilot boundary migration + validation commands
+- Added purge audit log trail (`who`, `role`, `doc_id`, `source_tier`, timestamp)
+
+### Completed in this addendum
+
+- Added durable DB image:
+  - `db/Dockerfile` now installs `postgresql-17-postgis-3` packages on top of `pgvector/pgvector:pg17`
+  - `docker-compose.yml` now builds local DB image from `db/Dockerfile`
+  - `db/init/01_extensions.sql` added (`postgis`, `vector`, `pgcrypto`)
+- Added GIS pilot migrations:
+  - `db/migrations/007_postgis_extension.sql`
+  - `db/migrations/008_municipal_boundaries_pilot.sql` (pilot Dallas envelope multipolygon, SRID 4326, GiST index)
+- Added purge audit logging:
+  - `db/migrations/009_purge_audit_log.sql`
+  - `db/client.py` -> `insert_purge_audit_log()`
+  - `api/routes/admin.py` purge route now records audit row with `X-Admin-User` + `X-Admin-Role`
+  - `scripts/purge_project_uploads.py` supports `--admin-user` and sends `X-Admin-User`
+- Updated docs:
+  - `docs/task14ab_execution_checklist.md` (Task 14B command block + validation queries)
+  - `docs/offboarding_runbook.md` (`X-Admin-User` usage)
+  - `README.md` startup/migration notes updated for PostGIS-inclusive stack
+- Added/updated tests:
+  - `tests/test_documents_routes.py`
+  - `tests/test_purge_project_uploads_script.py`
+  - `tests/test_db_client_purge_audit.py` (new)
+
+### Validation outcomes (addendum)
+
+- User-reported:
+  - `docker compose up -d --build` -> DB image built and container started
+  - `py -m pytest tests/test_documents_routes.py tests/test_purge_project_uploads_script.py -q` -> `19 passed in 8.16s`
+  - Task 14B SQL checks:
+    - extensions: `postgis`, `vector`
+    - geometry validation: `dallas | 4326 | MULTIPOLYGON | t`
+    - indexes on `municipal_boundaries`: `idx_municipal_boundaries_geom`, `idx_municipal_boundaries_jurisdiction` (+ PK/unique)
+    - point-in-polygon sample check returned `dallas`
+
+### Next session should
+
+1. Run API smoke after DB rebuild (`/health` + one retrieval query) and record output in checklist.
+2. Add targeted eval notes tied to GIS pilot outcomes (top similarity + behavior delta note).
+3. Verify `purge_audit_log` row insertion from one purge call.
+
+## Prompt for next session
+
+Read `AGENTS.md`, `STATE.md`, and `journals/session_260604.md`. Task 14A durability is now landed via Docker build path, and purge audit logging code is in place. Run Task 14B pilot boundary migration commands, capture geometry/index/point-in-polygon outputs, then finish targeted eval notes and finalize checklist/state updates.
+
+## Git commit message
+
+feat(gis): make postgis durable and add purge audit trail

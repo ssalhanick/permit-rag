@@ -1,10 +1,10 @@
 # permit_rag — State
 
-_Updated: 2026-06-04 (Sprint 4 hardening complete + Task 14A extension validation passed)_
+_Updated: 2026-06-04 (Task 14A durable + Task 14B pilot GIS validation passed)_
 
 ## Phase
 
-Sprint 4 hardening mostly complete. GIS planning/checklist done, frontend QA pass done, upload/purge governance path added. Task 14A extension validation passed (`postgis` + `vector` present), but current PostGIS install is not yet durable across container rebuild.
+Sprint 4 hardening mostly complete. GIS planning/checklist done, frontend QA pass done, upload/purge governance path added. Task 14A is now durable via Docker build path (pgvector + PostGIS image + extension init SQL). Task 14B pilot GIS validation passed (extensions, geometry validity, spatial index, point-in-polygon).
 
 ## Blocked on
 
@@ -12,9 +12,9 @@ Sprint 4 hardening mostly complete. GIS planning/checklist done, frontend QA pas
 
 ## Next 3 tasks
 
-1. Make Task 14A durable: move from in-container package install to Docker image build path
-2. Execute Task 14B pilot boundary load and validate geometry/index/query checks
-3. Add purge audit log trail (`who`, `role`, `doc_id`, `source_tier`, timestamp)
+1. Run API smoke after durable DB rebuild (`/health` + one retrieval query)
+2. Close targeted eval notes after GIS pilot (record top similarity + behavior delta note)
+3. Validate purge audit rows in DB after one purge operation
 
 ## Module status
 
@@ -29,7 +29,7 @@ _tracing note: `POST /query/answer` now captures LangSmith runs with `X-Client-S
 ## Current operational snapshot
 
 - Ingestion pipeline health (last full check): download ✅ extraction ✅ chunking ✅ embedding ✅
-- Vector DB: Postgres + pgvector (`chunks.embedding vector(768)`), plus PostGIS extension enabled in current dev container
+- Vector DB: Postgres + pgvector (`chunks.embedding vector(768)`), PostGIS now baked into local DB image build path
 - Schema additions (Sprint 1): `chunks.content_hash`, `chunks.status`, `documents.source_tier`
 - DB roles: `corpus_writer` (ingestion writes), `app_reader` (API reads + query_log insert)
 - API live routes:
@@ -120,8 +120,9 @@ _tracing note: `POST /query/answer` now captures LangSmith runs with `X-Client-S
 - [x] Offboarding purge path: added purge endpoint + reusable script (`api/routes/admin.py`, `scripts/purge_project_uploads.py`) with role-tier controls (`API_PURGE_ANY_TIER_ROLES`)
 - [x] Frontend/manual QA pass completed with checklist updates (`docs/sprint4_qa_checklist.md`)
 - [x] Task 14A extension validation: confirmed `postgis` and `vector` extensions active; API `/health` recovered to healthy
-- [ ] Task 14A durability: replace ephemeral in-container PostGIS package install with durable Docker build/image approach
-- [ ] Task 14B pilot: load first municipal boundary layer and run geometry + point-in-polygon validation
+- [x] Task 14A durability: replaced ephemeral PostGIS install with durable Docker build/image approach (`db/Dockerfile`, `docker-compose.yml`, `db/init/01_extensions.sql`)
+- [x] Task 14B pilot: loaded first municipal boundary layer and validated geometry + point-in-polygon
+- [x] Purge audit logging path added (`db/migrations/009_purge_audit_log.sql`, `db/client.py`, `api/routes/admin.py`, script header support)
 
 ## Validation / verification steps (canonical)
 
@@ -137,5 +138,9 @@ _tracing note: `POST /query/answer` now captures LangSmith runs with `X-Client-S
 10. `py -m pytest tests/test_documents_routes.py tests/test_purge_project_uploads_script.py -v` (latest: pass after purge tier controls)
 11. `Invoke-RestMethod -Uri "http://localhost:8000/health" -Method Get` (latest: `healthy`, `database=True` after enabling PostGIS)
 12. `docker exec permit_rag_db psql -U postgres -d permit_rag -c "SELECT extname FROM pg_extension WHERE extname IN ('postgis','vector') ORDER BY extname;"` (latest: both extensions present)
+13. `py -m pytest tests/test_documents_routes.py tests/test_purge_project_uploads_script.py -v` (latest user-reported: `19 passed`)
+14. `docker exec permit_rag_db psql -U postgres -d permit_rag -c "SELECT jurisdiction_id, ST_SRID(geom) AS srid, GeometryType(geom) AS geom_type, ST_IsValid(geom) AS is_valid FROM municipal_boundaries;"` (latest: `dallas | 4326 | MULTIPOLYGON | t`)
+15. `docker exec permit_rag_db psql -U postgres -d permit_rag -c "SELECT indexname FROM pg_indexes WHERE tablename='municipal_boundaries' ORDER BY indexname;"` (latest includes GiST geom + jurisdiction indexes)
+16. `docker exec permit_rag_db psql -U postgres -d permit_rag -c "SELECT jurisdiction_id FROM municipal_boundaries WHERE ST_Contains(geom, ST_SetSRID(ST_MakePoint(-96.7970, 32.7767), 4326));"` (latest: `dallas`)
 
 For older run logs, command-by-command history, and dated deltas, use journal entries (`journals/session_260531.md` + subsequent sessions).

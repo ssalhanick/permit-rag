@@ -88,13 +88,29 @@ Expected:
 - [ ] No empty `doc_id` or invalid `chunk_index` in citations
 
 If guardrail blocks with low confidence (422):
-- [ ] Record `top_similarity` and message in this checklist
-- [ ] Retry with fallback query 1: `What are the fire sprinkler requirements for new construction in Dallas?`
-- [ ] Retry with fallback query 2: `What are the building permit requirements in Plano?`
-- [ ] Confirm at least one fallback query returns citations in UI
+- [x ] Record `top_similarity` and message in this checklist
+- [- ] Retry with fallback query 1: `What are the fire sprinkler requirements for new construction in Dallas?`
+- [ x] Retry with fallback query 2: `What are the building permit requirements in Plano?`
+- [x ] Confirm at least one fallback query returns citations in UI
 
 Actual notes:
-- Insufficient retrieval confidence for grounded answer. `chunks=5`, `top_similarity=0.6760`, required `top_similarity>=0.74`
+- `garage conversion with electrical rewire and new bathroom plumbing`: Insufficient retrieval confidence for grounded answer. `chunks=5`, `top_similarity=0.6760`, required `top_similarity>=0.74`
+- `What are the fire sprinkler requirements for new construction in Dallas`: Insufficient retrieval confidence for grounded answer. chunks=5, top_similarity=0.7110, required_chunks>=3, required_top_similarity>=0.74
+
+## 4B) Targeted eval notes after GIS pilot (Task 14B)
+
+- [x] Record boundary load result (`municipal_boundaries` row count)
+- [x] Record point-in-polygon result for Dallas sample point
+- [ ] Re-run one Dallas retrieval query and record top similarity
+- [ ] Note whether GIS pilot changed retrieval behavior (expected: no change in current phase)
+
+Notes:
+- 2026-06-04: Durable PostGIS Docker build path landed and validated.
+- 2026-06-04 Task 14B SQL outputs:
+  - Extensions: `postgis`, `vector`
+  - Geometry check: `dallas | 4326 | MULTIPOLYGON | t`
+  - Spatial indexes present: `idx_municipal_boundaries_geom`, `idx_municipal_boundaries_jurisdiction`
+  - Point-in-polygon sample (`-96.7970, 32.7767`) resolved to `dallas`
 
 ## 5) Fast Command Checks
 
@@ -108,6 +124,7 @@ Run backend regressions:
 
 ## 6) Sign-off
 
-- [ ] QA pass complete
+- [x ] QA pass complete
 - [ ] Bugs captured (if any) with repro steps
+    - when importing a new document, the chunking seems to time out and the embedding doesn't work
 - [ ] `STATE.md` updated if scope or blockers changed

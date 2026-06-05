@@ -216,6 +216,7 @@ def purge_project_upload_admin(
     doc_id: str,
     x_admin_token: Optional[str] = Header(default=None),
     x_admin_role: Optional[str] = Header(default=None),
+    x_admin_user: Optional[str] = Header(default=None),
 ) -> DocumentAdminActionResponse:
     """Purge project-upload content while retaining governance document row."""
     _require_admin_auth(x_admin_token, x_admin_role)
@@ -229,6 +230,8 @@ def purge_project_upload_admin(
     source_tier = int(row.get("source_tier", 1))
     if source_tier != 3:
         _require_any_tier_purge_role(x_admin_role)
+    actor_role = (x_admin_role or "").strip().lower() or "unknown"
+    actor_identity = (x_admin_user or "").strip() or "unknown"
     try:
         deleted_chunks = db_client.delete_chunks_for_document(row["id"])
         file_deleted = _remove_local_raw_file(row.get("local_path"))
@@ -237,6 +240,15 @@ def purge_project_upload_admin(
             document_status="repealed",
             is_current=False,
             retrieval_weight=0.0,
+        )
+        db_client.insert_purge_audit_log(
+            doc_id=doc_id,
+            document_id=row["id"],
+            actor_identity=actor_identity,
+            actor_role=actor_role,
+            source_tier=source_tier,
+            deleted_chunk_count=deleted_chunks,
+            local_file_deleted=file_deleted,
         )
     except Exception as exc:
         log.exception("Project upload purge failed for doc_id=%s", doc_id)

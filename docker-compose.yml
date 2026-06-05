@@ -1,6 +1,8 @@
 services:
   db:
-    image: pgvector/pgvector:pg17
+    build:
+      context: ./db
+      dockerfile: Dockerfile
     container_name: permit_rag_db
     restart: unless-stopped
     environment:
@@ -11,8 +13,9 @@ services:
       - "5433:5432"
     volumes:
       - pgdata:/var/lib/postgresql/data
+      - ./db/init/01_extensions.sql:/docker-entrypoint-initdb.d/00-extensions.sql:ro
       - ./db/schema.sql:/docker-entrypoint-initdb.d/01-schema.sql:ro
-      - ./db/init:/docker-entrypoint-initdb.d/init:ro
+      - ./db/init/02_roles.sql:/docker-entrypoint-initdb.d/02-roles.sql:ro
 
 volumes:
   pgdata:

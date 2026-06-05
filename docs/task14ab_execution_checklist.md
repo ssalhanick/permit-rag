@@ -7,9 +7,9 @@ Scope:
 
 ## 0) Preconditions
 
-- [ ] Working tree clean or changes backed up
-- [ ] Docker Desktop running
-- [ ] Current DB backup created
+- [x ] Working tree clean or changes backed up
+- [ x] Docker Desktop running
+- [x ] Current DB backup created
 - [ ] `docs/postgis_migration_checklist.md` gate approved
 
 Backup command:
@@ -20,15 +20,15 @@ Backup command:
 
 ### 1.1 Change set
 
-- [ ] Update `docker-compose.yml` image to PostGIS-capable image
-- [ ] Add extension init SQL for PostGIS (dev only)
-- [ ] Keep pgvector path working
+- [x] Update `docker-compose.yml` image to PostGIS-capable image
+- [x] Add extension init SQL for PostGIS (dev only)
+- [x] Keep pgvector path working
 
 ### 1.2 Apply
 
-- [ ] Stop stack
-- [ ] Recreate DB container with new image
-- [ ] Start stack and wait for healthy status
+- [x] Stop stack
+- [x] Recreate DB container with new image
+- [x] Start stack and wait for healthy status
 
 Commands:
 
@@ -38,8 +38,8 @@ Commands:
 
 ### 1.3 Validate extensions
 
-- [ ] `postgis` extension exists
-- [ ] `vector` extension exists
+- [x] `postgis` extension exists
+- [x] `vector` extension exists
 
 Commands:
 
@@ -61,25 +61,43 @@ Commands:
 
 ### 2.1 Minimal target
 
-- [ ] Load one city boundary layer only (pilot)
-- [ ] Store as SRID 4326 multipolygon
-- [ ] Link to jurisdiction ID
+- [x] Load one city boundary layer only (pilot)
+- [x] Store as SRID 4326 multipolygon
+- [x] Link to jurisdiction ID
 
 ### 2.2 Data checks
 
-- [ ] Source file has expected geometry type
-- [ ] CRS transformed to EPSG:4326 before insert
-- [ ] Row count > 0 after load
+- [x] Source file has expected geometry type
+- [x] CRS transformed to EPSG:4326 before insert
+- [x] Row count > 0 after load
 
 ### 2.3 Validate geometry
 
-- [ ] Geometry valid check passes
-- [ ] Spatial index exists
-- [ ] Sample point-in-polygon query works
+- [x] Geometry valid check passes
+- [x] Spatial index exists
+- [x] Sample point-in-polygon query works
 
 Validation command template:
 
 `cd "c:\Users\ssalh\Grad School\2026\02_Summer\MIS6V99\permit_rag"; docker exec permit_rag_db psql -U postgres -d permit_rag -c "SELECT COUNT(*) FROM municipal_boundaries;"`
+
+Task 14B pilot load commands:
+
+`cd "c:\Users\ssalh\Grad School\2026\02_Summer\MIS6V99\permit_rag"; Get-Content db/migrations/006_jurisdictions.sql | docker exec -i permit_rag_db psql -U postgres -d permit_rag`
+
+`cd "c:\Users\ssalh\Grad School\2026\02_Summer\MIS6V99\permit_rag"; Get-Content db/seeds/jurisdictions.sql | docker exec -i permit_rag_db psql -U postgres -d permit_rag`
+
+`cd "c:\Users\ssalh\Grad School\2026\02_Summer\MIS6V99\permit_rag"; Get-Content db/migrations/007_postgis_extension.sql | docker exec -i permit_rag_db psql -U postgres -d permit_rag`
+
+`cd "c:\Users\ssalh\Grad School\2026\02_Summer\MIS6V99\permit_rag"; Get-Content db/migrations/008_municipal_boundaries_pilot.sql | docker exec -i permit_rag_db psql -U postgres -d permit_rag`
+
+Task 14B geometry + point-in-polygon checks:
+
+`cd "c:\Users\ssalh\Grad School\2026\02_Summer\MIS6V99\permit_rag"; docker exec permit_rag_db psql -U postgres -d permit_rag -c "SELECT jurisdiction_id, ST_SRID(geom) AS srid, GeometryType(geom) AS geom_type, ST_IsValid(geom) AS is_valid FROM municipal_boundaries;"`
+
+`cd "c:\Users\ssalh\Grad School\2026\02_Summer\MIS6V99\permit_rag"; docker exec permit_rag_db psql -U postgres -d permit_rag -c "SELECT indexname, indexdef FROM pg_indexes WHERE tablename='municipal_boundaries' ORDER BY indexname;"`
+
+`cd "c:\Users\ssalh\Grad School\2026\02_Summer\MIS6V99\permit_rag"; docker exec permit_rag_db psql -U postgres -d permit_rag -c "SELECT jurisdiction_id FROM municipal_boundaries WHERE ST_Contains(geom, ST_SetSRID(ST_MakePoint(-96.7970, 32.7767), 4326));"`
 
 ## 3) Rollback Plan
 
@@ -98,8 +116,8 @@ Rollback commands:
 
 ## 4) Exit Criteria
 
-- [ ] PostGIS + pgvector both present
+- [x] PostGIS + pgvector both present
 - [ ] API retrieval path still passes smoke checks
-- [ ] one boundary layer loaded and queryable
-- [ ] rollback tested or rollback commands validated
-- [ ] `STATE.md` and journal updated with outcomes
+- [x] one boundary layer loaded and queryable
+- [x] rollback tested or rollback commands validated
+- [x] `STATE.md` and journal updated with outcomes

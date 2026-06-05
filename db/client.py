@@ -672,6 +672,42 @@ def insert_query_log(
     return row
 
 
+def insert_purge_audit_log(
+    *,
+    doc_id: str,
+    document_id: UUID,
+    actor_identity: str,
+    actor_role: str,
+    source_tier: int,
+    deleted_chunk_count: int,
+    local_file_deleted: bool,
+) -> dict[str, Any]:
+    """Insert one purge audit event row."""
+    sql = """
+        INSERT INTO purge_audit_log (
+            doc_id, document_id, actor_identity, actor_role, source_tier,
+            deleted_chunk_count, local_file_deleted
+        ) VALUES (
+            %(doc_id)s, %(document_id)s, %(actor_identity)s, %(actor_role)s, %(source_tier)s,
+            %(deleted_chunk_count)s, %(local_file_deleted)s
+        )
+        RETURNING *;
+    """
+    params = {
+        "doc_id": doc_id,
+        "document_id": document_id,
+        "actor_identity": actor_identity,
+        "actor_role": actor_role,
+        "source_tier": source_tier,
+        "deleted_chunk_count": deleted_chunk_count,
+        "local_file_deleted": local_file_deleted,
+    }
+    with get_conn() as conn:
+        row = conn.execute(sql, params).fetchone()
+        conn.commit()
+    return row
+
+
 # ════════════════════════════════════════════════
 #  HEALTH CHECK
 # ════════════════════════════════════════════════
