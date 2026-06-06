@@ -212,7 +212,7 @@ chore(gis): validate task14a postgis extensions and record durable-next steps
 
 ## Prompt for next session
 
-Read `AGENTS.md`, `STATE.md`, and `journals/session_260604.md`. Task 14A durability is now landed via Docker build path, and purge audit logging code is in place. Run Task 14B pilot boundary migration commands, capture geometry/index/point-in-polygon outputs, then finish targeted eval notes and finalize checklist/state updates.
+Read `AGENTS.md`, `STATE.md`, and `journals/session_260604.md`. Task 14A durability, Task 14B pilot GIS validation, and purge audit event logging are complete and verified. First, close Sprint 4 docs/sign-off sweep (`STATE.md`, QA checklist, README health check). Then decide whether to restore `mansfieldtx-tx-2` after audit validation purge. Finally, prepare the next scoped sprint task prompt with clear validation commands.
 
 ## Git commit message
 
