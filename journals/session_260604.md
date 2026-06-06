@@ -10,6 +10,8 @@ Finish Sprint 3 tasks:
 - Task 9: document change detection + supersession flow
 - Task 11: multi-permit classifier
 
+---
+
 ## Completed
 
 - Implemented/validated document-level change detection flow in `ingestion/governance.py`:
@@ -39,181 +41,27 @@ Finish Sprint 3 tasks:
 - Branch pushed by user.
 - `STATE.md` updated for Sprint 3 completion and next tasks.
 
-## Sprint 4 kickoff addendum (same day)
+---
 
-### Scope handled
+## Files changed
 
-- A1: GIS foundation plan only (no risky DB change)
-- B1: Frontend document browser
-- B2: Upload flow UX polish
-- C1: Regression checks for multi-permit + citations
+- `ingestion/governance.py`, `db/client.py`, `rag/permit_classifier.py`
+- `api/routes/query.py`, `api/schemas.py`, `db/__init__.py`
+- `tests/test_governance.py`, `tests/test_permit_classifier.py`
+- `STATE.md`, `journals/session_260604.md` (created)
 
-### Completed in this addendum
-
-- Added planning docs:
-  - `implementation_plan.md`
-  - `docs/postgis_migration_checklist.md`
-- Added frontend document browser route:
-  - `frontend/src/DocumentBrowserPage.jsx`
-  - `frontend/src/main.jsx` (`/documents`)
-  - `frontend/src/Nav.jsx` (`Documents` link)
-  - `frontend/src/api.js` (`fetchDocuments`, `fetchDocumentStatus`)
-  - `frontend/src/styles.css` (browser table/filter styles)
-- Polished upload UX:
-  - `frontend/src/UploadPage.jsx` (readiness blockers, status banners, clearer errors)
-  - `frontend/src/uploadUtils.js` (helper functions)
-  - `frontend/src/uploadUtils.test.js` (new tests)
-- Added frontend helper tests:
-  - `frontend/src/api.test.js`
-- Added backend regressions:
-  - `tests/test_query_answer_route.py`
-  - `tests/test_permit_classifier.py` (multi-scope regression case)
-- Fixed frontend test environment issue:
-  - `frontend/src/api.js` now uses `import.meta.env?.VITE_API_BASE_URL` for Node test compatibility.
-
-### Validation outcomes (addendum)
-
-- Frontend tests: pass (user confirmed)
-- Backend targeted regressions: pass (user confirmed)
-  - `24 passed in 0.09s`
-  - `26 passed in 0.35s`
-
-## Sprint 4 hardening addendum (later same day)
-
-### Scope handled
-
-- Upload reliability fixes for PDF/HTML background processing
-- QA checklist clarification and completion pass
-- Offboarding purge path (chunks/vectors/raw file purge) with role tiers
-- Reusable purge script with env token loading
-- Docs updates (`README.md`, `docs/api.md`, `STATE.md`)
-
-### Completed in this addendum
-
-- Fixed upload background processing order:
-  - chunk by `doc_id` -> insert chunks -> embed -> activate
-  - file: `api/routes/upload.py`
-- Added HTML-specific resilience:
-  - retry chunking once with procedural filter disabled when first pass yields zero chunks
-  - failure status split: PDF -> `needs_ocr`, HTML -> `draft`
-  - tests: `tests/test_upload_route.py`
-- Added admin purge endpoint:
-  - `POST /admin/documents/{doc_id}/purge-project-upload`
-  - deletes chunks (and vectors), deletes local raw file under `documents/raw`, tombstones metadata
-  - file: `api/routes/admin.py`
-- Added purge role tiering:
-  - normal admin can purge project uploads (`source_tier=3`)
-  - elevated role (`API_PURGE_ANY_TIER_ROLES`) can purge any source tier
-- Added reusable script:
-  - `scripts/purge_project_uploads.py`
-  - supports `--doc-id` and `--doc-id-file`
-  - auto-loads `API_ADMIN_TOKEN` from `.env` via `load_dotenv()`
-  - tests: `tests/test_purge_project_uploads_script.py`
-- Added docs TOC in README for files under `docs/`.
-
-## Sprint 4 GIS execution addendum (late same day)
-
-### Scope handled
-
-- Began Task 14A execution from approved PostGIS checklist
-- Verified extension state and API health after PostGIS enable
-
-### Completed in this addendum
-
-- Confirmed baseline issue:
-  - `vector` extension present, `postgis` missing on default `pgvector/pgvector:pg17` container
-- Enabled PostGIS in running dev container and validated:
-  - `SELECT extname ...` returned both `postgis` and `vector`
-  - API health check returned `healthy`, `database=True`
-- Created Task 14A/B execution checklist:
-  - `docs/task14ab_execution_checklist.md`
-
-### Important note
-
-- Current PostGIS enablement is ephemeral (installed in running container).
-- Next session must make this durable via Docker build/image path before Task 14B pilot data load.
+---
 
 ## Next session should
 
-1. Make Task 14A durable via Docker image/build update (PostGIS + pgvector together after rebuild).
-2. Execute Task 14B pilot boundary load and run geometry/index/point-in-polygon checks.
-3. Add purge audit log trail (`who`, `role`, `doc_id`, `source_tier`, timestamp) and tests.
+1. Kick off Sprint 4: GIS foundation plan (checklist only), frontend document browser, upload UX polish.
+2. Add multi-permit + citation regression tests.
+3. Begin upload reliability and purge governance hardening.
 
 ## Prompt for next session
 
-Read `AGENTS.md`, `STATE.md`, and `journals/session_260604.md`. Task 14A extension validation passed (`postgis` + `vector` active and API healthy), but PostGIS install is currently ephemeral in-container. First, make PostGIS durable via Docker image/build path. Then execute Task 14B pilot boundary load with geometry and point-in-polygon validation. After GIS pilot, continue purge audit logging and targeted eval notes.
+Read `AGENTS.md`, `STATE.md`, and `journals/session_260604.md`. Sprint 3 is complete. Start Sprint 4 kickoff: add GIS planning checklist (no risky DB change), build frontend document browser route, polish upload UX, and add multi-permit + citation regression tests.
 
 ## Git commit message
 
-chore(gis): validate task14a postgis extensions and record durable-next steps
-
-## Sprint 4 durability + audit addendum (same session)
-
-### Scope handled
-
-- Made Task 14A durable in Docker image/build path
-- Staged Task 14B pilot boundary migration + validation commands
-- Added purge audit log trail (`who`, `role`, `doc_id`, `source_tier`, timestamp)
-
-### Completed in this addendum
-
-- Added durable DB image:
-  - `db/Dockerfile` now installs `postgresql-17-postgis-3` packages on top of `pgvector/pgvector:pg17`
-  - `docker-compose.yml` now builds local DB image from `db/Dockerfile`
-  - `db/init/01_extensions.sql` added (`postgis`, `vector`, `pgcrypto`)
-- Added GIS pilot migrations:
-  - `db/migrations/007_postgis_extension.sql`
-  - `db/migrations/008_municipal_boundaries_pilot.sql` (pilot Dallas envelope multipolygon, SRID 4326, GiST index)
-- Added purge audit logging:
-  - `db/migrations/009_purge_audit_log.sql`
-  - `db/client.py` -> `insert_purge_audit_log()`
-  - `api/routes/admin.py` purge route now records audit row with `X-Admin-User` + `X-Admin-Role`
-  - `scripts/purge_project_uploads.py` supports `--admin-user` and sends `X-Admin-User`
-- Updated docs:
-  - `docs/task14ab_execution_checklist.md` (Task 14B command block + validation queries)
-  - `docs/offboarding_runbook.md` (`X-Admin-User` usage)
-  - `README.md` startup/migration notes updated for PostGIS-inclusive stack
-- Added/updated tests:
-  - `tests/test_documents_routes.py`
-  - `tests/test_purge_project_uploads_script.py`
-  - `tests/test_db_client_purge_audit.py` (new)
-
-### Validation outcomes (addendum)
-
-- User-reported:
-  - `docker compose up -d --build` -> DB image built and container started
-  - `py -m pytest tests/test_documents_routes.py tests/test_purge_project_uploads_script.py -q` -> `19 passed in 8.16s`
-  - Task 14B SQL checks:
-    - extensions: `postgis`, `vector`
-    - geometry validation: `dallas | 4326 | MULTIPOLYGON | t`
-    - indexes on `municipal_boundaries`: `idx_municipal_boundaries_geom`, `idx_municipal_boundaries_jurisdiction` (+ PK/unique)
-    - point-in-polygon sample check returned `dallas`
-  - API/retrieval smoke checks:
-    - `/health` -> `healthy`, `database=True`, version `0.1.0`
-    - `/query` Dallas smoke -> `num_results=5`, `top_similarity=0.8020008206367493`, `mean_similarity=0.7910454318402472`
-  - Purge audit check:
-    - Applied `db/migrations/009_purge_audit_log.sql` on current DB (`CREATE TABLE`, `CREATE INDEX`, `CREATE INDEX`)
-    - `SELECT ... FROM purge_audit_log ...` now succeeds (`0 rows`, expected before first purge event)
-  - Purge audit event check:
-    - `py -m scripts.purge_project_uploads --doc-id "mansfieldtx-tx-2" --admin-role owner --admin-user sprint4-audit-check` -> `All purge calls succeeded.`
-    - `purge_audit_log` row recorded with:
-      - `doc_id=mansfieldtx-tx-2`
-      - `actor_identity=sprint4-audit-chec` (as submitted)
-      - `actor_role=owner`
-      - `source_tier=2`
-      - `deleted_chunk_count=88`
-      - `local_file_deleted=true`
-
-### Next session should
-
-1. Finalize Sprint 4 closeout notes and sign-off.
-2. Decide whether to re-upload/restore `mansfieldtx-tx-2` after audit validation purge.
-3. Prepare next-session handoff prompt.
-
-## Prompt for next session
-
-Read `AGENTS.md`, `STATE.md`, and `journals/session_260604.md`. Task 14A durability, Task 14B pilot GIS validation, and purge audit event logging are complete and verified. First, close Sprint 4 docs/sign-off sweep (`STATE.md`, QA checklist, README health check). Then decide whether to restore `mansfieldtx-tx-2` after audit validation purge. Finally, prepare the next scoped sprint task prompt with clear validation commands.
-
-## Git commit message
-
-chore(sprint4): verify purge audit event after task14a/14b completion
+feat(sprint3): complete governance change detection and multi-permit classifier with tests

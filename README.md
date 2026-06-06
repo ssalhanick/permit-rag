@@ -7,6 +7,29 @@ plus Texas state and federal regulations.
 
 ---
 
+## Current Status (2026-06-06)
+
+- Sprint 4 is closed and signed off (Task 14A durability + Task 14B GIS pilot validation complete).
+- Purge audit logging is verified with a live event (`mansfieldtx-tx-2` audit validation purge).
+- Restore decision: do not restore `mansfieldtx-tx-2` now because it is outside active catalog/registry scope.
+- Next scoped sprint task: add `ConflictWarning` surfacing in answer flow when retrieved authorities conflict.
+
+Validation commands for the next scoped task:
+
+```powershell
+cd "c:\Users\ssalh\Grad School\2026\02_Summer\MIS6V99\permit_rag"; py -m pytest tests/test_query_answer_route.py tests/test_permit_classifier.py -v
+```
+
+```powershell
+cd "c:\Users\ssalh\Grad School\2026\02_Summer\MIS6V99\permit_rag"; py -m pytest tests/test_documents_routes.py tests/test_upload_route.py -v
+```
+
+```powershell
+cd "c:\Users\ssalh\Grad School\2026\02_Summer\MIS6V99\permit_rag"; Invoke-RestMethod -Uri "http://localhost:8000/query/answer" -Method Post -ContentType "application/json" -Body '{"query":"Project includes mixed occupancy requirements and conflicting municipal references. What applies?","top_k":5,"municipality":"dallas"}'
+```
+
+---
+
 ## Timeline
 
 | Week | Dates | Phase | Deliverables | Status |

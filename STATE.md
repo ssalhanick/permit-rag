@@ -1,10 +1,10 @@
 # permit_rag — State
 
-_Updated: 2026-06-04 (Task 14A/14B passed; purge audit event verified)_
+_Updated: 2026-06-06 (Sprint 4 closeout docs/sign-off complete)_
 
 ## Phase
 
-Sprint 4 hardening mostly complete. GIS planning/checklist done, frontend QA pass done, upload/purge governance path added. Task 14A is now durable via Docker build path (pgvector + PostGIS image + extension init SQL). Task 14B pilot GIS validation passed (extensions, geometry validity, spatial index, point-in-polygon), retrieval smoke is healthy, and purge audit logging is verified with a live row insert.
+Sprint 4 is closed and signed off. GIS durability/checks are complete, frontend QA checklist is closed, upload/purge governance path is live, and purge audit logging is verified with a live row insert.
 
 ## Blocked on
 
@@ -12,9 +12,9 @@ Sprint 4 hardening mostly complete. GIS planning/checklist done, frontend QA pas
 
 ## Next 3 tasks
 
-1. Final closeout sweep on docs/checklists for Sprint 4
-2. Confirm replacement plan for purged test document (`mansfieldtx-tx-2`) if needed
-3. Start next scoped sprint task after Sprint 4 closeout sign-off
+1. Sprint 5 Task 15 (scoped): add `ConflictWarning` surfacing when retrieved chunks disagree
+2. Add route/unit tests for conflict warning output contract
+3. Run targeted eval/route regression for conflict-warning safety
 
 ## Module status
 
@@ -68,6 +68,7 @@ _tracing note: `POST /query/answer` now captures LangSmith runs with `X-Client-S
 - Governance: documents are never deleted; lifecycle is `active/superseded/repealed/needs_ocr/draft`. Chunks now have independent `status` lifecycle.
 - Security baseline: admin routes enforce auth by default (`API_ADMIN_AUTH_REQUIRED=true`) with token + role allowlist (`API_ADMIN_ALLOWED_ROLES`).
 - Purge tier policy: `source_tier=3` purge available to normal admin role; non-project tiers require elevated role in `API_PURGE_ANY_TIER_ROLES`.
+- Purge audit validation decision: do **not** restore `mansfieldtx-tx-2` now; it was used only to verify tier-2 audit logging and is not present in active catalog/registry scope.
 - DB role policy: ingestion connects via `CORPUS_WRITER_URL`; API reads via `APP_READER_URL`. Rotate passwords before any shared deployment. Supabase migration: replace with service_role / anon RLS pattern (see `db/init/02_roles.sql` comments).
 - Admin token policy: rotate `API_ADMIN_TOKEN` at least every 30 days and after suspected secret exposure or admin roster change.
 - CORS policy: env-driven allowlist via `API_CORS_ALLOW_ORIGINS`; wildcard only via explicit dev override `API_CORS_ALLOW_ALL=true`.
@@ -123,6 +124,8 @@ _tracing note: `POST /query/answer` now captures LangSmith runs with `X-Client-S
 - [x] Task 14A durability: replaced ephemeral PostGIS install with durable Docker build/image approach (`db/Dockerfile`, `docker-compose.yml`, `db/init/01_extensions.sql`)
 - [x] Task 14B pilot: loaded first municipal boundary layer and validated geometry + point-in-polygon
 - [x] Purge audit logging path added (`db/migrations/009_purge_audit_log.sql`, `db/client.py`, `api/routes/admin.py`, script header support)
+- [x] Sprint 4 closeout docs/sign-off sweep completed (`STATE.md`, `docs/sprint4_qa_checklist.md`, `README.md`)
+- [x] Restore decision recorded for audit-validation purge doc (`mansfieldtx-tx-2`): no restore required at this time
 
 ## Validation / verification steps (canonical)
 
@@ -147,5 +150,6 @@ _tracing note: `POST /query/answer` now captures LangSmith runs with `X-Client-S
 19. `Get-Content db/migrations/009_purge_audit_log.sql | docker exec -i permit_rag_db psql -U postgres -d permit_rag` (latest: `CREATE TABLE`, `CREATE INDEX`, `CREATE INDEX`)
 20. `docker exec permit_rag_db psql -U postgres -d permit_rag -c "SELECT id, doc_id, actor_identity, actor_role, source_tier, created_at FROM purge_audit_log ORDER BY created_at DESC LIMIT 5;"` (latest: table query succeeds, `0 rows` before first purge event)
 21. `docker exec permit_rag_db psql -U postgres -d permit_rag -c "SELECT doc_id, actor_identity, actor_role, source_tier, deleted_chunk_count, local_file_deleted, created_at FROM purge_audit_log ORDER BY created_at DESC LIMIT 5;"` (latest: audit row present for `mansfieldtx-tx-2`, role `owner`, tier `2`, deleted chunks `88`)
+22. `rg "mansfieldtx-tx-2|mansfieldtx-tx-1" documents/catalog.json documents/registry.json` (latest: no matches; restore not required for active corpus scope)
 
-For older run logs, command-by-command history, and dated deltas, use journal entries (`journals/session_260531.md` + subsequent sessions).
+For older run logs, command-by-command history, and dated deltas, use journal entries (`journals/session_260531.md` through `journals/session_260604d.md`; latest: `session_260604d.md`).
