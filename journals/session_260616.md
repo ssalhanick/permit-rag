@@ -143,7 +143,7 @@ Sprint 5 full implementation + architecture fix integration.
 
 ## Prompt for next session
 
-Read `AGENTS.md`, `STATE.md`, and `journals/session_260616.md`. Sprint 5 is closed and signed off. Start Sprint 6:
+Read `AGENTS.md`, `STATE.md`, and `journals/session_260616.md`. Sprint 5 is closed and signed off. Create `journals/session_260616a.md` for the next sprint and start Sprint 6:
 
 **Fix 2 first** — in `api/routes/query.py`, after `generate_answer()` returns, filter the chunks in `AnswerResponse` to only those cited by `gen.citations` (where `found_in_context=True`). Add `total_chunks_retrieved: int` to `AnswerResponse` schema. If no citations matched context, return all chunks. Add a unit test in `tests/test_sprint5.py` or a new `tests/test_sprint6.py`.
 
