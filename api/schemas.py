@@ -190,7 +190,19 @@ class AnswerResponse(BaseModel):
     latency_generation_ms: int = Field(description="Generation latency in milliseconds.")
     latency_retrieval_ms: int = Field(description="Retrieval latency in milliseconds.")
     num_chunks: int = Field(description="Number of chunks sent to the generator.")
-    chunks: list[ChunkResponse] = Field(description="Retrieved chunks used as context.")
+    # Sprint 6 — Fix 2: citation-aware chunk filtering
+    total_chunks_retrieved: int = Field(
+        description=(
+            "Total chunks returned by retrieval before citation filtering. "
+            "Equals len(chunks) when no citations matched context (fallback)."
+        )
+    )
+    chunks: list[ChunkResponse] = Field(
+        description=(
+            "Chunks cited by the generated answer (found_in_context=True). "
+            "Falls back to all retrieved chunks when no citations matched context."
+        )
+    )
     diagnostics: DiagnosticsResponse = Field(description="Retrieval quality diagnostics.")
     # Sprint 3 — Task 11: multi-permit classifier
     permit_types: list[str] = Field(

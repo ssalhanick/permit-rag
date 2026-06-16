@@ -366,7 +366,7 @@ def query_answer(body: QueryRequest, request: Request) -> AnswerResponse:
         ) from exc
 
     # 3. Build response
-    chunks = [
+    all_chunks = [
         ChunkResponse(
             id=chunk["id"],
             document_id=chunk["document_id"],
@@ -398,6 +398,32 @@ def query_answer(body: QueryRequest, request: Request) -> AnswerResponse:
         for c in gen.citations
     ]
 
+    # Sprint 6 — Fix 2: filter response chunks to only those cited (found_in_context=True).
+    # Falls back to all retrieved chunks when no citations matched context.
+    cited_keys: set[tuple[str, int]] = {
+        (c["doc_id"], c["chunk_index"])
+        for c in gen.citations
+        if c["found_in_context"]
+    }
+    if cited_keys:
+        cited_chunks = [
+            cr for cr in all_chunks
+            if (cr.doc_id, cr.chunk_index) in cited_keys
+        ]
+        log.info(
+            "Fix2 citation filter: %d/%d chunks retained (cited by answer)",
+            len(cited_chunks),
+            len(all_chunks),
+        )
+    else:
+        # No citations matched context — return everything so the caller
+        # still has the retrieval context for inspection/debugging.
+        cited_chunks = all_chunks
+        log.info(
+            "Fix2 citation filter: no in-context citations found — returning all %d chunks",
+            len(all_chunks),
+        )
+
     diagnostics = DiagnosticsResponse(
         top_similarity=result.top_similarity,
         mean_similarity=result.mean_similarity,
@@ -415,7 +441,8 @@ def query_answer(body: QueryRequest, request: Request) -> AnswerResponse:
         latency_generation_ms=gen.latency_ms,
         latency_retrieval_ms=result.latency_ms,
         num_chunks=gen.chunk_count,
-        chunks=chunks,
+        total_chunks_retrieved=len(all_chunks),
+        chunks=cited_chunks,
         diagnostics=diagnostics,
         permit_types=permit_types,
         ahj_disclaimer=_build_ahj_disclaimer(effective_municipality),

@@ -1,10 +1,10 @@
 # permit_rag — State
 
-_Updated: 2026-06-16 (Sprint 5 closeout)_
+_Updated: 2026-06-16a (Sprint 6 kickoff)_
 
 ## Phase
 
-Sprint 5 is closed. Fix 1 (SQL tier-ordering), Fix 3 (citation regex hardening), Task 14C (geocoding + jurisdiction resolver), Task 15 (conflict warning), and the Mapbox address autocomplete are all live. Eval checkpoint passed (faithfulness 0.931, no regression).
+Sprint 6 in progress. Fix 2 (citation-aware chunk filtering + `total_chunks_retrieved`) and Task 16A (Neo4j CE docker-compose service) are implemented. Pending: eval run to confirm relevancy improvement, Task 16B (Cypher constraints + graph_client.py), Task 16C (ingestion connector).
 
 ## Blocked on
 
@@ -12,19 +12,20 @@ Sprint 5 is closed. Fix 1 (SQL tier-ordering), Fix 3 (citation regex hardening),
 
 ## Next 3 tasks
 
-1. Sprint 6 — Fix 2: citation-aware chunk filtering in `POST /query/answer` (improves relevancy score)
-2. Sprint 6 — Task 16A: Add Neo4j Community Edition to Docker Compose
-3. Sprint 6 — Task 16B: Graph schema (Cypher constraints) + `db/graph_client.py`
+1. Sprint 6 — run eval after Fix 2 and confirm relevancy > 0.687
+2. Sprint 6 — Task 16B: Graph schema (Cypher constraints) + `db/graph_client.py`
+3. Sprint 6 — Task 16C: ingestion connector — write chunk/doc nodes into Neo4j
 
 ## Module status
 
-ingestion ✅ db ✅ rag ✅ api ✅ eval ✅ frontend ✅
+ingestion ✅ db ✅ rag ✅ api ✅ eval ✅ frontend ✅ graph 🔧
 
 _db note: Sprint 1 migrations applied — `content_hash` + `status` on chunks, `source_tier` on documents, `match_chunks()` updated. **Sprint 5 migration 010**: `match_chunks()` ORDER BY fixed — pure cosine ordering, tier bias now owned exclusively by Python reranker. Roles `corpus_writer`/`app_reader` live on Docker dev DB._
 _rag note: multi-permit classifier live (`rag/permit_classifier.py`). **Sprint 5**: `conflict_detector.py` implemented (lightweight numeric cross-authority conflict detection). `jurisdiction_resolver.py` implemented (Census geocoding + PostGIS ST_Contains). Citation regex hardened (strict + loose format, miss-rate warning). `evaluation/ragas_eval.py` embeddings init fixed (`local_files_only=True` prevents HF network error)._
-_api note: `POST /query/answer` returns `ahj_disclaimer` + `permit_types` + **`conflict_warnings`** + **`resolved_municipality`**. Optional **`address`** field on `QueryRequest` auto-resolves municipality via geocoding. Upload flow chunks/inserts/embeds reliably. Admin purge route live with role-tier controls._
+_api note: `POST /query/answer` returns `ahj_disclaimer` + `permit_types` + **`conflict_warnings`** + **`resolved_municipality`** + **`total_chunks_retrieved`**. **Sprint 6 Fix 2**: `chunks` array now contains only citation-filtered chunks (`found_in_context=True`); falls back to all chunks when no citations match context. Optional **`address`** field on `QueryRequest` auto-resolves municipality via geocoding. Upload flow chunks/inserts/embeds reliably. Admin purge route live with role-tier controls._
 _frontend note: query flow + document browser + upload UX live. **Sprint 5**: `AddressAutocomplete` component added (Mapbox Search API, DFW-bbox restricted, degrades gracefully without token). Conflict warnings panel added to answer view. CSS for autocomplete dropdown + conflict warnings added._
 _tracing note: `POST /query/answer` captures LangSmith runs with `X-Client-Session-Id` and `X-Client-Request-Id` metadata._
+_graph note: **Task 16A** — Neo4j Community Edition added to `docker-compose.yml` (`neo4j:5-community`, APOC enabled, ports 7474+7687, `neo4jdata` volume). `NEO4J_AUTH` + `NEO4J_BOLT_URL` in `.env.example`. Task 16B (Cypher constraints + `db/graph_client.py`) pending._
 
 ## Current operational snapshot
 
@@ -40,18 +41,17 @@ _tracing note: `POST /query/answer` captures LangSmith runs with `X-Client-Sessi
 
 ## Quality gates (current)
 
-- Latest full eval: `evaluation/results/ragas_20260616_124025.json` _(Sprint 5 checkpoint)_
-  - avg faithfulness `0.931` ✅ (PASS vs `0.85` target)
-  - avg relevancy `0.687` (Q0+Q4 scored 0.000 — RAGAs artifact, not regression; Fix 2 in Sprint 6 targets this)
-  - avg context precision `0.659` ↑ from `0.624`
-  - q1 faithfulness `0.882` (above baseline `0.600`)
-- Eval guard: PASS (candidate `ragas_20260616_124025.json` vs baseline `ragas_20260531_122639.json`)
+- Latest full eval: `evaluation/results/ragas_20260616_143411.json` _(Sprint 6 checkpoint)_
+  - avg faithfulness `0.910` ✅ (PASS vs `0.85` target)
+  - avg relevancy `0.689` ✅ (> 0.687 Sprint 5 baseline; Q0/Q4 at 0.000 = RAGAs cosine-collapse artifact)
+  - avg context precision `0.654`
+  - q1 faithfulness `0.875` (above baseline `0.600`)
+- Eval guard: PASS (candidate `ragas_20260616_143411.json` vs baseline `ragas_20260531_122639.json`)
 - Answer cache policy for eval: keep `RAGAS_ANSWER_CACHE_ENABLED=false`
-- Metric delta vs prior PASS (`ragas_20260602_214048.json`):
-  - avg faithfulness: `+0.038` (`0.893 → 0.931`, PASS)
-  - avg relevancy: `-0.007` (`0.694 → 0.687`, within noise)
-  - avg context precision: `+0.035` (`0.624 → 0.659`)
-  - _Note: relevancy 0.000 on Q0/Q4 is a RAGAs AnswerRelevancy scoring artifact (cosine collapse), not caused by Sprint 5 changes_
+- Metric delta vs Sprint 5 (`ragas_20260616_124025.json`):
+  - avg faithfulness: `-0.021` (`0.931 → 0.910`, still well above gate)
+  - avg relevancy: `+0.002` (`0.687 → 0.689`, marginal improvement — Fix 2 filters at API layer, eval harness bypasses route)
+  - avg context precision: `-0.005` (`0.659 → 0.654`, within noise)
 
 ## Docs status
 
@@ -140,6 +140,15 @@ _tracing note: `POST /query/answer` captures LangSmith runs with `X-Client-Sessi
 - [x] `evaluation/ragas_eval.py` fixed: `local_files_only=True` in `HuggingFaceEmbeddings` prevents DNS failure when HuggingFace is unreachable
 - [x] Sprint 5 tests: `tests/test_sprint5.py` — 16 tests covering Fix 3 citation variants, jurisdiction resolver (mocked), conflict detector (5 cases)
 - [x] Eval checkpoint: faithfulness `0.931` ✅, context precision `0.659` ↑, no regression vs Sprint 4 baseline
+
+### Sprint 6 — Graph Layer + Architecture Fix 2 (2026-06-16a)
+- [x] Fix 2: citation-aware chunk filtering in `POST /query/answer` — `chunks` array trimmed to cited-only (`found_in_context=True`); fallback to all chunks when no citations match context; `total_chunks_retrieved: int` added to `AnswerResponse` (`api/schemas.py`, `api/routes/query.py`)
+- [x] Task 16A: Neo4j Community Edition added to `docker-compose.yml` — `neo4j:5-community`, APOC enabled via `NEO4J_PLUGINS`, ports 7474+7687, `neo4jdata` named volume, health check
+- [x] `.env.example` updated with `NEO4J_AUTH` + `NEO4J_BOLT_URL` placeholders
+- [x] Sprint 6 tests: `tests/test_sprint6.py` — 8 tests covering citation filter logic, fallback, dedup, schema field presence
+- [x] Eval run: faithfulness `0.910` ✅ | relevancy `0.689` ✅ | guard PASS (`ragas_20260616_143411.json`)
+- [ ] Task 16B: Cypher constraints + `db/graph_client.py`
+- [ ] Task 16C: ingestion connector (chunk/doc nodes into Neo4j)
 
 ## Validation / verification steps (canonical)
 
