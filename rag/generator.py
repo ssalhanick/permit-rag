@@ -196,30 +196,48 @@ def _extract_citations(
     """
     Extract citation references from the generated answer.
 
-    Looks for [doc_id, chunk N] patterns and matches them to
-    the provided chunks for structured citation metadata.
+    Accepts both citation formats (case-insensitive):
+      Strict (comma): [dallas-building-code, chunk 42]
+      Loose (space):  [dallas-building-code chunk 42]
+                      [dallas-building-code, Chunk 42]   (capital C)
+
+    Logs a warning when citations reference chunks not found in the
+    retrieved context (possible hallucination or format drift).
     """
     import re
 
     citations: list[dict[str, Any]] = []
     seen: set[str] = set()
 
-    pattern = re.compile(r"\[([^,\]]+),\s*chunk\s*(\d+)\]")
-    for match in pattern.finditer(answer):
-        doc_id = match.group(1).strip()
-        chunk_idx = int(match.group(2))
-        key = f"{doc_id}:{chunk_idx}"
+    # Strict pattern — [doc_id, chunk N] (comma-separated)
+    _strict = re.compile(r"\[([^,\]]+),\s*chunk\s*(\d+)\]", re.IGNORECASE)
+    # Loose pattern  — [doc_id chunk N] (space only, no comma)
+    _loose = re.compile(r"\[([^\]\s,]+)\s+chunk\s+(\d+)\]", re.IGNORECASE)
 
+    raw_matches: list[tuple[str, int]] = []
+    for m in _strict.finditer(answer):
+        raw_matches.append((m.group(1).strip(), int(m.group(2))))
+    for m in _loose.finditer(answer):
+        pair = (m.group(1).strip(), int(m.group(2)))
+        if pair not in raw_matches:
+            raw_matches.append(pair)
+
+    unmatched = 0
+    for doc_id, chunk_idx in raw_matches:
+        key = f"{doc_id}:{chunk_idx}"
         if key in seen:
             continue
         seen.add(key)
 
-        # Find matching chunk in context
-        source_chunk = None
-        for c in chunks:
-            if c.get("doc_id") == doc_id and c.get("chunk_index") == chunk_idx:
-                source_chunk = c
-                break
+        source_chunk = next(
+            (
+                c for c in chunks
+                if c.get("doc_id") == doc_id and c.get("chunk_index") == chunk_idx
+            ),
+            None,
+        )
+        if source_chunk is None:
+            unmatched += 1
 
         citations.append({
             "doc_id": doc_id,
@@ -228,6 +246,14 @@ def _extract_citations(
             "municipality": source_chunk.get("municipality") if source_chunk else None,
             "authority_level": source_chunk.get("authority_level") if source_chunk else None,
         })
+
+    if unmatched:
+        log.warning(
+            "_extract_citations: %d/%d citations not matched to context chunks "
+            "(possible hallucination or format drift — check LLM output)",
+            unmatched,
+            len(citations),
+        )
 
     return citations
 

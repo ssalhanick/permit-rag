@@ -1,9 +1,11 @@
 import React, { useMemo, useState } from "react";
 import { API_BASE_URL, DEFAULT_BASE_URL, fetchAnswer, fetchHealth } from "./api.js";
+import AddressAutocomplete from "./components/AddressAutocomplete.jsx";
 
 const DEFAULT_FORM = {
   query: "",
   municipality: "",
+  address: "",
   top_k: 5,
 };
 
@@ -123,6 +125,7 @@ function App() {
       query: form.query.trim(),
       top_k: Number(form.top_k),
       municipality: form.municipality.trim() || null,
+      address: form.address.trim() || null,
       min_similarity: 0.0,
     };
     const requestId = `answer-${Date.now()}`;
@@ -285,6 +288,26 @@ function App() {
             </div>
           </div>
 
+          <div>
+            <label htmlFor="address">
+              Project address{" "}
+              <span className="muted">(optional — auto-detects municipality)</span>
+            </label>
+            <AddressAutocomplete
+              id="address"
+              value={form.address}
+              onChange={(val) => setForm((prev) => ({ ...prev, address: val }))}
+              onSelect={({ address, municipality }) => {
+                setForm((prev) => ({
+                  ...prev,
+                  address,
+                  // Only pre-fill municipality if user hasn't already typed one
+                  municipality: prev.municipality || municipality || "",
+                }));
+              }}
+            />
+          </div>
+
           <button type="submit" disabled={!canSubmit}>
             {loading ? "Asking..." : "Ask permit_rag"}
           </button>
@@ -345,6 +368,36 @@ function App() {
                   </a>
                 )}
               </div>
+            </aside>
+          )}
+
+          {activeAnswer.resolved_municipality && (
+            <p className="muted">
+              📍 Jurisdiction auto-detected from address:{" "}
+              <strong>{activeAnswer.resolved_municipality}</strong>
+            </p>
+          )}
+
+          {activeAnswer.conflict_warnings?.length > 0 && (
+            <aside className="conflict-warnings">
+              <strong>⚠️ Regulatory Conflicts Detected</strong>
+              <p className="muted">
+                The following subjects have different requirements across authority levels.
+                Verify with your AHJ before proceeding.
+              </p>
+              <ul>
+                {activeAnswer.conflict_warnings.map((w, i) => (
+                  <li key={`conflict-${i}`} className="conflict-item">
+                    <strong>{w.subject}</strong>{" — "}
+                    <span className="muted">
+                      [{w.chunk_a_doc_id}, chunk {w.chunk_a_index}] ({w.chunk_a_authority})
+                      {" vs "}
+                      [{w.chunk_b_doc_id}, chunk {w.chunk_b_index}] ({w.chunk_b_authority})
+                    </span>
+                    <p>{w.detail}</p>
+                  </li>
+                ))}
+              </ul>
             </aside>
           )}
 

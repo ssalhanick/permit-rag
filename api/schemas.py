@@ -55,7 +55,20 @@ class QueryRequest(BaseModel):
     )
     municipality: Optional[str] = Field(
         default=None,
-        description="Optional municipality filter (e.g. 'dallas', 'plano').",
+        description="Optional municipality filter (e.g. 'dallas', 'plano'). "
+                    "If omitted and 'address' is provided, the municipality is "
+                    "auto-resolved via geocoding.",
+    )
+    address: Optional[str] = Field(
+        default=None,
+        max_length=500,
+        description=(
+            "Optional civic address (e.g. '1234 Main St, Dallas, TX 75201'). "
+            "When provided and 'municipality' is not set, the API geocodes the "
+            "address via the Census Bureau API and resolves the municipality via "
+            "PostGIS point-in-polygon. 'municipality' takes precedence if both "
+            "are supplied."
+        ),
     )
     min_similarity: float = Field(
         default=0.0,
@@ -134,6 +147,27 @@ class AHJDisclaimer(BaseModel):
     )
 
 
+class ConflictWarning(BaseModel):
+    """
+    Lightweight conflict signal surfaced when retrieved chunks from different
+    authority levels appear to state contradictory requirements for the same
+    subject (Sprint 5 / Task 15 — scoped version).
+    """
+
+    subject: str = Field(
+        description="Subject keyword or phrase where the conflict was detected."
+    )
+    chunk_a_doc_id: str = Field(description="doc_id of the first conflicting chunk.")
+    chunk_a_index: int = Field(description="chunk_index of the first conflicting chunk.")
+    chunk_a_authority: str = Field(description="Authority level of the first chunk.")
+    chunk_b_doc_id: str = Field(description="doc_id of the second conflicting chunk.")
+    chunk_b_index: int = Field(description="chunk_index of the second conflicting chunk.")
+    chunk_b_authority: str = Field(description="Authority level of the second chunk.")
+    detail: str = Field(
+        description="Human-readable explanation of the detected conflict."
+    )
+
+
 class CitationResponse(BaseModel):
     """A single citation extracted from the generated answer."""
 
@@ -172,6 +206,23 @@ class AnswerResponse(BaseModel):
             "Authority Having Jurisdiction disclaimer. Always present. Informs the user "
             "that the AHJ (city building department) has final authority over permit decisions."
         )
+    )
+    # Sprint 5 — Task 14C: resolved jurisdiction from address geocoding
+    resolved_municipality: Optional[str] = Field(
+        default=None,
+        description=(
+            "Municipality auto-resolved from the 'address' field via geocoding + "
+            "PostGIS point-in-polygon. Null when address was not provided or resolution failed."
+        ),
+    )
+    # Sprint 5 — Task 15: lightweight conflict detection
+    conflict_warnings: list["ConflictWarning"] = Field(
+        default_factory=list,
+        description=(
+            "Conflict warnings surfaced when retrieved chunks from different "
+            "authority levels appear to state contradictory requirements "
+            "for the same subject."
+        ),
     )
 
 

@@ -21,6 +21,7 @@ from api.schemas import (
     AnswerResponse,
     ChunkResponse,
     CitationResponse,
+    ConflictWarning,
     DiagnosticsResponse,
     ErrorResponse,
     QueryRequest,
@@ -212,6 +213,25 @@ def query_answer(body: QueryRequest, request: Request) -> AnswerResponse:
         log.warning("permit_classifier failed (%s) — defaulting to []", exc)
         permit_types = []
 
+    # Sprint 5 Task 14C: auto-resolve municipality from address when not explicit
+    resolved_municipality: str | None = None
+    effective_municipality = body.municipality
+    if not effective_municipality and body.address:
+        try:
+            from rag.jurisdiction_resolver import municipality_from_address
+            resolved = municipality_from_address(body.address)
+            if resolved:
+                resolved_municipality = resolved
+                effective_municipality = resolved
+                log.info(
+                    "address geocoded to municipality='%s' for address=%r",
+                    resolved, body.address,
+                )
+            else:
+                log.info("address geocoding returned no match for %r", body.address)
+        except Exception as exc:
+            log.warning("jurisdiction_resolver failed (%s) — skipping auto-municipality", exc)
+
     root_trace = _start_trace(
         name="api_query_answer",
         run_type="chain",
@@ -229,14 +249,14 @@ def query_answer(body: QueryRequest, request: Request) -> AnswerResponse:
     retrieval_trace = _start_trace(
         name="api_retrieval",
         run_type="tool",
-        inputs={"query": body.query, "municipality": body.municipality, "top_k": body.top_k},
+        inputs={"query": body.query, "municipality": effective_municipality, "top_k": body.top_k},
         parent=root_trace,
     ) if tracing_on else None
     try:
         result = retrieve(
             body.query,
             top_k=body.top_k,
-            municipality=body.municipality,
+            municipality=effective_municipality,
             min_similarity=body.min_similarity,
         )
         _end_trace(
@@ -279,6 +299,29 @@ def query_answer(body: QueryRequest, request: Request) -> AnswerResponse:
             status_code=422,
             detail=low_conf_msg,
         )
+
+    # Sprint 5 Task 15: lightweight conflict detection (non-blocking)
+    conflict_warnings: list[ConflictWarning] = []
+    try:
+        from rag.conflict_detector import detect_conflicts
+        raw_conflicts = detect_conflicts(result.chunks)
+        conflict_warnings = [
+            ConflictWarning(
+                subject=c.subject,
+                chunk_a_doc_id=c.chunk_a.get("doc_id", ""),
+                chunk_a_index=int(c.chunk_a.get("chunk_index", 0)),
+                chunk_a_authority=str(c.chunk_a.get("authority_level", "")),
+                chunk_b_doc_id=c.chunk_b.get("doc_id", ""),
+                chunk_b_index=int(c.chunk_b.get("chunk_index", 0)),
+                chunk_b_authority=str(c.chunk_b.get("authority_level", "")),
+                detail=c.detail,
+            )
+            for c in raw_conflicts
+        ]
+        if conflict_warnings:
+            log.info("conflict_warnings: %d conflict(s) detected", len(conflict_warnings))
+    except Exception as exc:
+        log.warning("conflict_detector failed (%s) — skipping", exc)
 
     # 2. Generate answer
     generation_trace = _start_trace(
@@ -375,7 +418,9 @@ def query_answer(body: QueryRequest, request: Request) -> AnswerResponse:
         chunks=chunks,
         diagnostics=diagnostics,
         permit_types=permit_types,
-        ahj_disclaimer=_build_ahj_disclaimer(body.municipality),
+        ahj_disclaimer=_build_ahj_disclaimer(effective_municipality),
+        resolved_municipality=resolved_municipality,
+        conflict_warnings=conflict_warnings,
     )
     _end_trace(
         root_trace,

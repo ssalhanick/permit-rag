@@ -303,9 +303,12 @@ def _get_evaluator_embeddings() -> Any:
     except ImportError:
         from langchain_community.embeddings import HuggingFaceEmbeddings
 
+    # local_files_only=True: use the cached model without hitting HuggingFace.
+    # The nomic-embed-text model was already downloaded at first ingest run.
+    # Remove this flag only if you need to pull a newer model version.
     lc_embeddings = HuggingFaceEmbeddings(
         model_name=model_name,
-        model_kwargs={"trust_remote_code": True},
+        model_kwargs={"trust_remote_code": True, "local_files_only": True},
         encode_kwargs={"normalize_embeddings": True},
     )
     return LangchainEmbeddingsWrapper(lc_embeddings)

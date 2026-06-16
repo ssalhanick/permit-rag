@@ -506,3 +506,104 @@ button:disabled {
   color: #166534;
   font-weight: 600;
 }
+
+/* ── Address autocomplete ─────────────────────────────────── */
+
+.autocomplete-container {
+  position: relative;
+  width: 100%;
+}
+
+.autocomplete-loading {
+  position: absolute;
+  right: 10px;
+  top: 50%;
+  transform: translateY(-50%);
+  color: #94a3b8;
+  font-size: 0.85rem;
+  pointer-events: none;
+}
+
+.autocomplete-dropdown {
+  position: absolute;
+  z-index: 200;
+  top: calc(100% + 4px);
+  left: 0;
+  right: 0;
+  background: #fff;
+  border: 1px solid #cbd5e1;
+  border-radius: 8px;
+  box-shadow: 0 4px 16px rgba(0,0,0,0.12);
+  list-style: none;
+  margin: 0;
+  padding: 4px 0;
+  max-height: 260px;
+  overflow-y: auto;
+}
+
+.autocomplete-option {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  text-align: left;
+  background: transparent;
+  border: none;
+  padding: 9px 14px;
+  cursor: pointer;
+  border-radius: 0;
+  color: #1f2937;
+  gap: 2px;
+}
+
+.autocomplete-option:hover,
+.autocomplete-option:focus {
+  background: #eff6ff;
+  outline: none;
+}
+
+.autocomplete-primary {
+  font-size: 0.9rem;
+  font-weight: 500;
+}
+
+.autocomplete-secondary {
+  font-size: 0.8rem;
+  color: #64748b;
+}
+
+/* ── Conflict warnings panel ──────────────────────────────── */
+
+.conflict-warnings {
+  background: #fff7ed;
+  border: 1px solid #f97316;
+  border-left: 4px solid #f97316;
+  border-radius: 8px;
+  padding: 12px 14px;
+  margin: 14px 0 4px;
+}
+
+.conflict-warnings strong {
+  display: block;
+  font-size: 0.9rem;
+  color: #9a3412;
+  margin-bottom: 4px;
+}
+
+.conflict-warnings ul {
+  margin: 8px 0 0;
+  padding-left: 18px;
+}
+
+.conflict-item {
+  margin-bottom: 10px;
+  font-size: 0.875rem;
+  color: #7c2d12;
+  line-height: 1.5;
+}
+
+.conflict-item p {
+  margin: 4px 0 0;
+  color: #9a3412;
+}
+

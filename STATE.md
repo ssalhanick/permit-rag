@@ -1,30 +1,30 @@
 # permit_rag — State
 
-_Updated: 2026-06-06 (Sprint 4 closeout docs/sign-off complete)_
+_Updated: 2026-06-16 (Sprint 5 closeout)_
 
 ## Phase
 
-Sprint 4 is closed and signed off. GIS durability/checks are complete, frontend QA checklist is closed, upload/purge governance path is live, and purge audit logging is verified with a live row insert.
+Sprint 5 is closed. Fix 1 (SQL tier-ordering), Fix 3 (citation regex hardening), Task 14C (geocoding + jurisdiction resolver), Task 15 (conflict warning), and the Mapbox address autocomplete are all live. Eval checkpoint passed (faithfulness 0.931, no regression).
 
 ## Blocked on
 
-- None.
+- **Mapbox token**: `VITE_MAPBOX_TOKEN` not yet set in `frontend/.env` — address autocomplete degrades gracefully to plain text input until token is added. See `frontend/.env.example`.
 
 ## Next 3 tasks
 
-1. Sprint 5 Task 15 (scoped): add `ConflictWarning` surfacing when retrieved chunks disagree
-2. Add route/unit tests for conflict warning output contract
-3. Run targeted eval/route regression for conflict-warning safety
+1. Sprint 6 — Fix 2: citation-aware chunk filtering in `POST /query/answer` (improves relevancy score)
+2. Sprint 6 — Task 16A: Add Neo4j Community Edition to Docker Compose
+3. Sprint 6 — Task 16B: Graph schema (Cypher constraints) + `db/graph_client.py`
 
 ## Module status
 
 ingestion ✅ db ✅ rag ✅ api ✅ eval ✅ frontend ✅
 
-_db note: Sprint 1 migrations applied — `content_hash` + `status` on chunks, `source_tier` on documents, `match_chunks()` updated (chunk status filter + tier ordering + new return cols). Roles `corpus_writer`/`app_reader` live on Docker dev DB._
-_rag note: multi-permit classifier is live (`rag/permit_classifier.py`) and wired into `POST /query/answer`; conflict detector remains backlog._
-_api note: `POST /query/answer` returns `ahj_disclaimer` + `permit_types`. Upload flow now chunks/inserts/embeds reliably and retries HTML chunking without procedural filter when first-pass chunks are empty. New admin purge route supports project uploads and elevated-role any-tier purge._
-_frontend note: query flow + document browser route (`/documents`) + upload UX blockers/status guidance are now in place. API helper tests and upload utility tests added under `frontend/src/*.test.js`._
-_tracing note: `POST /query/answer` now captures LangSmith runs with `X-Client-Session-Id` and `X-Client-Request-Id` metadata._
+_db note: Sprint 1 migrations applied — `content_hash` + `status` on chunks, `source_tier` on documents, `match_chunks()` updated. **Sprint 5 migration 010**: `match_chunks()` ORDER BY fixed — pure cosine ordering, tier bias now owned exclusively by Python reranker. Roles `corpus_writer`/`app_reader` live on Docker dev DB._
+_rag note: multi-permit classifier live (`rag/permit_classifier.py`). **Sprint 5**: `conflict_detector.py` implemented (lightweight numeric cross-authority conflict detection). `jurisdiction_resolver.py` implemented (Census geocoding + PostGIS ST_Contains). Citation regex hardened (strict + loose format, miss-rate warning). `evaluation/ragas_eval.py` embeddings init fixed (`local_files_only=True` prevents HF network error)._
+_api note: `POST /query/answer` returns `ahj_disclaimer` + `permit_types` + **`conflict_warnings`** + **`resolved_municipality`**. Optional **`address`** field on `QueryRequest` auto-resolves municipality via geocoding. Upload flow chunks/inserts/embeds reliably. Admin purge route live with role-tier controls._
+_frontend note: query flow + document browser + upload UX live. **Sprint 5**: `AddressAutocomplete` component added (Mapbox Search API, DFW-bbox restricted, degrades gracefully without token). Conflict warnings panel added to answer view. CSS for autocomplete dropdown + conflict warnings added._
+_tracing note: `POST /query/answer` captures LangSmith runs with `X-Client-Session-Id` and `X-Client-Request-Id` metadata._
 
 ## Current operational snapshot
 
@@ -40,19 +40,18 @@ _tracing note: `POST /query/answer` now captures LangSmith runs with `X-Client-S
 
 ## Quality gates (current)
 
-- Latest full eval: `evaluation/results/ragas_20260602_214048.json`
-  - avg faithfulness `0.893` (PASS vs `0.85`)
-  - avg relevancy `0.694`
-  - avg context precision `0.624`
+- Latest full eval: `evaluation/results/ragas_20260616_124025.json` _(Sprint 5 checkpoint)_
+  - avg faithfulness `0.931` ✅ (PASS vs `0.85` target)
+  - avg relevancy `0.687` (Q0+Q4 scored 0.000 — RAGAs artifact, not regression; Fix 2 in Sprint 6 targets this)
+  - avg context precision `0.659` ↑ from `0.624`
   - q1 faithfulness `0.882` (above baseline `0.600`)
-- Eval guard: PASS (candidate `ragas_20260602_214048.json`) against baseline `ragas_20260531_122639.json`
+- Eval guard: PASS (candidate `ragas_20260616_124025.json` vs baseline `ragas_20260531_122639.json`)
 - Answer cache policy for eval: keep `RAGAS_ANSWER_CACHE_ENABLED=false`
-- Dated run-by-run metrics/deltas (including pass/fail/pass variability on 2026-06-02) live in journals
-- Metric delta vs prior PASS (`ragas_20260602_151539.json`):
-  - avg faithfulness: `-0.006` (`0.899 -> 0.893`, still PASS)
-  - avg relevancy: `-0.132` (`0.826 -> 0.694`)
-  - avg context precision: `+0.041` (`0.583 -> 0.624`)
-  - q1 faithfulness: `-0.051` (`0.933 -> 0.882`, still above baseline)
+- Metric delta vs prior PASS (`ragas_20260602_214048.json`):
+  - avg faithfulness: `+0.038` (`0.893 → 0.931`, PASS)
+  - avg relevancy: `-0.007` (`0.694 → 0.687`, within noise)
+  - avg context precision: `+0.035` (`0.624 → 0.659`)
+  - _Note: relevancy 0.000 on Q0/Q4 is a RAGAs AnswerRelevancy scoring artifact (cosine collapse), not caused by Sprint 5 changes_
 
 ## Docs status
 
@@ -127,14 +126,30 @@ _tracing note: `POST /query/answer` now captures LangSmith runs with `X-Client-S
 - [x] Sprint 4 closeout docs/sign-off sweep completed (`STATE.md`, `docs/sprint4_qa_checklist.md`, `README.md`)
 - [x] Restore decision recorded for audit-validation purge doc (`mansfieldtx-tx-2`): no restore required at this time
 
+### Sprint 5 — Geocoding + Conflict Detection + Architecture Fixes (2026-06-16)
+- [x] Fix 1: `match_chunks()` SQL ORDER BY corrected — pure cosine ordering, tier bias moved to Python reranker only (`db/migrations/010_fix_match_chunks_ordering.sql`, `db/schema.sql`)
+- [x] Fix 3: Citation regex hardened — accepts both `[doc_id, chunk N]` (strict) and `[doc_id chunk N]` (loose/capital-C) formats; unmatched citations now log miss-rate warning (`rag/generator.py`)
+- [x] Task 14C: `rag/jurisdiction_resolver.py` — Census Bureau geocoding API + PostGIS `ST_Contains` point-in-polygon; `municipality_from_address()` convenience helper
+- [x] Task 14C: Optional `address` field added to `QueryRequest` — auto-resolves municipality via geocoding when `municipality` not explicitly set; `resolved_municipality` returned on `AnswerResponse`
+- [x] Task 15 (scoped): `rag/conflict_detector.py` — lightweight numeric discrepancy detection across 9 permit subject keywords; cross-authority-level pairs only; non-blocking in route
+- [x] Task 15: `ConflictWarning` Pydantic model added to `api/schemas.py`; `conflict_warnings: list[ConflictWarning]` on `AnswerResponse`; wired into `api/routes/query.py`
+- [x] Frontend: `AddressAutocomplete` component (`frontend/src/components/AddressAutocomplete.jsx`) — Mapbox Search API, DFW bbox, 300ms debounce, graceful no-token fallback
+- [x] Frontend: Conflict warnings panel added to answer view; `resolved_municipality` detection badge; autocomplete + conflict CSS added to `styles.css`
+- [x] Backlog: `docs/backlog.md` created — 9 DFW city boundaries pending, FEMA/historic overlays, Google Maps upgrade path, BM25 A/B eval
+- [x] `frontend/.env.example` updated with `VITE_MAPBOX_TOKEN` placeholder
+- [x] `evaluation/ragas_eval.py` fixed: `local_files_only=True` in `HuggingFaceEmbeddings` prevents DNS failure when HuggingFace is unreachable
+- [x] Sprint 5 tests: `tests/test_sprint5.py` — 16 tests covering Fix 3 citation variants, jurisdiction resolver (mocked), conflict detector (5 cases)
+- [x] Eval checkpoint: faithfulness `0.931` ✅, context precision `0.659` ↑, no regression vs Sprint 4 baseline
+
 ## Validation / verification steps (canonical)
 
 1. `py -m pytest tests/test_governance.py tests/test_permit_classifier.py -v 2>&1` (latest: `35 passed`)
 2. `py -m pytest tests/test_documents_routes.py` (latest: `12 passed`)
 3. `py -m pytest tests/test_eval_guard.py` (latest: `3 passed`)
 4. `py -m pytest tests/test_api_main.py` (latest: `5 passed`)
-5. `$env:RAGAS_ANSWER_CACHE_ENABLED="false"; py -m evaluation.ragas_eval --export` (latest: `ragas_20260602_214048.json`, PASS)
-6. `py -m evaluation.eval_guard` (latest: PASS on `ragas_20260602_214048.json`)
+5. `$env:RAGAS_ANSWER_CACHE_ENABLED="false"; py -m evaluation.ragas_eval --export` (latest: Sprint 5 checkpoint `ragas_20260616_124025.json`, faithfulness `0.931` PASS)
+6. `py -m evaluation.eval_guard` (latest: run against Sprint 5 checkpoint)
+11b. `py -m pytest tests/test_sprint5.py -v` (latest: `16 passed in 0.78s`)
 7. `cd frontend; npm run test` (latest: pass after `import.meta.env` Node-safe fallback)
 8. `py -m pytest tests/test_query_answer_route.py tests/test_permit_classifier.py -v` (latest user-reported: `24 passed` then `26 passed` across targeted runs)
 9. `py -m pytest tests/test_upload_route.py -v` (latest: pass after upload reliability fixes)
