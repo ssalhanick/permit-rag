@@ -70,9 +70,46 @@ It also prevents an empty `chunks` array from breaking downstream UIs.
   - `test_schema_total_chunks_retrieved_field_present` — schema field exists
   - `test_schema_total_chunks_retrieved_is_int` — schema type is int
 
----
+### Task 16B — Cypher constraints + db/graph_client.py
 
-## Validation steps (this session)
+- `db/cypher/constraints.cypher` — 5 UNIQUE constraints (Document.doc_id, Document.pg_id, Chunk.pg_id, Municipality.municipality_id, AuthorityLevel.name) + 4 performance indexes. All `IF NOT EXISTS` (idempotent).
+- `db/graph_client.py` — singleton Bolt driver (mirrors `db/client.py` pattern):
+  - `get_driver()` / `close_driver()` — lazy singleton, reads `NEO4J_BOLT_URL` + `NEO4J_AUTH`
+  - `get_session()` — contextmanager yielding a Neo4j session
+  - `apply_constraints()` — reads + executes `constraints.cypher` statement by statement
+  - `upsert_document_node()` — MERGE Document + Municipality + AuthorityLevel nodes + relationships
+  - `upsert_chunk_node()` — MERGE Chunk node + HAS_CHUNK edge to parent Document
+  - `link_supersession()` — MERGE SUPERSEDED_BY edge between two Document nodes
+  - `ping()` — returns True/False; non-raising health check
+  - `get_document_node()` / `get_chunks_for_document()` — read helpers
+- `neo4j` pip package installed.
+- `tests/test_sprint6.py` expanded: 19 tests (8 Fix2 + 5 parsing/file + 6 mocked graph ops) → **35 total** ✅
+
+### Task 16C — scripts/sync_graph.py (ingestion connector)
+
+- `scripts/sync_graph.py`:
+  - `_sync_document(doc, dry_run)` — upserts Document + Chunk nodes; returns chunk count
+  - `_sync_supersessions(docs, dry_run)` — creates SUPERSEDED_BY edges for superseded docs
+  - `main()` — pings Neo4j, re-applies constraints, loads docs from Postgres, syncs all
+  - CLI flags: `--dry-run`, `--municipality`, `--doc-id`, `--verbose`
+  - **dotenv fix**: added `load_dotenv()` at module top (try/except fallback) so the script works when run with `py -m` outside the API server environment
+- `tests/test_sprint6.py` expanded to 24 tests (+ 5 sync_graph) → **40 total** ✅
+
+**Dry-run result:**
+```
+16:05:05 INFO  Sync complete: 23 doc(s), 17242 chunk node(s), 0 supersession edge(s) in 5075ms [DRY RUN]
+```
+_23 docs (corpus has grown since original 10-doc ingest). 0 supersession edges expected — no docs currently superseded._
+
+**Live sync result (Neo4j Browser node counts):**
+| Label | Count |
+|-------|-------|
+| Chunk | 17,242 |
+| Document | 23 |
+| Municipality | 7 |
+| AuthorityLevel | 3 |
+
+All relationships (HAS_CHUNK, BELONGS_TO, GOVERNED_BY, PART_OF) created. 0 SUPERSEDED_BY edges (no superseded docs in active corpus).
 
 ```
 py -m pytest tests/test_sprint5.py tests/test_sprint6.py -v
@@ -108,17 +145,35 @@ Results:
 
 ---
 
-## Issues encountered
+- `.env.example` (`NEO4J_AUTH` + `NEO4J_BOLT_URL` placeholders)
+- `STATE.md`, `journals/session_260616a.md`
 
-_None yet — pending validation runs._
+---
+
+## Git commit message
+
+feat(sprint6): citation chunk filter (Fix 2), Neo4j CE docker service, graph client + constraints, Postgres→Graph sync connector
 
 ---
 
 ## Next session should
 
-1. Run the validation sequence above; record eval results here.
-2. Implement Task 16B: Cypher constraints + `db/graph_client.py`.
-3. Implement Task 16C: ingestion connector — write chunk nodes + doc nodes into Neo4j.
+1. Task 16D — expose `graph_health` (Neo4j `ping()`) in `GET /health` response
+2. Task 16E — graph-powered conflict traversal (walk SUPERSEDED_BY + cross-authority edges in Cypher)
+3. Optional: link `POST /query/answer` to tag cited chunks as graph nodes (enrich graph with query signals)
+
+## Prompt for next session
+
+Read `AGENTS.md`, `STATE.md`, and `journals/session_260616a.md`. Sprint 6 is closed and signed off. Create `journals/session_260617.md` for the next sprint and start Sprint 7:
+
+**Task 16D first** — expose `graph_health: bool` in the `GET /health` response (`api/routes/health.py` or equivalent). Call `db.graph_client.ping()` non-blocking; if Neo4j is not running, `graph_health=False` but overall status stays `healthy` (graph is additive, not load-bearing for the RAG path).
+
+**Then Task 16E** — add a Cypher query in `db/graph_client.py` that traverses the graph to find cross-authority conflicts: for a given subject keyword, return Document pairs connected via GOVERNED_BY to different AuthorityLevel nodes with differing numeric values in adjacent Chunk content. Wire this into `rag/conflict_detector.py` as an optional graph-backed path (fall back to the existing lightweight detector if Neo4j is unreachable).
+
+Validate with:
+- `py -m pytest tests/test_sprint5.py tests/test_sprint6.py tests/test_sprint7.py -v`
+- `Invoke-RestMethod -Uri "http://localhost:8000/health" -Method Get` (expect `graph_health=True`)
+- `py -m evaluation.eval_guard`
 
 ## Git commit message
 

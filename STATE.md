@@ -4,7 +4,7 @@ _Updated: 2026-06-16a (Sprint 6 kickoff)_
 
 ## Phase
 
-Sprint 6 in progress. Fix 2 (citation-aware chunk filtering + `total_chunks_retrieved`) and Task 16A (Neo4j CE docker-compose service) are implemented. Pending: eval run to confirm relevancy improvement, Task 16B (Cypher constraints + graph_client.py), Task 16C (ingestion connector).
+Sprint 6 is closed. Fix 2, Task 16A, Task 16B, and Task 16C are all live. Neo4j CE running, constraints applied, full Postgres→Graph sync available via `py -m scripts.sync_graph`. 40 tests passing.
 
 ## Blocked on
 
@@ -12,9 +12,9 @@ Sprint 6 in progress. Fix 2 (citation-aware chunk filtering + `total_chunks_retr
 
 ## Next 3 tasks
 
-1. Sprint 6 — run eval after Fix 2 and confirm relevancy > 0.687
-2. Sprint 6 — Task 16B: Graph schema (Cypher constraints) + `db/graph_client.py`
-3. Sprint 6 — Task 16C: ingestion connector — write chunk/doc nodes into Neo4j
+1. Sprint 7 — Task 16D: expose `graph_health` (Neo4j ping) in `GET /health` response
+2. Sprint 7 — Task 16E: graph-powered conflict detection (cross-authority SUPERSEDED_BY traversal)
+3. Sprint 7 — Run full sync (`py -m scripts.sync_graph`) and validate nodes in Neo4j Browser
 
 ## Module status
 
@@ -25,7 +25,7 @@ _rag note: multi-permit classifier live (`rag/permit_classifier.py`). **Sprint 5
 _api note: `POST /query/answer` returns `ahj_disclaimer` + `permit_types` + **`conflict_warnings`** + **`resolved_municipality`** + **`total_chunks_retrieved`**. **Sprint 6 Fix 2**: `chunks` array now contains only citation-filtered chunks (`found_in_context=True`); falls back to all chunks when no citations match context. Optional **`address`** field on `QueryRequest` auto-resolves municipality via geocoding. Upload flow chunks/inserts/embeds reliably. Admin purge route live with role-tier controls._
 _frontend note: query flow + document browser + upload UX live. **Sprint 5**: `AddressAutocomplete` component added (Mapbox Search API, DFW-bbox restricted, degrades gracefully without token). Conflict warnings panel added to answer view. CSS for autocomplete dropdown + conflict warnings added._
 _tracing note: `POST /query/answer` captures LangSmith runs with `X-Client-Session-Id` and `X-Client-Request-Id` metadata._
-_graph note: **Task 16A** — Neo4j Community Edition added to `docker-compose.yml` (`neo4j:5-community`, APOC enabled, ports 7474+7687, `neo4jdata` volume). `NEO4J_AUTH` + `NEO4J_BOLT_URL` in `.env.example`. Task 16B (Cypher constraints + `db/graph_client.py`) pending._
+_graph note: **Task 16A** — Neo4j Community Edition in `docker-compose.yml`. **Task 16B** — `db/graph_client.py` (singleton Bolt driver, all helpers), `db/cypher/constraints.cypher` (5 UNIQUE + 4 indexes), constraints applied to live container. **Task 16C** — `scripts/sync_graph.py` bulk-syncs Postgres documents+chunks into Neo4j; supports `--dry-run`, `--municipality`, `--doc-id` filters; links SUPERSEDED_BY edges._
 
 ## Current operational snapshot
 
@@ -147,8 +147,12 @@ _graph note: **Task 16A** — Neo4j Community Edition added to `docker-compose.y
 - [x] `.env.example` updated with `NEO4J_AUTH` + `NEO4J_BOLT_URL` placeholders
 - [x] Sprint 6 tests: `tests/test_sprint6.py` — 8 tests covering citation filter logic, fallback, dedup, schema field presence
 - [x] Eval run: faithfulness `0.910` ✅ | relevancy `0.689` ✅ | guard PASS (`ragas_20260616_143411.json`)
-- [ ] Task 16B: Cypher constraints + `db/graph_client.py`
-- [ ] Task 16C: ingestion connector (chunk/doc nodes into Neo4j)
+- [x] Task 16B: `db/graph_client.py` — singleton Bolt driver, `upsert_document_node`, `upsert_chunk_node`, `link_supersession`, `apply_constraints`, `ping`, read helpers
+- [x] `db/cypher/constraints.cypher` — 5 UNIQUE constraints + 4 indexes, idempotent (IF NOT EXISTS)
+- [x] `neo4j` pip package installed; `tests/test_sprint6.py` expanded to 19 tests (35 total with sprint5) ✅
+- [x] Task 16B bootstrap: constraints applied to live Neo4j container ✅
+- [x] Task 16C: `scripts/sync_graph.py` — bulk-sync Postgres corpus → Neo4j; dry-run, municipality + doc-id filters, SUPERSEDED_BY edge linking
+- [x] Sprint 6 tests: `tests/test_sprint6.py` — 24 tests (8 Fix2 + 5 parsing/file + 6 mocked graph + 5 sync_graph) — **40 total** ✅
 
 ## Validation / verification steps (canonical)
 
