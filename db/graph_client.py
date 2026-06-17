@@ -284,3 +284,63 @@ def get_chunks_for_document(doc_id: str) -> list[dict[str, Any]]:
     with get_session() as session:
         records = session.run(cypher, doc_id=doc_id).data()
     return [dict(r["props"]) for r in records]
+
+
+# ── Cross-authority conflict traversal (Task 16E) ─────────────
+
+
+def find_cross_authority_conflicts(
+    subject_keyword: str,
+    *,
+    limit: int = 50,
+) -> list[dict[str, Any]]:
+    """
+    Traverse the graph to find Document pairs that address the same subject
+    keyword but are governed by different AuthorityLevel nodes.
+
+    For each candidate pair the query returns Chunk nodes from both documents
+    whose content mentions the subject keyword, so the caller can extract and
+    compare numeric values.
+
+    Returns a list of result dicts with keys:
+        doc_a_id, doc_a_authority, chunk_a_content, chunk_a_index,
+        doc_b_id, doc_b_authority, chunk_b_content, chunk_b_index
+
+    Returns an empty list (never raises) if Neo4j is unreachable or the
+    query fails — callers should fall back to the lightweight detector.
+
+    Args:
+        subject_keyword: Plain-text keyword to match in Chunk.content.
+        limit:           Maximum number of pairs to return (default 50).
+    """
+    cypher = """
+    MATCH (dA:Document)-[:GOVERNED_BY]->(aA:AuthorityLevel),
+          (dB:Document)-[:GOVERNED_BY]->(aB:AuthorityLevel)
+    WHERE dA.doc_id < dB.doc_id
+      AND aA.name <> aB.name
+    MATCH (dA)-[:HAS_CHUNK]->(cA:Chunk)
+    WHERE toLower(cA.content) CONTAINS toLower($keyword)
+    MATCH (dB)-[:HAS_CHUNK]->(cB:Chunk)
+    WHERE toLower(cB.content) CONTAINS toLower($keyword)
+    RETURN
+        dA.doc_id   AS doc_a_id,
+        aA.name     AS doc_a_authority,
+        cA.content  AS chunk_a_content,
+        cA.chunk_index AS chunk_a_index,
+        dB.doc_id   AS doc_b_id,
+        aB.name     AS doc_b_authority,
+        cB.content  AS chunk_b_content,
+        cB.chunk_index AS chunk_b_index
+    LIMIT $limit
+    """
+    try:
+        with get_session() as session:
+            records = session.run(cypher, keyword=subject_keyword, limit=limit).data()
+        return [dict(r) for r in records]
+    except Exception as exc:
+        log.warning(
+            "Graph conflict traversal failed (subject=%r): %s — falling back to lightweight detector",
+            subject_keyword,
+            exc,
+        )
+        return []

@@ -27,6 +27,7 @@ from fastapi.responses import JSONResponse
 from api.routes import admin_router, documents_router, query_router, upload_router
 from api.schemas import HealthResponse
 from db.client import close_pool, ping
+from db import graph_client as _graph_client
 
 log = logging.getLogger(__name__)
 
@@ -130,13 +131,21 @@ def handle_http_exception(_request: Request, exc: HTTPException) -> JSONResponse
     response_model=HealthResponse,
     tags=["system"],
     summary="Health check",
-    description="Returns service status and database connectivity.",
+    description="Returns service status, database connectivity, and graph layer health.",
 )
 def health_check() -> HealthResponse:
-    """Check API and database health."""
+    """Check API, database, and graph (Neo4j) health.
+
+    Overall status is driven by Postgres connectivity only.
+    graph_health is additive — Neo4j being unreachable does NOT flip
+    the service to 'unhealthy'; it merely surfaces graph_health=False.
+    """
     db_ok = ping()
+    # Non-blocking graph ping — catches all exceptions internally
+    graph_ok = _graph_client.ping()
     return HealthResponse(
         status="healthy" if db_ok else "unhealthy",
         database=db_ok,
+        graph_health=graph_ok,
         version="0.1.0",
     )

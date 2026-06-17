@@ -130,6 +130,15 @@ class HealthResponse(BaseModel):
     status: str = Field(description="Service status: 'healthy' or 'unhealthy'.")
     database: bool = Field(description="True if the database is reachable.")
     version: str = Field(description="API version string.")
+    # Sprint 7 — Task 16D: graph layer health (additive, non-load-bearing)
+    graph_health: bool = Field(
+        default=False,
+        description=(
+            "True if Neo4j is reachable via Bolt. "
+            "False does not affect overall 'status' — graph is additive, "
+            "not required for the RAG retrieval path."
+        ),
+    )
 
 
 class AHJDisclaimer(BaseModel):

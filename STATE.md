@@ -1,10 +1,10 @@
 # permit_rag — State
 
-_Updated: 2026-06-16a (Sprint 6 kickoff)_
+_Updated: 2026-06-16b (Sprint 7 close)_
 
 ## Phase
 
-Sprint 6 is closed. Fix 2, Task 16A, Task 16B, and Task 16C are all live. Neo4j CE running, constraints applied, full Postgres→Graph sync available via `py -m scripts.sync_graph`. 40 tests passing.
+Sprint 7 is closed. Task 16D (graph_health in /health) and Task 16E (cross-authority Cypher traversal + graph-backed conflict detector) are live. 60 tests passing.
 
 ## Blocked on
 
@@ -12,20 +12,20 @@ Sprint 6 is closed. Fix 2, Task 16A, Task 16B, and Task 16C are all live. Neo4j 
 
 ## Next 3 tasks
 
-1. Sprint 7 — Task 16D: expose `graph_health` (Neo4j ping) in `GET /health` response
-2. Sprint 7 — Task 16E: graph-powered conflict detection (cross-authority SUPERSEDED_BY traversal)
-3. Sprint 7 — Run full sync (`py -m scripts.sync_graph`) and validate nodes in Neo4j Browser
+1. Sprint 8 — Live validation: `Invoke-RestMethod -Uri "http://localhost:8000/health" -Method Get` (expect `graph_health=True`)
+2. Sprint 8 — Task 16F (optional): enrich graph with query signals — tag cited chunks as graph nodes after each `/query/answer` call
+3. Sprint 8 — BM25 A/B eval: measure hybrid vs dense-only retrieval quality delta
 
 ## Module status
 
-ingestion ✅ db ✅ rag ✅ api ✅ eval ✅ frontend ✅ graph 🔧
+ingestion ✅ db ✅ rag ✅ api ✅ eval ✅ frontend ✅ graph ✅
 
 _db note: Sprint 1 migrations applied — `content_hash` + `status` on chunks, `source_tier` on documents, `match_chunks()` updated. **Sprint 5 migration 010**: `match_chunks()` ORDER BY fixed — pure cosine ordering, tier bias now owned exclusively by Python reranker. Roles `corpus_writer`/`app_reader` live on Docker dev DB._
-_rag note: multi-permit classifier live (`rag/permit_classifier.py`). **Sprint 5**: `conflict_detector.py` implemented (lightweight numeric cross-authority conflict detection). `jurisdiction_resolver.py` implemented (Census geocoding + PostGIS ST_Contains). Citation regex hardened (strict + loose format, miss-rate warning). `evaluation/ragas_eval.py` embeddings init fixed (`local_files_only=True` prevents HF network error)._
-_api note: `POST /query/answer` returns `ahj_disclaimer` + `permit_types` + **`conflict_warnings`** + **`resolved_municipality`** + **`total_chunks_retrieved`**. **Sprint 6 Fix 2**: `chunks` array now contains only citation-filtered chunks (`found_in_context=True`); falls back to all chunks when no citations match context. Optional **`address`** field on `QueryRequest` auto-resolves municipality via geocoding. Upload flow chunks/inserts/embeds reliably. Admin purge route live with role-tier controls._
-_frontend note: query flow + document browser + upload UX live. **Sprint 5**: `AddressAutocomplete` component added (Mapbox Search API, DFW-bbox restricted, degrades gracefully without token). Conflict warnings panel added to answer view. CSS for autocomplete dropdown + conflict warnings added._
+_rag note: multi-permit classifier live (`rag/permit_classifier.py`). **Sprint 5**: `conflict_detector.py` implemented (lightweight numeric cross-authority conflict detection). `jurisdiction_resolver.py` implemented (Census geocoding + PostGIS ST_Contains). Citation regex hardened (strict + loose format, miss-rate warning). **Sprint 7 Task 16E**: `detect_conflicts_with_graph()` added — optional graph-backed path using Neo4j Cypher traversal; falls back to lightweight detector when Neo4j is unreachable._
+_api note: `POST /query/answer` returns `ahj_disclaimer` + `permit_types` + **`conflict_warnings`** + **`resolved_municipality`** + **`total_chunks_retrieved`**. **Sprint 6 Fix 2**: `chunks` array now contains only citation-filtered chunks (`found_in_context=True`); falls back to all chunks when no citations match context. Optional **`address`** field on `QueryRequest` auto-resolves municipality via geocoding. **Sprint 7 Task 16D**: `GET /health` now returns `graph_health: bool` (Neo4j ping, additive — does not affect overall `status`)._
+_frontend note: query flow + document browser + upload UX live. **Sprint 5**: `AddressAutocomplete` component added (Mapbox Search API, DFW-bbox restricted, degrades gracefully without token). Conflict warnings panel added to answer view._
 _tracing note: `POST /query/answer` captures LangSmith runs with `X-Client-Session-Id` and `X-Client-Request-Id` metadata._
-_graph note: **Task 16A** — Neo4j Community Edition in `docker-compose.yml`. **Task 16B** — `db/graph_client.py` (singleton Bolt driver, all helpers), `db/cypher/constraints.cypher` (5 UNIQUE + 4 indexes), constraints applied to live container. **Task 16C** — `scripts/sync_graph.py` bulk-syncs Postgres documents+chunks into Neo4j; supports `--dry-run`, `--municipality`, `--doc-id` filters; links SUPERSEDED_BY edges._
+_graph note: **Task 16A** — Neo4j CE in `docker-compose.yml`. **Task 16B** — `db/graph_client.py` singleton Bolt driver + helpers. **Task 16C** — `scripts/sync_graph.py` bulk-sync. **Task 16D** — `graph_health` field in `GET /health`. **Task 16E** — `find_cross_authority_conflicts()` Cypher traversal; `detect_conflicts_with_graph()` in `rag/conflict_detector.py`._
 
 ## Current operational snapshot
 
@@ -152,7 +152,12 @@ _graph note: **Task 16A** — Neo4j Community Edition in `docker-compose.yml`. *
 - [x] `neo4j` pip package installed; `tests/test_sprint6.py` expanded to 19 tests (35 total with sprint5) ✅
 - [x] Task 16B bootstrap: constraints applied to live Neo4j container ✅
 - [x] Task 16C: `scripts/sync_graph.py` — bulk-sync Postgres corpus → Neo4j; dry-run, municipality + doc-id filters, SUPERSEDED_BY edge linking
-- [x] Sprint 6 tests: `tests/test_sprint6.py` — 24 tests (8 Fix2 + 5 parsing/file + 6 mocked graph + 5 sync_graph) — **40 total** ✅
+### Sprint 7 — Graph Health + Graph Conflict Detection (2026-06-16b)
+- [x] Task 16D: `graph_health: bool` field added to `HealthResponse` schema (`api/schemas.py`) — defaults `False`, non-load-bearing
+- [x] Task 16D: `health_check()` in `api/main.py` calls `_graph_client.ping()` non-blocking; `graph_health` returned in response; overall `status` driven by Postgres only
+- [x] Task 16E: `find_cross_authority_conflicts(subject_keyword)` added to `db/graph_client.py` — Cypher traversal matching Document pairs via `GOVERNED_BY` to different `AuthorityLevel` nodes; returns Chunk content for numeric comparison; never raises (returns `[]` on error)
+- [x] Task 16E: `_graph_pairs_to_conflicts()` + `detect_conflicts_with_graph()` added to `rag/conflict_detector.py` — graph-backed Tier B path; falls back to lightweight Tier A when Neo4j unreachable or empty
+- [x] Sprint 7 tests: `tests/test_sprint7.py` — 20 tests (8 Task 16D + 12 Task 16E) → **60 total** ✅
 
 ## Validation / verification steps (canonical)
 

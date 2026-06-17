@@ -1,21 +1,19 @@
 """
-rag/conflict_detector.py — Lightweight conflict detection (Sprint 5 / Task 15)
-================================================================================
-Scoped implementation: detects when two or more retrieved chunks from DIFFERENT
-authority levels appear to address the same subject but state different
-numeric or conditional requirements.
+rag/conflict_detector.py — Lightweight + graph-backed conflict detection
+========================================================================
+Sprint 5 / Task 15: lightweight numeric cross-authority conflict detection.
+Sprint 7 / Task 16E: optional graph-backed path via Neo4j Cypher traversal.
 
-Detection strategy (Tier A — lightweight):
-  1. Build a subject keyword index from the retrieved chunks.
-  2. For each subject that appears in ≥2 chunks from different authority levels,
-     extract numeric values (feet, sq ft, %, stories, etc.) from each chunk.
-  3. If the numeric values differ, emit a ConflictWarning.
-
-This is intentionally conservative — it only flags clear numeric discrepancies
-to avoid false positives. Section normalization and full content diff
-(Task 13, Sprint 7) is a future enhancement.
+Detection strategy:
+  Tier A (lightweight): build a subject keyword index from retrieved chunks;
+    compare numeric values across chunks from different authority levels.
+  Tier B (graph): call db.graph_client.find_cross_authority_conflicts() to
+    traverse Document→AuthorityLevel relationships in Neo4j; falls back to
+    Tier A when Neo4j is unreachable.
 
 Import boundary: rag/ → standard library only (AGENTS.md).
+db.graph_client is imported lazily inside detect_conflicts_with_graph()
+so that the module loads cleanly even when neo4j is not installed.
 """
 
 from __future__ import annotations
@@ -172,3 +170,119 @@ def _higher_authority(auth_a: str, auth_b: str) -> str:
     rank_a = _AUTHORITY_ORDER.get(auth_a.lower(), 0)
     rank_b = _AUTHORITY_ORDER.get(auth_b.lower(), 0)
     return auth_a if rank_a >= rank_b else auth_b
+
+
+# ── Graph-backed conflict path (Task 16E) ─────────────────────
+
+
+def _graph_pairs_to_conflicts(
+    pairs: list[dict],
+    subject: str,
+    keywords: list[str],
+) -> list[ConflictResult]:
+    """
+    Convert graph traversal result rows into ConflictResult objects.
+
+    Each pair is a dict with:
+        doc_a_id, doc_a_authority, chunk_a_content, chunk_a_index,
+        doc_b_id, doc_b_authority, chunk_b_content, chunk_b_index
+
+    Applies the same numeric extraction logic as the lightweight detector
+    so results are comparable.
+    """
+    conflicts: list[ConflictResult] = []
+    for row in pairs:
+        auth_a = str(row.get("doc_a_authority") or "unknown").lower()
+        auth_b = str(row.get("doc_b_authority") or "unknown").lower()
+        content_a = str(row.get("chunk_a_content") or "")
+        content_b = str(row.get("chunk_b_content") or "")
+
+        vals_a = _extract_numeric_values(content_a, keywords)
+        vals_b = _extract_numeric_values(content_b, keywords)
+
+        if not vals_a or not vals_b or set(vals_a) == set(vals_b):
+            continue  # no numeric discrepancy detectable
+
+        chunk_a: dict[str, Any] = {
+            "doc_id": row.get("doc_a_id"),
+            "chunk_index": row.get("chunk_a_index"),
+            "content": content_a,
+            "authority_level": auth_a,
+        }
+        chunk_b: dict[str, Any] = {
+            "doc_id": row.get("doc_b_id"),
+            "chunk_index": row.get("chunk_b_index"),
+            "content": content_b,
+            "authority_level": auth_b,
+        }
+        detail = (
+            f"'{subject}' (graph path) — {auth_a.upper()} source states "
+            f"{sorted(set(vals_a))} but {auth_b.upper()} source states "
+            f"{sorted(set(vals_b))}. "
+            f"The {_higher_authority(auth_a, auth_b).upper()} source typically "
+            f"sets the floor; verify with the AHJ."
+        )
+        log.info(
+            "graph conflict detected: subject=%r docs=%s vs %s",
+            subject,
+            chunk_a["doc_id"],
+            chunk_b["doc_id"],
+        )
+        conflicts.append(
+            ConflictResult(subject=subject, chunk_a=chunk_a, chunk_b=chunk_b, detail=detail)
+        )
+    return conflicts
+
+
+def detect_conflicts_with_graph(
+    chunks: list[dict[str, Any]],
+) -> list[ConflictResult]:
+    """
+    Attempt graph-backed conflict detection (Task 16E).
+
+    For each subject keyword, calls db.graph_client.find_cross_authority_conflicts().
+    If Neo4j is unreachable or returns no results, falls back transparently to
+    the lightweight detect_conflicts() path.
+
+    Args:
+        chunks: Retrieved chunks (same input as detect_conflicts()).
+
+    Returns:
+        List of ConflictResult objects. May be empty.
+    """
+    try:
+        from db import graph_client as gc  # lazy import — keeps rag/ import boundary
+    except ImportError:
+        log.debug("neo4j not installed — using lightweight conflict detector")
+        return detect_conflicts(chunks)
+
+    all_conflicts: list[ConflictResult] = []
+    any_graph_hit = False
+
+    for subject, keywords in _SUBJECT_PATTERNS.items():
+        # Quick pre-filter: skip subjects not mentioned in any retrieved chunk
+        if not any(_chunks_cover_subject(c, keywords) for c in chunks):
+            continue
+
+        # Primary keyword used as the Neo4j full-text search term
+        primary_keyword = keywords[0]
+        pairs = gc.find_cross_authority_conflicts(primary_keyword)
+
+        if pairs:
+            any_graph_hit = True
+            all_conflicts.extend(_graph_pairs_to_conflicts(pairs, subject, keywords))
+
+    if any_graph_hit:
+        log.info(
+            "Graph conflict path returned %d conflict(s) across %d subject(s)",
+            len(all_conflicts),
+            sum(
+                1 for s, kws in _SUBJECT_PATTERNS.items()
+                if any(_chunks_cover_subject(c, kws) for c in chunks)
+            ),
+        )
+        return all_conflicts
+
+    # Graph returned nothing (Neo4j empty or unreachable) — fall back
+    log.debug("Graph conflict path empty — falling back to lightweight detector")
+    return detect_conflicts(chunks)
