@@ -125,7 +125,81 @@ feat(sprint8): graph citation signals via BackgroundTasks (16F) — record_cited
 
 ---
 
-## Next session should
+## BM25 A/B Eval — hybrid vs dense-only
+
+**Command run:**
+```powershell
+$env:RETRIEVAL_HYBRID_ENABLED="true"; $env:RAGAS_ANSWER_CACHE_ENABLED="false"; py -m evaluation.ragas_eval --export
+```
+
+**Results (hybrid `RETRIEVAL_HYBRID_ENABLED=true`):**
+
+| # | Faith | Relev | CtxPr | top_sim | Query |
+|---|-------|-------|-------|---------|-------|
+| 0 | 0.714 | 0.000 | 0.200 | 0.762 | Setback requirements… |
+| 1 | 0.720 | 0.948 | 0.921 | 0.799 | Permit for electrical… |
+| 2 | 0.900 | 0.994 | 0.719 | 0.814 | ADA accessibility… |
+| 3 | 1.000 | 0.884 | 0.369 | 0.803 | Stormwater management… |
+| 4 | 0.889 | 0.969 | 0.337 | 0.819 | Building permit reqs… |
+| 5 | 0.947 | 1.000 | 1.000 | 0.772 | Fire sprinkler reqs… |
+| 6 | 0.500 | 0.919 | 0.750 | 0.803 | Max building height… |
+| **AVG** | **0.810** | **0.816** | **0.614** | 0.796 | |
+
+**Comparison vs dense-only baseline (`ragas_20260616_143411.json`):**
+
+| Metric | Dense-only | Hybrid | Delta | Decision |
+|--------|-----------|--------|-------|----------|
+| Faithfulness | `0.910` | `0.810` | **-0.100** | ❌ fails gate |
+| Relevancy | `0.689` | `0.816` | **+0.127** | ✅ improvement |
+| Context precision | `0.654` | `0.614` | -0.040 | ⚠ slight drop |
+
+**Decision: do NOT promote hybrid as default.**
+
+- Faithfulness gate requires `>= 0.85`. Hybrid delivers `0.810` — 4 points below gate.
+- Root cause hypothesis: BM25 keyword matches retrieve topically-adjacent chunks that are
+  not semantically grounded for the specific query. The LLM incorporates these into answers
+  but cannot fully ground them, increasing hallucination rate.
+- Relevancy gain (+0.127) suggests hybrid retrieval broadens recall correctly — the problem
+  is generation faithfulness, not retrieval coverage.
+- **Mitigation path (future sprint):** tune RRF weights to down-weight BM25 contribution
+  (`RETRIEVAL_RRF_BM25_WEIGHT < 1.0`) and re-evaluate. Alternatively: use BM25 for
+  candidate expansion only (top_k×2 recall) then dense-only reranker for final selection.
+
+**Env state after eval:** reset `RETRIEVAL_HYBRID_ENABLED` to `false` (default).
+
+---
+
+## Updated validation steps (end of session)
+
+1. `Invoke-RestMethod -Uri "http://localhost:8000/health" -Method Get` → `status=healthy graph_health=True` ✅
+2. `py -m evaluation.eval_guard` → avg faithfulness `0.910` ≥ `0.850` ✅ **PASS** ✅
+3. `py -m pytest tests/test_sprint8.py -v` → **12 passed** ✅
+4. `py -m pytest tests/test_sprint5.py … tests/test_sprint8.py -v` → **72 passed** ✅
+5. BM25 A/B eval → hybrid `0.810` < gate; dense-only retained as default ✅
+
+## Git commit message (addendum)
+
+docs(sprint8): BM25 A/B eval results — hybrid faithfulness 0.810 below 0.85 gate; dense-only retained as default
+
+---
+
+## Updated next session should
+
+1. Run live validation: `Invoke-RestMethod -Uri "http://localhost:8000/health" -Method Get` → confirm `graph_health=True`
+2. Run `py -m evaluation.eval_guard` to confirm no RAGAs regression
+3. Sprint 8 — PostGIS: add remaining 8 DFW city boundary layers (backlog)
+4. Optional: investigate hybrid RRF weight tuning (`RETRIEVAL_RRF_BM25_WEIGHT < 1.0`) as path to improving hybrid faithfulness
+
+## Updated prompt for next session
+
+Read `AGENTS.md`, `STATE.md`, and `journals/session_260616c.md`. Sprint 8 Task 16F is done and BM25 A/B eval is closed (hybrid failed faithfulness gate — dense-only retained).
+
+Run live validation first:
+- `Invoke-RestMethod -Uri "http://localhost:8000/health" -Method Get` (expect `graph_health=True`)
+- `py -m evaluation.eval_guard`
+
+Then start Sprint 8 PostGIS task: add remaining DFW city boundary layers to the municipal_boundaries table (see `docs/backlog.md`). Check which cities are missing, source their boundary shapefiles or GeoJSON, and load via `db/migrations/` or a new script.
+
 
 1. Run live validation: `Invoke-RestMethod -Uri "http://localhost:8000/health" -Method Get` → confirm `graph_health=True`
 2. Run `py -m evaluation.eval_guard` to confirm no RAGAs regression

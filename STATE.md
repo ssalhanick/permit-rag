@@ -12,8 +12,8 @@ Sprint 8 in progress. **72 tests passing.** Task 16F live.
 
 ## Next tasks
 
-1. Sprint 8 — BM25 A/B eval: measure hybrid vs dense-only retrieval quality delta
-2. Sprint 8 — Add remaining 8 DFW city boundary layers to PostGIS (see `docs/backlog.md`)
+1. Sprint 8 — PostGIS: add remaining 8 DFW city boundary layers to PostGIS (see `docs/backlog.md`)
+2. Optional: tune hybrid RRF weights (`RETRIEVAL_RRF_BM25_WEIGHT < 1.0`) and re-eval — path to promoting hybrid without faithfulness regression
 
 ## Module status
 
@@ -55,6 +55,7 @@ ingestion ✅ db ✅ rag ✅ api ✅ eval ✅ frontend ✅ graph ✅
 - **DB roles**: rotate passwords before any shared deployment; prod → Supabase service_role/anon RLS.
 - **Graph health**: `graph_health` in `/health` is additive — Neo4j down does not flip `status` to `unhealthy`.
 - **Graph citation signals**: `record_cited_chunks()` fires as `BackgroundTask` after `/query/answer` — zero latency impact; non-raising.
+- **Hybrid retrieval**: `RETRIEVAL_HYBRID_ENABLED=false` default retained — BM25 A/B eval showed hybrid faithfulness `0.810` < gate `0.850` (dense-only `0.910`). Relevancy improved +0.127 but faithfulness gap is disqualifying. Future path: tune `RETRIEVAL_RRF_BM25_WEIGHT < 1.0`.
 - **Eval baseline**: do not change baseline file without a deliberate sprint gate review.
 
 ## Sprint 8 deliverables (current sprint)
@@ -63,7 +64,7 @@ ingestion ✅ db ✅ rag ✅ api ✅ eval ✅ frontend ✅ graph ✅
 - [x] Task 16F: wired via `BackgroundTasks` in `api/routes/query.py` — fires after HTTP response, zero latency impact
 - [x] `tests/test_sprint8.py` — 12 tests → **72 total** ✅
 - [x] Live validation: `GET /health` → `graph_health=True` ✅ | eval guard PASS ✅
-- [ ] BM25 A/B eval: hybrid vs dense-only RAGAs delta
+- [x] BM25 A/B eval: hybrid faithfulness `0.810` < gate `0.850` — dense-only `RETRIEVAL_HYBRID_ENABLED=false` retained
 - [ ] PostGIS: remaining 8 DFW city boundary layers
 
 ## Sprint 7 deliverables (closed)
