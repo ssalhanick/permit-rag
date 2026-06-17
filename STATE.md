@@ -1,10 +1,10 @@
 # permit_rag — State
 
-_Updated: 2026-06-16b (Sprint 7 close)_
+_Updated: 2026-06-16c (Sprint 8 — Task 16F complete)_
 
 ## Phase
 
-Sprint 7 closed. **60 tests passing.** All graph layer tasks (16A–16E) live.
+Sprint 8 in progress. **72 tests passing.** Task 16F live.
 
 ## Blocked on
 
@@ -12,9 +12,8 @@ Sprint 7 closed. **60 tests passing.** All graph layer tasks (16A–16E) live.
 
 ## Next tasks
 
-1. Sprint 8 — Task 16F (optional): tag cited chunks as graph nodes after each `/query/answer` call
-2. Sprint 8 — BM25 A/B eval: measure hybrid vs dense-only retrieval quality delta
-3. Sprint 8 — Add remaining 8 DFW city boundary layers to PostGIS (see `docs/backlog.md`)
+1. Sprint 8 — BM25 A/B eval: measure hybrid vs dense-only retrieval quality delta
+2. Sprint 8 — Add remaining 8 DFW city boundary layers to PostGIS (see `docs/backlog.md`)
 
 ## Module status
 
@@ -24,8 +23,8 @@ ingestion ✅ db ✅ rag ✅ api ✅ eval ✅ frontend ✅ graph ✅
 |--------|---------------|
 | db | pgvector + PostGIS live; `corpus_writer`/`app_reader` roles; migrations 001–010 applied; `db/graph_client.py` singleton Bolt driver |
 | rag | Hybrid retrieval; provenance reranker; multi-permit classifier; jurisdiction resolver; conflict detector (lightweight + graph-backed) |
-| api | `/query`, `/query/answer`, `/health` (+ `graph_health`), `/documents/*`, `/admin/*`, `/upload`; LangSmith tracing |
-| graph | Neo4j CE in docker-compose; constraints + indexes applied; Postgres→Graph sync via `scripts/sync_graph.py`; cross-authority Cypher traversal |
+| api | `/query`, `/query/answer`, `/health` (+ `graph_health`), `/documents/*`, `/admin/*`, `/upload`; LangSmith tracing; BackgroundTask graph citation signals |
+| graph | Neo4j CE in docker-compose; constraints + indexes applied; Postgres→Graph sync via `scripts/sync_graph.py`; cross-authority Cypher traversal; citation signal enrichment (`record_cited_chunks`) |
 | eval | RAGAs eval + guard live; baseline `ragas_20260531_122639.json`; faithfulness gate `>= 0.85` |
 | frontend | Vite+React; chat/citation viewer; document browser; upload UX; address autocomplete; conflict warnings panel |
 
@@ -55,23 +54,32 @@ ingestion ✅ db ✅ rag ✅ api ✅ eval ✅ frontend ✅ graph ✅
 - **CORS**: env-driven allowlist (`API_CORS_ALLOW_ORIGINS`); wildcard only via `API_CORS_ALLOW_ALL=true`.
 - **DB roles**: rotate passwords before any shared deployment; prod → Supabase service_role/anon RLS.
 - **Graph health**: `graph_health` in `/health` is additive — Neo4j down does not flip `status` to `unhealthy`.
+- **Graph citation signals**: `record_cited_chunks()` fires as `BackgroundTask` after `/query/answer` — zero latency impact; non-raising.
 - **Eval baseline**: do not change baseline file without a deliberate sprint gate review.
 
-## Sprint 7 deliverables (current sprint)
+## Sprint 8 deliverables (current sprint)
+
+- [x] Task 16F: `record_cited_chunks()` in `db/graph_client.py` — `(:Query)-[:CITED]->(:Chunk)` edges; stamps `last_cited_at`, `last_cited_query`, `citation_count` on cited Chunk nodes
+- [x] Task 16F: wired via `BackgroundTasks` in `api/routes/query.py` — fires after HTTP response, zero latency impact
+- [x] `tests/test_sprint8.py` — 12 tests → **72 total** ✅
+- [x] Live validation: `GET /health` → `graph_health=True` ✅ | eval guard PASS ✅
+- [ ] BM25 A/B eval: hybrid vs dense-only RAGAs delta
+- [ ] PostGIS: remaining 8 DFW city boundary layers
+
+## Sprint 7 deliverables (closed)
 
 - [x] Task 16D: `graph_health: bool` in `GET /health` — non-blocking `ping()`, additive only
 - [x] Task 16E: `find_cross_authority_conflicts()` Cypher traversal in `db/graph_client.py`
 - [x] Task 16E: `detect_conflicts_with_graph()` in `rag/conflict_detector.py` — graph Tier B path with lightweight fallback
 - [x] `tests/test_sprint7.py` — 20 tests → **60 total** ✅
-- [x] Live validation: `GET /health` → `graph_health=True` ✅ | eval guard PASS ✅
 
-_For full per-task history see `journals/session_260616a.md` (Sprint 6) and `journals/session_260616b.md` (Sprint 7)._
+_For full per-task history see `journals/session_260616a.md` (Sprint 6), `journals/session_260616b.md` (Sprint 7), `journals/session_260616c.md` (Sprint 8 Task 16F)._
 
 ## Canonical validation commands
 
 ```powershell
 # 1. Full test suite
-py -m pytest tests/test_sprint5.py tests/test_sprint6.py tests/test_sprint7.py -v
+py -m pytest tests/test_sprint5.py tests/test_sprint6.py tests/test_sprint7.py tests/test_sprint8.py -v
 
 # 2. Health check (API must be running)
 Invoke-RestMethod -Uri "http://localhost:8000/health" -Method Get
@@ -85,6 +93,10 @@ $env:RAGAS_ANSWER_CACHE_ENABLED="false"; py -m evaluation.ragas_eval --export
 # 5. Graph sync dry-run
 py -m scripts.sync_graph --dry-run
 
-# 6. Frontend tests
+# 6. BM25 A/B eval (Sprint 8)
+$env:RETRIEVAL_HYBRID_ENABLED="true"; $env:RAGAS_ANSWER_CACHE_ENABLED="false"; py -m evaluation.ragas_eval --export
+
+# 7. Frontend tests
 cd frontend; npm run test
 ```
+

@@ -7,25 +7,23 @@ plus Texas state and federal regulations.
 
 ---
 
-## Current Status (2026-06-06)
+## Current Status (2026-06-16)
 
-- Sprint 4 is closed and signed off (Task 14A durability + Task 14B GIS pilot validation complete).
-- Purge audit logging is verified with a live event (`mansfieldtx-tx-2` audit validation purge).
-- Restore decision: do not restore `mansfieldtx-tx-2` now because it is outside active catalog/registry scope.
-- Next scoped sprint task: add `ConflictWarning` surfacing in answer flow when retrieved authorities conflict.
-
-Validation commands for the next scoped task:
-
-```powershell
-cd "c:\Users\ssalh\Grad School\2026\02_Summer\MIS6V99\permit_rag"; py -m pytest tests/test_query_answer_route.py tests/test_permit_classifier.py -v
-```
+- **Sprint 8 in progress** — Task 16F (graph citation signals) complete.
+- **72 tests passing** (Sprint 5: 16 · Sprint 6: 24 · Sprint 7: 20 · Sprint 8: 12).
+- `GET /health` returns `status=healthy graph_health=True`; eval guard PASS (faithfulness `0.910`).
+- After every `/query/answer` call, cited `Chunk` nodes are tagged in Neo4j via a non-blocking `BackgroundTask` (`record_cited_chunks()`).
+- Next: BM25 A/B eval (hybrid vs dense-only retrieval quality delta).
 
 ```powershell
-cd "c:\Users\ssalh\Grad School\2026\02_Summer\MIS6V99\permit_rag"; py -m pytest tests/test_documents_routes.py tests/test_upload_route.py -v
-```
+# Full test suite
+py -m pytest tests/test_sprint5.py tests/test_sprint6.py tests/test_sprint7.py tests/test_sprint8.py -v
 
-```powershell
-cd "c:\Users\ssalh\Grad School\2026\02_Summer\MIS6V99\permit_rag"; Invoke-RestMethod -Uri "http://localhost:8000/query/answer" -Method Post -ContentType "application/json" -Body '{"query":"Project includes mixed occupancy requirements and conflicting municipal references. What applies?","top_k":5,"municipality":"dallas"}'
+# Health check (API must be running)
+Invoke-RestMethod -Uri "http://localhost:8000/health" -Method Get
+
+# Eval guard (no regression)
+py -m evaluation.eval_guard
 ```
 
 ---

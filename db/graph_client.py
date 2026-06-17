@@ -344,3 +344,71 @@ def find_cross_authority_conflicts(
             exc,
         )
         return []
+
+
+# ── Query-signal enrichment (Task 16F) ───────────────────────
+
+
+def record_cited_chunks(
+    *,
+    query_text: str,
+    session_id: str,
+    cited_pairs: list[tuple[str, int]],
+    cited_at_iso: str,
+) -> None:
+    """
+    Tag cited Chunk nodes with query-signal metadata after a /query/answer call.
+
+    Creates (or merges) a :Query node keyed on (session_id, cited_at_iso) and
+    draws a :CITED edge to each cited :Chunk node.  Also increments
+    ``citation_count`` and stamps ``last_cited_at`` / ``last_cited_query`` on
+    each Chunk so the graph captures retrieval-frequency signals over time.
+
+    Non-raising: all exceptions are caught and logged at WARNING level.
+    Callers (BackgroundTasks) proceed even when Neo4j is unreachable.
+
+    Args:
+        query_text:    The natural-language query from the request body.
+        session_id:    X-Client-Session-Id header value (or 'unknown').
+        cited_pairs:   List of (doc_id, chunk_index) tuples that were cited.
+        cited_at_iso:  UTC ISO-8601 timestamp string for the citation event.
+    """
+    if not cited_pairs:
+        log.debug("record_cited_chunks: no cited pairs — skipping graph write")
+        return
+
+    # Cypher: merge Query node, then for each chunk merge the CITED edge
+    # and update citation signals on the Chunk node.
+    cypher = """
+    MERGE (q:Query {session_id: $session_id, cited_at: $cited_at})
+    SET q.query_text = $query_text
+
+    WITH q
+    UNWIND $cited_pairs AS pair
+    MATCH (c:Chunk {doc_id: pair[0], chunk_index: pair[1]})
+    MERGE (q)-[:CITED]->(c)
+    SET c.last_cited_at    = $cited_at,
+        c.last_cited_query = $query_text,
+        c.citation_count   = coalesce(c.citation_count, 0) + 1
+    """
+    try:
+        with get_session() as session:
+            session.run(
+                cypher,
+                session_id=session_id,
+                cited_at=cited_at_iso,
+                query_text=query_text,
+                cited_pairs=[[doc_id, chunk_index] for doc_id, chunk_index in cited_pairs],
+            )
+        log.info(
+            "Graph citation signals written: session=%s cited=%d chunk(s) at %s",
+            session_id,
+            len(cited_pairs),
+            cited_at_iso,
+        )
+    except Exception as exc:
+        log.warning(
+            "record_cited_chunks failed (session=%s): %s — graph enrichment skipped",
+            session_id,
+            exc,
+        )

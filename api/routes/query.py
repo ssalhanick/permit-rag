@@ -12,9 +12,10 @@ from __future__ import annotations
 import logging
 import os
 import time
+from datetime import datetime, timezone
 from typing import Any
 
-from fastapi import APIRouter, HTTPException, Request
+from fastapi import APIRouter, BackgroundTasks, HTTPException, Request
 
 from api.schemas import (
     AHJDisclaimer,
@@ -195,7 +196,11 @@ def query_chunks(body: QueryRequest) -> QueryResponse:
         "the source chunks used as context."
     ),
 )
-def query_answer(body: QueryRequest, request: Request) -> AnswerResponse:
+def query_answer(
+    body: QueryRequest,
+    request: Request,
+    background_tasks: BackgroundTasks,
+) -> AnswerResponse:
     """Retrieve chunks and generate a cited answer via Claude."""
     from rag.generator import generate_answer
     from rag.permit_classifier import classify_permit_types
@@ -423,6 +428,20 @@ def query_answer(body: QueryRequest, request: Request) -> AnswerResponse:
             "Fix2 citation filter: no in-context citations found — returning all %d chunks",
             len(all_chunks),
         )
+
+    # Task 16F: tag cited chunks in Neo4j graph (background, non-blocking)
+    if cited_keys:
+        try:
+            from db import graph_client as _gc
+            background_tasks.add_task(
+                _gc.record_cited_chunks,
+                query_text=body.query,
+                session_id=session_id,
+                cited_pairs=list(cited_keys),
+                cited_at_iso=datetime.now(timezone.utc).isoformat(),
+            )
+        except Exception as exc:
+            log.warning("16F: could not schedule graph enrichment task: %s", exc)
 
     diagnostics = DiagnosticsResponse(
         top_similarity=result.top_similarity,
