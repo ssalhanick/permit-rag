@@ -1,5 +1,6 @@
-import React, { useMemo, useState } from "react";
-import { API_BASE_URL, DEFAULT_BASE_URL, fetchAnswer, fetchHealth } from "./api.js";
+import React, { useEffect, useMemo, useState } from "react";
+import { API_BASE_URL, DEFAULT_BASE_URL, fetchAnswer, fetchHealth, fetchProjects } from "./api.js";
+import { useAuth } from "./context/AuthContext.jsx";
 import AddressAutocomplete from "./components/AddressAutocomplete.jsx";
 
 const DEFAULT_FORM = {
@@ -48,6 +49,7 @@ const QUICK_TESTS = [
 ];
 
 function App() {
+  const { user } = useAuth();
   const initialSessionId = useMemo(() => `web-${Date.now()}`, []);
   const [form, setForm] = useState(DEFAULT_FORM);
   const [loading, setLoading] = useState(false);
@@ -58,6 +60,33 @@ function App() {
   const [debugLogs, setDebugLogs] = useState([]);
   const [sessionId, setSessionId] = useState(initialSessionId);
   const [healthState, setHealthState] = useState({ status: "idle", detail: "" });
+  const [projects, setProjects] = useState([]);
+  const [activeProjectId, setActiveProjectId] = useState("");
+
+  // Prefill search query if reloading from profile page
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const q = params.get("q");
+    const m = params.get("m");
+    if (q) {
+      setForm((prev) => ({
+        ...prev,
+        query: q,
+        municipality: m || "",
+      }));
+    }
+  }, []);
+
+  useEffect(() => {
+    if (user) {
+      fetchProjects()
+        .then((res) => setProjects(res.data || []))
+        .catch(() => {});
+    } else {
+      setProjects([]);
+      setActiveProjectId("");
+    }
+  }, [user]);
 
   const canSubmit = useMemo(() => form.query.trim().length >= 3 && !loading, [form.query, loading]);
 
@@ -128,6 +157,9 @@ function App() {
       address: form.address.trim() || null,
       min_similarity: 0.0,
     };
+    if (activeProjectId) {
+      payload.project_id = activeProjectId;
+    }
     const requestId = `answer-${Date.now()}`;
 
     try {
@@ -307,6 +339,23 @@ function App() {
               }}
             />
           </div>
+
+          {user && projects.length > 0 && (
+            <div style={{ marginBottom: "14px" }}>
+              <label htmlFor="activeProjectId">Project Workspace (optional)</label>
+              <select
+                id="activeProjectId"
+                value={activeProjectId}
+                onChange={(e) => setActiveProjectId(e.target.value)}
+              >
+                <option value="">-- No project context --</option>
+                {projects.map(p => (
+                  <option key={p.id} value={p.id}>{p.name}</option>
+                ))}
+              </select>
+              <p className="field-hint">Tag query metadata in LangSmith logs under this project.</p>
+            </div>
+          )}
 
           <button type="submit" disabled={!canSubmit}>
             {loading ? "Asking..." : "Ask permit_rag"}

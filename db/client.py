@@ -117,6 +117,8 @@ def insert_document(
     source_etag: Optional[str] = None,
     local_path: Optional[str] = None,
     source_tier: int = 1,  # Sprint 1: 1=corpus, 2=user ordinance, 3=project doc
+    project_id: Optional[UUID] = None,
+    uploaded_by: Optional[UUID] = None,
 ) -> dict[str, Any]:
     """
     Insert a document row. Returns the full row as a dict.
@@ -129,7 +131,8 @@ def insert_document(
             doc_id, source_url, municipality, authority_level,
             doc_type, subject_tags, effective_date, document_status,
             is_current, retrieval_weight, review_due,
-            checksum_sha256, source_etag, local_path, source_tier
+            checksum_sha256, source_etag, local_path, source_tier,
+            project_id, uploaded_by
         ) VALUES (
             %(doc_id)s, %(source_url)s, %(municipality)s,
             %(authority_level)s::authority_level,
@@ -138,7 +141,7 @@ def insert_document(
             %(effective_date)s, %(document_status)s::document_status,
             %(is_current)s, %(retrieval_weight)s, %(review_due)s,
             %(checksum_sha256)s, %(source_etag)s, %(local_path)s,
-            %(source_tier)s
+            %(source_tier)s, %(project_id)s, %(uploaded_by)s
         )
         ON CONFLICT (doc_id) DO UPDATE SET
             source_url       = EXCLUDED.source_url,
@@ -154,7 +157,9 @@ def insert_document(
             checksum_sha256  = EXCLUDED.checksum_sha256,
             source_etag      = EXCLUDED.source_etag,
             local_path       = EXCLUDED.local_path,
-            source_tier      = EXCLUDED.source_tier
+            source_tier      = EXCLUDED.source_tier,
+            project_id       = EXCLUDED.project_id,
+            uploaded_by      = EXCLUDED.uploaded_by
         RETURNING *;
     """
     params = {
@@ -173,6 +178,8 @@ def insert_document(
         "source_etag": source_etag,
         "local_path": local_path,
         "source_tier": source_tier,  # Sprint 1
+        "project_id": project_id,
+        "uploaded_by": uploaded_by,
     }
     with get_conn() as conn:
         row = conn.execute(sql, params).fetchone()
@@ -642,6 +649,8 @@ def insert_query_log(
     answer_text: Optional[str] = None,
     citations: Optional[list[dict]] = None,
     latency_ms: Optional[int] = None,
+    user_id: Optional[UUID] = None,
+    project_id: Optional[UUID] = None,
 ) -> dict[str, Any]:
     """Log a RAG query for auditing and evaluation."""
     import json as _json
@@ -649,11 +658,12 @@ def insert_query_log(
     sql = """
         INSERT INTO query_log
             (query_text, municipality, top_k, chunk_ids,
-             answer_text, citations, model, latency_ms)
+             answer_text, citations, model, latency_ms, user_id, project_id)
         VALUES
             (%(query_text)s, %(municipality)s, %(top_k)s,
              %(chunk_ids)s, %(answer_text)s,
-             %(citations)s::jsonb, %(model)s, %(latency_ms)s)
+             %(citations)s::jsonb, %(model)s, %(latency_ms)s,
+             %(user_id)s, %(project_id)s)
         RETURNING *;
     """
     params = {
@@ -665,6 +675,8 @@ def insert_query_log(
         "citations": _json.dumps(citations or []),
         "model": model,
         "latency_ms": latency_ms,
+        "user_id": user_id,
+        "project_id": project_id,
     }
     with get_conn() as conn:
         row = conn.execute(sql, params).fetchone()
@@ -721,3 +733,365 @@ def ping() -> bool:
     except Exception as exc:
         log.error("Database ping failed: %s", exc)
         return False
+
+
+# ════════════════════════════════════════════════
+#  USERS (Sprint 9)
+# ════════════════════════════════════════════════
+
+def create_user(
+    *,
+    username: str,
+    email: str,
+    password_hash: str,
+    phone_number: Optional[str] = None,
+    role: str = "member",
+) -> dict[str, Any]:
+    """Insert a new user row."""
+    sql = """
+        INSERT INTO users (username, email, phone_number, password_hash, role)
+        VALUES (%(username)s, %(email)s, %(phone_number)s, %(password_hash)s, %(role)s)
+        RETURNING *;
+    """
+    with get_conn() as conn:
+        row = conn.execute(sql, {
+            "username": username,
+            "email": email,
+            "phone_number": phone_number,
+            "password_hash": password_hash,
+            "role": role,
+        }).fetchone()
+        conn.commit()
+    log.info("Created user: %s (role=%s)", username, role)
+    return row
+
+
+def get_user_by_identifier(identifier: str) -> Optional[dict[str, Any]]:
+    """Look up user by username, email, or phone_number (lowercase username/email check)."""
+    sql = """
+        SELECT * FROM users 
+        WHERE (username = lower(%s) OR email = lower(%s) OR phone_number = %s)
+          AND is_active = true;
+    """
+    with get_conn() as conn:
+        return conn.execute(sql, (identifier, identifier, identifier)).fetchone()
+
+
+def get_user_by_id(user_id: UUID) -> Optional[dict[str, Any]]:
+    """Fetch user row by primary key UUID."""
+    sql = "SELECT * FROM users WHERE id = %s AND is_active = true;"
+    with get_conn() as conn:
+        return conn.execute(sql, (user_id,)).fetchone()
+
+
+def update_refresh_token_hash(
+    user_id: UUID,
+    token_hash: Optional[str],
+    family: Optional[UUID] = None,
+) -> None:
+    """Store or clear refresh_token_hash + token_family atomically."""
+    sql = """
+        UPDATE users 
+        SET refresh_token_hash = %(hash)s,
+            token_family = %(family)s
+        WHERE id = %(id)s;
+    """
+    with get_conn() as conn:
+        conn.execute(sql, {"hash": token_hash, "family": family, "id": user_id})
+        conn.commit()
+
+
+def get_refresh_token_meta(user_id: UUID) -> Optional[dict[str, Any]]:
+    """Return {refresh_token_hash, token_family} for revocation check."""
+    sql = "SELECT refresh_token_hash, token_family FROM users WHERE id = %s;"
+    with get_conn() as conn:
+        return conn.execute(sql, (user_id,)).fetchone()
+
+
+def deactivate_user(user_id: UUID) -> Optional[dict[str, Any]]:
+    """Soft-delete user: set is_active=False, clear refresh_token_hash."""
+    sql = """
+        UPDATE users 
+        SET is_active = false, refresh_token_hash = NULL 
+        WHERE id = %s 
+        RETURNING *;
+    """
+    with get_conn() as conn:
+        row = conn.execute(sql, (user_id,)).fetchone()
+        conn.commit()
+    return row
+
+
+# ════════════════════════════════════════════════
+#  PROJECTS (Sprint 9)
+# ════════════════════════════════════════════════
+
+def create_project(
+    *,
+    name: str,
+    owner_user_id: UUID,
+    description: Optional[str] = None,
+    municipality: Optional[str] = None,
+) -> dict[str, Any]:
+    """Create a project and auto-enroll the owner in one transaction."""
+    sql_project = """
+        INSERT INTO projects (name, owner_user_id, description, municipality)
+        VALUES (%(name)s, %(owner_user_id)s, %(description)s, %(municipality)s)
+        RETURNING *;
+    """
+    sql_member = """
+        INSERT INTO project_members (project_id, user_id, role)
+        VALUES (%(project_id)s, %(user_id)s, 'owner');
+    """
+    with get_conn() as conn:
+        row = conn.execute(sql_project, {
+            "name": name,
+            "owner_user_id": owner_user_id,
+            "description": description,
+            "municipality": municipality,
+        }).fetchone()
+        conn.execute(sql_member, {"project_id": row["id"], "user_id": owner_user_id})
+        conn.commit()
+    log.info("Created project: %s (owner=%s)", name, owner_user_id)
+    return row
+
+
+def get_project(project_id: UUID) -> Optional[dict[str, Any]]:
+    """Fetch active project by UUID."""
+    sql = "SELECT * FROM projects WHERE id = %s AND is_active = true;"
+    with get_conn() as conn:
+        return conn.execute(sql, (project_id,)).fetchone()
+
+
+def list_projects_for_user(user_id: UUID) -> list[dict[str, Any]]:
+    """All active projects where user is a member (any role)."""
+    sql = """
+        SELECT p.*
+        FROM projects p
+        JOIN project_members pm ON pm.project_id = p.id
+        WHERE pm.user_id = %s AND p.is_active = true
+        ORDER BY p.created_at DESC;
+    """
+    with get_conn() as conn:
+        return conn.execute(sql, (user_id,)).fetchall()
+
+
+def update_project(
+    project_id: UUID,
+    *,
+    name: Optional[str] = None,
+    description: Optional[str] = None,
+    municipality: Optional[str] = None,
+) -> Optional[dict[str, Any]]:
+    """Update mutable project fields."""
+    assignments: list[str] = []
+    params: dict[str, Any] = {"id": project_id}
+    if name is not None:
+        assignments.append("name = %(name)s")
+        params["name"] = name
+    if description is not None:
+        assignments.append("description = %(description)s")
+        params["description"] = description
+    if municipality is not None:
+        assignments.append("municipality = %(municipality)s")
+        params["municipality"] = municipality
+    if not assignments:
+        return get_project(project_id)
+    sql = f"UPDATE projects SET {', '.join(assignments)} WHERE id = %(id)s RETURNING *;"
+    with get_conn() as conn:
+        row = conn.execute(sql, params).fetchone()
+        conn.commit()
+    return row
+
+
+def transfer_project_ownership(project_id: UUID, new_owner_id: UUID) -> Optional[dict[str, Any]]:
+    """Transfer ownership atomically: projects.owner_user_id and project_members roles."""
+    with get_conn() as conn:
+        proj = conn.execute("SELECT owner_user_id FROM projects WHERE id = %s;", (project_id,)).fetchone()
+        if not proj:
+            return None
+        old_owner_id = proj["owner_user_id"]
+        conn.execute("UPDATE projects SET owner_user_id = %s WHERE id = %s;", (new_owner_id, project_id))
+        conn.execute("""
+            INSERT INTO project_members (project_id, user_id, role)
+            VALUES (%s, %s, 'owner')
+            ON CONFLICT (project_id, user_id) DO UPDATE SET role = 'owner';
+        """, (project_id, new_owner_id))
+        conn.execute("""
+            UPDATE project_members SET role = 'editor' 
+            WHERE project_id = %s AND user_id = %s;
+        """, (project_id, old_owner_id))
+        conn.commit()
+    return get_project(project_id)
+
+
+def archive_project(project_id: UUID) -> Optional[dict[str, Any]]:
+    """Soft-delete: set is_active=False."""
+    sql = "UPDATE projects SET is_active = false WHERE id = %s RETURNING *;"
+    with get_conn() as conn:
+        row = conn.execute(sql, (project_id,)).fetchone()
+        conn.commit()
+    return row
+
+
+# ════════════════════════════════════════════════
+#  PROJECT MEMBERS (Sprint 9)
+# ════════════════════════════════════════════════
+
+def get_project_role(project_id: UUID, user_id: UUID) -> Optional[str]:
+    """Return role string or None if not a member."""
+    sql = "SELECT role FROM project_members WHERE project_id = %s AND user_id = %s;"
+    with get_conn() as conn:
+        row = conn.execute(sql, (project_id, user_id)).fetchone()
+    return row["role"] if row else None
+
+
+def list_project_members(project_id: UUID) -> list[dict[str, Any]]:
+    """Join with users table: returns user details and role."""
+    sql = """
+        SELECT u.id AS user_id, u.username, u.email, pm.role, pm.invited_at
+        FROM project_members pm
+        JOIN users u ON u.id = pm.user_id
+        WHERE pm.project_id = %s
+        ORDER BY pm.invited_at ASC;
+    """
+    with get_conn() as conn:
+        return conn.execute(sql, (project_id,)).fetchall()
+
+
+def upsert_project_member(project_id: UUID, user_id: UUID, *, role: str) -> dict[str, Any]:
+    """Add or update member role."""
+    sql = """
+        INSERT INTO project_members (project_id, user_id, role)
+        VALUES (%(project_id)s, %(user_id)s, %(role)s::project_role)
+        ON CONFLICT (project_id, user_id) DO UPDATE SET role = EXCLUDED.role
+        RETURNING *;
+    """
+    with get_conn() as conn:
+        row = conn.execute(sql, {"project_id": project_id, "user_id": user_id, "role": role}).fetchone()
+        conn.commit()
+    return row
+
+
+def remove_project_member(project_id: UUID, user_id: UUID) -> bool:
+    """Remove member. Cannot remove owner."""
+    sql = """
+        DELETE FROM project_members 
+        WHERE project_id = %s AND user_id = %s AND role != 'owner';
+    """
+    with get_conn() as conn:
+        cur = conn.execute(sql, (project_id, user_id))
+        conn.commit()
+    return cur.rowcount > 0
+
+
+# ════════════════════════════════════════════════
+#  PROJECT DOCUMENTS (Sprint 9)
+# ════════════════════════════════════════════════
+
+def share_document_to_project(project_id: UUID, document_id: UUID, added_by: UUID) -> dict[str, Any]:
+    """Insert into project_documents (idempotent)."""
+    sql = """
+        INSERT INTO project_documents (project_id, document_id, added_by)
+        VALUES (%(project_id)s, %(document_id)s, %(added_by)s)
+        ON CONFLICT (project_id, document_id) DO NOTHING
+        RETURNING *;
+    """
+    with get_conn() as conn:
+        row = conn.execute(sql, {
+            "project_id": project_id,
+            "document_id": document_id,
+            "added_by": added_by,
+        }).fetchone()
+        conn.commit()
+    return row or {"project_id": project_id, "document_id": document_id}
+
+
+def list_project_documents(project_id: UUID) -> list[dict[str, Any]]:
+    """JOIN documents — returns doc metadata for all docs shared into project."""
+    sql = """
+        SELECT d.*
+        FROM project_documents pd
+        JOIN documents d ON d.id = pd.document_id
+        WHERE pd.project_id = %s
+        ORDER BY d.municipality, d.doc_id;
+    """
+    with get_conn() as conn:
+        return conn.execute(sql, (project_id,)).fetchall()
+
+
+def unshare_document_from_project(project_id: UUID, document_id: UUID) -> bool:
+    """DELETE from project_documents."""
+    sql = "DELETE FROM project_documents WHERE project_id = %s AND document_id = %s;"
+    with get_conn() as conn:
+        cur = conn.execute(sql, (project_id, document_id))
+        conn.commit()
+    return cur.rowcount > 0
+
+
+def get_user_query_history(user_id: UUID) -> list[dict[str, Any]]:
+    """Fetch query log history for a specific user, sorted by newest first."""
+    sql = "SELECT id, query_text, municipality, top_k, answer_text, citations, model, latency_ms, created_at, project_id FROM query_log WHERE user_id = %s ORDER BY created_at DESC;"
+    with get_conn() as conn:
+        return conn.execute(sql, (user_id,)).fetchall()
+
+
+def delete_user_query(user_id: UUID, query_id: UUID) -> bool:
+    """Delete a specific query log entry belonging to the user."""
+    sql = "DELETE FROM query_log WHERE id = %s AND user_id = %s;"
+    with get_conn() as conn:
+        cur = conn.execute(sql, (query_id, user_id))
+        conn.commit()
+    return cur.rowcount > 0
+
+
+def get_all_users() -> list[dict[str, Any]]:
+    """List all users in the system."""
+    sql = "SELECT id, username, email, phone_number, role, is_active, created_at FROM users ORDER BY username ASC;"
+    with get_conn() as conn:
+        return conn.execute(sql).fetchall()
+
+
+def delete_user_and_clean_up(user_id: UUID) -> bool:
+    """Delete user account and safely reassign or clean up their owned projects."""
+    with get_conn() as conn:
+        # Find all projects owned by the user
+        projects = conn.execute(
+            "SELECT id FROM projects WHERE owner_user_id = %s AND is_active = true;",
+            (user_id,)
+        ).fetchall()
+        
+        for p in projects:
+            project_id = p["id"]
+            # Find another member to transfer to
+            candidate = conn.execute(
+                """
+                SELECT user_id, role FROM project_members 
+                WHERE project_id = %s AND user_id != %s
+                ORDER BY CASE WHEN role = 'editor' THEN 1 ELSE 2 END ASC, invited_at ASC
+                LIMIT 1;
+                """,
+                (project_id, user_id)
+            ).fetchone()
+            
+            if candidate:
+                new_owner_id = candidate["user_id"]
+                # Update project owner
+                conn.execute(
+                    "UPDATE projects SET owner_user_id = %s WHERE id = %s;",
+                    (new_owner_id, project_id)
+                )
+                # Change candidate's role to owner
+                conn.execute(
+                    "UPDATE project_members SET role = 'owner' WHERE project_id = %s AND user_id = %s;",
+                    (project_id, new_owner_id)
+                )
+            else:
+                # No other members, delete project
+                conn.execute("DELETE FROM projects WHERE id = %s;", (project_id,))
+        
+        # Delete user (cascades to project_members, set null on project_documents/documents/query_log)
+        cur = conn.execute("DELETE FROM users WHERE id = %s;", (user_id,))
+        conn.commit()
+    return cur.rowcount > 0
+

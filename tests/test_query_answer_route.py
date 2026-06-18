@@ -97,7 +97,9 @@ def test_query_answer_returns_multi_permit_types_and_citations(monkeypatch) -> N
     from api.routes import query as query_route
     import rag.generator as generator_module
     import rag.permit_classifier as classifier_module
+    from db import client as db_client
 
+    monkeypatch.setattr(db_client, "insert_query_log", lambda **kwargs: {})
     monkeypatch.setattr(query_route, "retrieve", lambda *_a, **_k: _retrieval_result())
     monkeypatch.setattr(generator_module, "generate_answer", lambda *_a, **_k: _generation_result())
     monkeypatch.setattr(
@@ -130,7 +132,9 @@ def test_query_answer_classifier_failure_falls_back_to_empty_list(monkeypatch) -
     from api.routes import query as query_route
     import rag.generator as generator_module
     import rag.permit_classifier as classifier_module
+    from db import client as db_client
 
+    monkeypatch.setattr(db_client, "insert_query_log", lambda **kwargs: {})
     monkeypatch.setattr(query_route, "retrieve", lambda *_a, **_k: _retrieval_result())
     monkeypatch.setattr(generator_module, "generate_answer", lambda *_a, **_k: _generation_result())
 

@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useState } from "react";
-import { fetchDocuments, fetchDocumentStatus } from "./api.js";
+import { fetchDocuments, fetchDocumentStatus, fetchProjects, shareDocumentToProject } from "./api.js";
+import { useAuth } from "./context/AuthContext.jsx";
 
 const DEFAULT_FILTERS = {
   municipality: "",
@@ -9,11 +10,15 @@ const DEFAULT_FILTERS = {
 };
 
 export default function DocumentBrowserPage() {
+  const { user } = useAuth();
   const [filters, setFilters] = useState(DEFAULT_FILTERS);
   const [rows, setRows] = useState([]);
   const [statusBuckets, setStatusBuckets] = useState([]);
+  const [projects, setProjects] = useState([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
+  const [shareSuccess, setShareSuccess] = useState("");
+  const [shareError, setShareError] = useState("");
 
   const activeFilterCount = useMemo(() => {
     return Object.values(filters).filter((value) => value.trim().length > 0).length;
@@ -39,6 +44,16 @@ export default function DocumentBrowserPage() {
     loadDocuments();
   }, [filters]);
 
+  useEffect(() => {
+    if (user) {
+      fetchProjects()
+        .then((res) => setProjects(res.data || []))
+        .catch(() => {});
+    } else {
+      setProjects([]);
+    }
+  }, [user]);
+
   function handleChange(event) {
     const { name, value } = event.target;
     setFilters((prev) => ({ ...prev, [name]: value }));
@@ -47,6 +62,20 @@ export default function DocumentBrowserPage() {
   function resetFilters() {
     setFilters(DEFAULT_FILTERS);
   }
+
+  const handleShare = async (docId, projId) => {
+    if (!projId) return;
+    setShareError("");
+    setShareSuccess("");
+    try {
+      await shareDocumentToProject(projId, docId);
+      setShareSuccess("Document shared with project successfully!");
+      setTimeout(() => setShareSuccess(""), 3000);
+    } catch (err) {
+      setShareError(err.message || "Failed to share document.");
+      setTimeout(() => setShareError(""), 3000);
+    }
+  };
 
   return (
     <main className="page">
@@ -83,6 +112,8 @@ export default function DocumentBrowserPage() {
         </div>
 
         {error ? <p className="error">{error}</p> : null}
+        {shareSuccess && <div className="success-box" style={{ marginTop: "10px" }}>{shareSuccess}</div>}
+        {shareError && <div className="error-box" style={{ marginTop: "10px" }}>{shareError}</div>}
       </section>
 
       <section className="panel">
@@ -113,6 +144,7 @@ export default function DocumentBrowserPage() {
                   <th>authority</th>
                   <th>status</th>
                   <th>updated_at</th>
+                  <th>Actions</th>
                 </tr>
               </thead>
               <tbody>
@@ -124,6 +156,24 @@ export default function DocumentBrowserPage() {
                     <td>{row.authority_level}</td>
                     <td>{row.document_status}</td>
                     <td>{row.updated_at}</td>
+                    <td>
+                      {user && projects.length > 0 ? (
+                        <select 
+                          value="" 
+                          onChange={(e) => handleShare(row.id, e.target.value)}
+                          style={{ width: "auto", fontSize: "0.8rem", padding: "2px 6px" }}
+                        >
+                          <option value="">Share with project...</option>
+                          {projects.map(p => (
+                            <option key={p.id} value={p.id}>{p.name}</option>
+                          ))}
+                        </select>
+                      ) : user ? (
+                        <span className="muted" style={{ fontSize: "0.8rem" }}>No projects</span>
+                      ) : (
+                        <span className="muted" style={{ fontSize: "0.8rem" }}>Sign in to share</span>
+                      )}
+                    </td>
                   </tr>
                 ))}
               </tbody>

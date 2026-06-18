@@ -9,9 +9,11 @@ from __future__ import annotations
 import logging
 import os
 from pathlib import Path
-from typing import Optional
+from typing import Optional, Annotated
+from uuid import UUID
 
-from fastapi import APIRouter, Header, HTTPException
+from fastapi import APIRouter, Header, HTTPException, Depends
+from api.auth import get_current_user
 
 from api.schemas import (
     DocumentAdminActionResponse,

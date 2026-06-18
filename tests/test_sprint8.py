@@ -254,7 +254,7 @@ class TestQueryAnswerBackgroundTask:
              patch("api.routes.query._langsmith_enabled", return_value=False), \
              patch("api.routes.query.MIN_GROUNDED_CHUNKS", 1), \
              patch("api.routes.query.MIN_GROUNDED_TOP_SIM", 0.0), \
-             patch("db.graph_client.record_cited_chunks"):
+             patch("db.graph_client.record_cited_chunks") as mock_record:
 
             result = query_answer(
                 body=mock_body,
@@ -262,8 +262,9 @@ class TestQueryAnswerBackgroundTask:
                 background_tasks=mock_bg,
             )
 
-        # BackgroundTasks.add_task must have been called at least once
-        assert mock_bg.add_task.called
+        # BackgroundTasks.add_task must have been called for graph enrichment
+        called_funcs = [call_args[0][0] for call_args in mock_bg.add_task.call_args_list]
+        assert mock_record in called_funcs
 
     def test_background_tasks_param_accepted(self):
         """query_answer signature must accept a BackgroundTasks parameter."""
@@ -337,7 +338,8 @@ class TestQueryAnswerBackgroundTask:
              patch("db.client.get_jurisdiction", return_value=None), \
              patch("api.routes.query._langsmith_enabled", return_value=False), \
              patch("api.routes.query.MIN_GROUNDED_CHUNKS", 1), \
-             patch("api.routes.query.MIN_GROUNDED_TOP_SIM", 0.0):
+             patch("api.routes.query.MIN_GROUNDED_TOP_SIM", 0.0), \
+             patch("db.graph_client.record_cited_chunks") as mock_record:
 
             result = query_answer(
                 body=mock_body,
@@ -346,4 +348,5 @@ class TestQueryAnswerBackgroundTask:
             )
 
         # When no in-context citations, add_task must not be called for graph enrichment
-        assert not mock_bg.add_task.called
+        called_funcs = [call_args[0][0] for call_args in mock_bg.add_task.call_args_list]
+        assert mock_record not in called_funcs

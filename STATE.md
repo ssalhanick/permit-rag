@@ -1,19 +1,21 @@
 # permit_rag — State
 
-_Updated: 2026-06-16c (Sprint 8 — Task 16F complete)_
+_Updated: 2026-06-18 (Sprint 9 — JWT Auth, Projects, and Query History complete)_
 
 ## Phase
 
-Sprint 8 in progress. **72 tests passing.** Task 16F live.
+Sprint 9 complete. **93 tests passing.** JWT Auth, Project Management, User Profiles, and Query History live.
 
 ## Blocked on
 
 - **Mapbox token**: `VITE_MAPBOX_TOKEN` not set in `frontend/.env` — autocomplete degrades to plain text. See `frontend/.env.example`.
+- **RAG Query Hang**: RAG query processing gets hung up in the UI/backend pipeline and fails to log to the user's private query history.
 
 ## Next tasks
 
-1. Sprint 8 — PostGIS: add remaining 8 DFW city boundary layers to PostGIS (see `docs/backlog.md`)
-2. Optional: tune hybrid RRF weights (`RETRIEVAL_RRF_BM25_WEIGHT < 1.0`) and re-eval — path to promoting hybrid without faithfulness regression
+1. **UX/RAG Bugfix**: Diagnose and resolve UI/backend hang during query submission, and ensure successful answers are consistently logged to the user's history.
+2. PostGIS: add remaining 8 DFW city boundary layers to PostGIS (see `docs/backlog.md`)
+3. Optional: tune hybrid RRF weights (`RETRIEVAL_RRF_BM25_WEIGHT < 1.0`) and re-eval — path to promoting hybrid without faithfulness regression
 
 ## Module status
 
@@ -58,7 +60,7 @@ ingestion ✅ db ✅ rag ✅ api ✅ eval ✅ frontend ✅ graph ✅
 - **Hybrid retrieval**: `RETRIEVAL_HYBRID_ENABLED=false` default retained — BM25 A/B eval showed hybrid faithfulness `0.810` < gate `0.850` (dense-only `0.910`). Relevancy improved +0.127 but faithfulness gap is disqualifying. Future path: tune `RETRIEVAL_RRF_BM25_WEIGHT < 1.0`.
 - **Eval baseline**: do not change baseline file without a deliberate sprint gate review.
 
-## Sprint 8 deliverables (current sprint)
+## Sprint 8 deliverables (closed)
 
 - [x] Task 16F: `record_cited_chunks()` in `db/graph_client.py` — `(:Query)-[:CITED]->(:Chunk)` edges; stamps `last_cited_at`, `last_cited_query`, `citation_count` on cited Chunk nodes
 - [x] Task 16F: wired via `BackgroundTasks` in `api/routes/query.py` — fires after HTTP response, zero latency impact
@@ -67,6 +69,16 @@ ingestion ✅ db ✅ rag ✅ api ✅ eval ✅ frontend ✅ graph ✅
 - [x] BM25 A/B eval: hybrid faithfulness `0.810` < gate `0.850` — dense-only `RETRIEVAL_HYBRID_ENABLED=false` retained
 - [ ] PostGIS: remaining 8 DFW city boundary layers
 
+## Sprint 9 deliverables (closed)
+
+- [x] JWT Auth & Verification primitives (`api/auth.py`) — Argon2id password hashing, E.164 phone formatting, strict visual-safety username validation rules.
+- [x] Session & JWT Tokens — access and refresh tokens, refresh token hashing in DB, token family rotation (reuse prevention), logout-all-sessions.
+- [x] Project CRUD & Lifecycle — Projects table, project members table with roles (owner, editor, viewer), ownership transfer, cascading deletion.
+- [x] Document Sharing & Binding — Project documents join table, RBAC checks on sharing, binding on upload (via optional project_id form field).
+- [x] Query History & Deletion — Private, user-scoped query history logging and single-query deletion controls.
+- [x] React Frontend Integration — Wired JWT login/register, token auto-refresh interceptor, project workspace manager, collaborator role controls, query histories, and document management.
+- [x] `tests/test_sprint9.py` — 21 tests → **93 total** ✅
+
 ## Sprint 7 deliverables (closed)
 
 - [x] Task 16D: `graph_health: bool` in `GET /health` — non-blocking `ping()`, additive only
@@ -74,13 +86,13 @@ ingestion ✅ db ✅ rag ✅ api ✅ eval ✅ frontend ✅ graph ✅
 - [x] Task 16E: `detect_conflicts_with_graph()` in `rag/conflict_detector.py` — graph Tier B path with lightweight fallback
 - [x] `tests/test_sprint7.py` — 20 tests → **60 total** ✅
 
-_For full per-task history see `journals/session_260616a.md` (Sprint 6), `journals/session_260616b.md` (Sprint 7), `journals/session_260616c.md` (Sprint 8 Task 16F)._
+_For full per-task history see journals/session_260616a.md (Sprint 6), journals/session_260616b.md (Sprint 7), journals/session_260616c.md (Sprint 8 Task 16F)._
 
 ## Canonical validation commands
 
 ```powershell
 # 1. Full test suite
-py -m pytest tests/test_sprint5.py tests/test_sprint6.py tests/test_sprint7.py tests/test_sprint8.py -v
+py -m pytest tests/test_sprint5.py tests/test_sprint6.py tests/test_sprint7.py tests/test_sprint8.py tests/test_sprint9.py -v
 
 # 2. Health check (API must be running)
 Invoke-RestMethod -Uri "http://localhost:8000/health" -Method Get

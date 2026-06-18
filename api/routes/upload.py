@@ -21,14 +21,17 @@ import shutil
 from pathlib import Path
 from typing import Annotated, Optional
 
+from uuid import UUID
 from fastapi import APIRouter, BackgroundTasks, Depends, File, Form, HTTPException, UploadFile
 from fastapi.security import APIKeyHeader
 from pydantic import BaseModel
+from api.auth import get_optional_current_user
 from db.client import (
     delete_chunks_for_document,
     insert_chunks,
     insert_document,
     update_document_admin_fields,
+    share_document_to_project,
 )
 from ingestion.chunker import chunk_document
 from ingestion.embedder import embed_document
@@ -67,16 +70,25 @@ def _failure_status(local_path: str) -> str:
 _token_header = APIKeyHeader(name="X-Admin-Token", auto_error=False)
 
 
-def _require_admin(token: str | None = Depends(_token_header)) -> None:
-    """Raise 401/403 if the request lacks a valid admin token."""
+def _require_admin_or_jwt(
+    token: str | None = Depends(_token_header),
+    current_user: Optional[dict] = Depends(get_optional_current_user),
+) -> Optional[dict]:
+    """Require either a valid X-Admin-Token or a valid logged-in JWT user."""
     required = os.environ.get("API_ADMIN_AUTH_REQUIRED", "true").lower() not in {"0", "false", "no"}
     if not required:
-        return
-    expected = os.environ.get("API_ADMIN_TOKEN", "")
-    if not expected:
-        raise HTTPException(status_code=500, detail="API_ADMIN_TOKEN is not configured.")
-    if token != expected:
-        raise HTTPException(status_code=401, detail="Invalid or missing admin token.")
+        return current_user or {"user_id": None, "role": "admin", "username": "system-admin"}
+
+    # Check legacy X-Admin-Token
+    expected = os.environ.get("API_ADMIN_TOKEN", "").strip()
+    if expected and token == expected:
+        return {"user_id": None, "role": "admin", "username": "system-admin"}
+
+    # Check JWT user
+    if current_user:
+        return current_user
+
+    raise HTTPException(status_code=401, detail="Authentication required. Provide a valid admin token or log in.")
 
 
 # ── Background processing task ───────────────────────────────
@@ -91,12 +103,14 @@ def _process_upload(
     doc_type: str,
     subject_tags: list[str],
     source_tier: int,
+    project_id: Optional[UUID] = None,
+    uploaded_by: Optional[UUID] = None,
 ) -> None:
     """
     Run in background: insert document row, chunk, and embed.
     Sets document_status = 'active' on success, 'needs_ocr' on failure.
     """
-    log.info("Background processing started for doc_id=%s", doc_id)
+    log.info("Background processing started for doc_id=%s project_id=%s uploaded_by=%s", doc_id, project_id, uploaded_by)
     try:
         checksum = hashlib.sha256(Path(local_path).read_bytes()).hexdigest()
         doc_row = insert_document(
@@ -110,8 +124,13 @@ def _process_upload(
             checksum_sha256=checksum,
             local_path=local_path,
             source_tier=source_tier,
+            project_id=project_id,
+            uploaded_by=uploaded_by,
         )
         document_uuid = doc_row["id"]
+        if project_id:
+            share_document_to_project(project_id, document_uuid, uploaded_by)
+
         chunk_result = chunk_document(doc_id)
         chunks = chunk_result["chunks"]
         if not chunks and _is_html_path(local_path):
@@ -173,7 +192,7 @@ VALID_DOC_TYPES = {
 )
 async def upload_document(
     background_tasks: BackgroundTasks,
-    _auth: None = Depends(_require_admin),
+    auth_user: Optional[dict] = Depends(_require_admin_or_jwt),
     file: UploadFile = File(..., description="PDF or HTML file to upload."),
     doc_id: str = Form(..., description="Unique document identifier (e.g. 'plano-pool-ordinance-2024')."),
     municipality: str = Form(..., description="Municipality string matching documents table (e.g. 'plano')."),
@@ -182,6 +201,7 @@ async def upload_document(
     subject_tags: str = Form(default="", description="Comma-separated subject tags (e.g. 'pools,setbacks')."),
     source_tier: int = Form(default=2, description="Source tier: 1=corpus, 2=user ordinance, 3=project doc."),
     source_url: Optional[str] = Form(default=None, description="Source URL if document was obtained online."),
+    project_id: Optional[UUID] = Form(default=None, description="Optional project UUID to bind/share document to."),
 ) -> UploadResponse:
     # ── Validate inputs ──────────────────────────────────────
     suffix = Path(file.filename or "").suffix.lower()
@@ -207,6 +227,14 @@ async def upload_document(
         )
     if source_tier not in (1, 2, 3):
         raise HTTPException(status_code=400, detail="source_tier must be 1, 2, or 3.")
+    if project_id and not db_client.get_project(project_id):
+        raise HTTPException(
+            status_code=404,
+            detail=f"Project {project_id} not found.",
+        )
+
+    # Resolve uploaded_by user_id
+    uploaded_by = auth_user.get("user_id") if (auth_user and isinstance(auth_user, dict)) else None
 
     # ── Save file ────────────────────────────────────────────
     UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
@@ -239,6 +267,8 @@ async def upload_document(
         doc_type=doc_type,
         subject_tags=tags,
         source_tier=source_tier,
+        project_id=project_id,
+        uploaded_by=uploaded_by,
     )
 
     return UploadResponse(

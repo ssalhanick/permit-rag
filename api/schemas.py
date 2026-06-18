@@ -11,7 +11,7 @@ from datetime import date, datetime
 from typing import Literal, Optional
 from uuid import UUID
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, EmailStr
 
 DocumentStatusType = Literal["active", "superseded", "repealed", "needs_ocr", "draft"]
 AuthorityLevelType = Literal["municipal", "county", "state", "federal"]
@@ -75,6 +75,10 @@ class QueryRequest(BaseModel):
         ge=0.0,
         le=1.0,
         description="Discard results below this cosine similarity.",
+    )
+    project_id: Optional[str] = Field(
+        default=None,
+        description="Optional project identifier to bind this query context to in logs and LangSmith.",
     )
 
 
@@ -347,3 +351,86 @@ class DocumentAdminActionResponse(BaseModel):
     action: str = Field(description="Mutation action that was applied.")
     message: str = Field(description="Human-readable mutation result.")
     document: DocumentDetailResponse = Field(description="Updated document metadata.")
+
+
+# ── Sprint 9 — Users & Projects Schemas ──────────────────────
+
+class RegisterRequest(BaseModel):
+    """Registration request payload."""
+    username: str = Field(..., min_length=3, max_length=30, description="Alphanumeric username plus _ . - allowed")
+    password: str = Field(..., min_length=10, description="Minimum 10 characters")
+    email: EmailStr = Field(..., description="Required email address")
+    phone_number: Optional[str] = Field(default=None, description="Optional E.164 phone number")
+
+
+class LoginRequest(BaseModel):
+    """Login request payload."""
+    identifier: str = Field(..., description="Username, email, or phone number")
+    password: str = Field(..., description="User password")
+
+
+class TokenResponse(BaseModel):
+    """Authentication tokens response."""
+    access_token: str = Field(..., description="Short-lived access token")
+    refresh_token: str = Field(..., description="Long-lived refresh token")
+    token_type: str = Field(default="bearer", description="Token scheme")
+
+
+class RefreshRequest(BaseModel):
+    """Token refresh request payload."""
+    refresh_token: str = Field(..., description="Valid refresh token to rotate")
+
+
+class UserResponse(BaseModel):
+    """User representation response."""
+    id: UUID
+    username: str
+    email: str
+    phone_number: Optional[str] = None
+    role: str
+    created_at: datetime
+
+
+class CreateProjectRequest(BaseModel):
+    """Project creation payload."""
+    name: str = Field(..., min_length=1, max_length=120)
+    description: Optional[str] = Field(default=None, max_length=500)
+    municipality: Optional[str] = Field(default=None, description="Default city scope")
+
+
+class ProjectResponse(BaseModel):
+    """Project representation response."""
+    id: UUID
+    name: str
+    description: Optional[str] = None
+    owner_user_id: UUID
+    municipality: Optional[str] = None
+    is_active: bool
+    created_at: datetime
+    updated_at: datetime
+
+
+class ProjectMemberResponse(BaseModel):
+    """Project member details response."""
+    user_id: UUID
+    username: str
+    email: str
+    role: str
+    invited_at: datetime
+
+
+class AddMemberRequest(BaseModel):
+    """Request to enroll a member."""
+    user_id: UUID = Field(..., description="UUID of the user to invite")
+    role: str = Field(default="viewer", pattern=r"^(editor|viewer)$", description="Role: editor or viewer")
+
+
+class TransferOwnershipRequest(BaseModel):
+    """Request to transfer project ownership."""
+    new_owner_id: UUID = Field(..., description="UUID of the new owner")
+
+
+class ShareDocumentRequest(BaseModel):
+    """Request to share a document to a project."""
+    document_id: UUID = Field(..., description="UUID of the document to share")
+

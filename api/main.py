@@ -24,7 +24,14 @@ from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
-from api.routes import admin_router, documents_router, query_router, upload_router
+from api.routes import (
+    admin_router,
+    auth_router,
+    documents_router,
+    projects_router,
+    query_router,
+    upload_router,
+)
 from api.schemas import HealthResponse
 from db.client import close_pool, ping
 from db import graph_client as _graph_client
@@ -95,6 +102,8 @@ app.include_router(query_router)
 app.include_router(documents_router)
 app.include_router(admin_router)
 app.include_router(upload_router)
+app.include_router(auth_router)
+app.include_router(projects_router)
 
 
 # ── Error handling (uniform payload shape) ───────────────────

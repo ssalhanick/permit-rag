@@ -1,5 +1,6 @@
-import React, { useState } from "react";
-import { API_BASE_URL } from "./api.js";
+import React, { useEffect, useState } from "react";
+import { API_BASE_URL, fetchProjects } from "./api.js";
+import { useAuth } from "./context/AuthContext.jsx";
 import { formatUploadError, getUploadBlockers, suggestDocIdFromFilename } from "./uploadUtils.js";
 
 const AUTHORITY_LEVELS = ["municipal", "state", "federal", "regional"];
@@ -31,15 +32,28 @@ const DEFAULT_FORM = {
   subject_tags: "",
   source_tier: 2,
   source_url: "",
+  project_id: "",
 };
 
 export default function UploadPage() {
+  const { user } = useAuth();
   const [form, setForm] = useState(DEFAULT_FORM);
   const [file, setFile] = useState(null);
+  const [projects, setProjects] = useState([]);
   const [adminToken, setAdminToken] = useState("");
   const [status, setStatus] = useState(null); // null | 'loading' | 'success' | 'error'
   const [result, setResult] = useState(null);
   const [error, setError] = useState("");
+
+  useEffect(() => {
+    if (user) {
+      fetchProjects()
+        .then((res) => setProjects(res.data || []))
+        .catch(() => {});
+    } else {
+      setProjects([]);
+    }
+  }, [user]);
 
   const handleChange = (e) => {
     const { name, value } = e.target;
@@ -83,6 +97,9 @@ export default function UploadPage() {
     body.append("source_tier", String(form.source_tier));
     if (form.source_url.trim()) {
       body.append("source_url", form.source_url.trim());
+    }
+    if (form.project_id) {
+      body.append("project_id", form.project_id);
     }
 
     try {
@@ -290,6 +307,24 @@ export default function UploadPage() {
                 onChange={handleChange}
                 placeholder="pools, setbacks, fences"
               />
+
+              {user && projects.length > 0 && (
+                <div style={{ marginTop: "10px" }}>
+                  <label htmlFor="projectId">Bind to Project Workspace (optional)</label>
+                  <select
+                    id="projectId"
+                    name="project_id"
+                    value={form.project_id || ""}
+                    onChange={(e) => setForm(prev => ({ ...prev, project_id: e.target.value }))}
+                  >
+                    <option value="">-- No project (global document) --</option>
+                    {projects.map(p => (
+                      <option key={p.id} value={p.id}>{p.name}</option>
+                    ))}
+                  </select>
+                  <p className="field-hint">Bind this document specifically to one project workspace.</p>
+                </div>
+              )}
             </fieldset>
 
             {/* ── Auth ── */}

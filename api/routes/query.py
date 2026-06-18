@@ -13,10 +13,12 @@ import logging
 import os
 import time
 from datetime import datetime, timezone
-from typing import Any
+from typing import Any, Annotated
+from uuid import UUID
 
-from fastapi import APIRouter, BackgroundTasks, HTTPException, Request
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Request
 
+from api.auth import get_optional_current_user, get_current_user
 from api.schemas import (
     AHJDisclaimer,
     AnswerResponse,
@@ -77,7 +79,13 @@ def _langsmith_enabled() -> bool:
     return True
 
 
-def _start_trace(name: str, run_type: str, inputs: dict[str, Any], parent: Any = None) -> Any:
+def _start_trace(
+    name: str,
+    run_type: str,
+    inputs: dict[str, Any],
+    parent: Any = None,
+    extra: dict[str, Any] | None = None,
+) -> Any:
     """Start a LangSmith run/span safely and return its handle."""
     try:
         if parent is None:
@@ -88,9 +96,10 @@ def _start_trace(name: str, run_type: str, inputs: dict[str, Any], parent: Any =
                 run_type=run_type,
                 inputs=inputs,
                 project_name=os.environ.get("LANGCHAIN_PROJECT", "permit-rag-app"),
+                extra=extra,
             )
         else:
-            run = parent.create_child(name=name, run_type=run_type, inputs=inputs)
+            run = parent.create_child(name=name, run_type=run_type, inputs=inputs, extra=extra)
         run.post()
         return run
     except Exception as exc:
@@ -200,6 +209,7 @@ def query_answer(
     body: QueryRequest,
     request: Request,
     background_tasks: BackgroundTasks,
+    current_user: dict | None = Depends(get_optional_current_user),
 ) -> AnswerResponse:
     """Retrieve chunks and generate a cited answer via Claude."""
     from rag.generator import generate_answer
@@ -237,6 +247,15 @@ def query_answer(
         except Exception as exc:
             log.warning("jurisdiction_resolver failed (%s) — skipping auto-municipality", exc)
 
+    metadata = {}
+    if current_user and isinstance(current_user, dict):
+        metadata["user_id"] = str(current_user["user_id"])
+        metadata["user_role"] = current_user["role"]
+        if "username" in current_user:
+            metadata["username"] = current_user["username"]
+    if body.project_id:
+        metadata["project_id"] = body.project_id
+
     root_trace = _start_trace(
         name="api_query_answer",
         run_type="chain",
@@ -248,6 +267,7 @@ def query_answer(
             "top_k": body.top_k,
             "min_similarity": body.min_similarity,
         },
+        extra={"metadata": metadata} if metadata else None,
     ) if tracing_on else None
 
     # 1. Retrieve
@@ -468,6 +488,25 @@ def query_answer(
         resolved_municipality=resolved_municipality,
         conflict_warnings=conflict_warnings,
     )
+    # Insert query log in Postgres (background, non-blocking)
+    try:
+        from db import client as db_client
+        background_tasks.add_task(
+            db_client.insert_query_log,
+            query_text=body.query,
+            model=gen.model,
+            municipality=body.municipality,
+            top_k=body.top_k,
+            chunk_ids=[c.id for c in cited_chunks],
+            answer_text=gen.answer,
+            citations=[c.model_dump() for c in citations],
+            latency_ms=int((time.perf_counter() - started_at) * 1000),
+            user_id=current_user["user_id"] if (current_user and isinstance(current_user, dict)) else None,
+            project_id=UUID(body.project_id) if body.project_id else None,
+        )
+    except Exception as exc:
+        log.warning("could not schedule Postgres query logging task: %s", exc)
+
     _end_trace(
         root_trace,
         outputs={
@@ -482,3 +521,20 @@ def query_answer(
         },
     )
     return response
+
+
+@router.get("/query/history", response_model=list[dict])
+def get_query_history(current_user: Annotated[dict, Depends(get_current_user)]) -> list[dict]:
+    """Fetch the authenticated user's private query history."""
+    from db import client as db_client
+    rows = db_client.get_user_query_history(current_user["user_id"])
+    return [dict(r) for r in rows]
+
+
+@router.delete("/query/history/{query_id}", status_code=200)
+def delete_query_history(query_id: UUID, current_user: Annotated[dict, Depends(get_current_user)]) -> dict:
+    """Delete a specific query log entry from user history."""
+    from db import client as db_client
+    if not db_client.delete_user_query(current_user["user_id"], query_id):
+        raise HTTPException(status_code=404, detail="Query log entry not found or unauthorized.")
+    return {"detail": "Query log entry deleted successfully."}

@@ -607,3 +607,218 @@ button:disabled {
   color: #9a3412;
 }
 
+/* ── Auth Page & Notifications ────────────────────────────── */
+
+.auth-page {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  min-height: calc(100vh - 100px);
+}
+
+.auth-panel {
+  width: 100%;
+  max-width: 420px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05);
+}
+
+.error-box {
+  background: #fef2f2;
+  border: 1px solid #fca5a5;
+  color: #991b1b;
+  padding: 10px 12px;
+  border-radius: 6px;
+  font-size: 0.875rem;
+  margin-bottom: 14px;
+}
+
+.success-box {
+  background: #f0fdf4;
+  border: 1px solid #86efac;
+  color: #166534;
+  padding: 10px 12px;
+  border-radius: 6px;
+  font-size: 0.875rem;
+  margin-bottom: 14px;
+}
+
+.auth-toggle {
+  text-align: center;
+  margin-top: 16px;
+}
+
+.text-button {
+  background: none;
+  border: none;
+  color: #2563eb;
+  cursor: pointer;
+  padding: 0;
+  font-size: 0.875rem;
+  text-decoration: underline;
+}
+
+.text-button:hover {
+  color: #1d4ed8;
+}
+
+.delete-text {
+  color: #dc2626;
+  text-decoration: none;
+}
+
+.delete-text:hover {
+  color: #b91c1c;
+  text-decoration: underline;
+}
+
+/* ── Projects Workspace Grid ──────────────────────────────── */
+
+.project-page {
+  max-width: 1200px;
+}
+
+.project-grid {
+  display: grid;
+  grid-template-columns: 320px 1fr;
+  gap: 20px;
+  align-items: start;
+}
+
+.project-list-items {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.project-list-item-btn {
+  width: 100%;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  text-align: left;
+  background: #fff;
+  border: 1px solid #e2e8f0;
+  color: #334155;
+  padding: 10px 12px;
+  transition: all 0.15s;
+}
+
+.project-list-item-btn:hover {
+  background: #f8fafc;
+  border-color: #cbd5e1;
+}
+
+.project-list-item-btn.active {
+  background: #eff6ff;
+  border-color: #3b82f6;
+  color: #1e3a8a;
+  box-shadow: inset 3px 0 0 #3b82f6;
+}
+
+.muni-badge {
+  font-size: 0.75rem;
+  background: #f1f5f9;
+  color: #475569;
+  padding: 2px 6px;
+  border-radius: 4px;
+  font-weight: 500;
+  text-transform: uppercase;
+}
+
+.project-detail-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  border-bottom: 1px solid #f1f5f9;
+  padding-bottom: 12px;
+  margin-bottom: 12px;
+}
+
+.project-detail-header h2 {
+  margin: 0;
+}
+
+.role-badge {
+  font-size: 0.8rem;
+  font-weight: 600;
+  background: #dbeafe;
+  color: #1e40af;
+  padding: 4px 10px;
+  border-radius: 9999px;
+}
+
+.project-description {
+  font-size: 1rem;
+  line-height: 1.5;
+  color: #334155;
+  margin: 0 0 16px;
+}
+
+.project-meta-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 12px;
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  padding: 12px;
+  margin-bottom: 24px;
+  font-size: 0.9rem;
+}
+
+.project-section {
+  border-top: 1px solid #f1f5f9;
+  padding-top: 20px;
+  margin-top: 20px;
+}
+
+.project-section h3 {
+  margin: 0 0 12px;
+}
+
+.badge {
+  display: inline-block;
+  font-size: 0.75rem;
+  font-weight: 600;
+  padding: 2px 8px;
+  border-radius: 9999px;
+  text-transform: uppercase;
+}
+
+.badge-owner {
+  background: #fef3c7;
+  color: #92400e;
+}
+
+.badge-editor {
+  background: #dcfce7;
+  color: #166534;
+}
+
+.badge-viewer {
+  background: #f1f5f9;
+  color: #475569;
+}
+
+.mini-form {
+  gap: 8px;
+  font-size: 0.85rem;
+}
+
+.mini-form label {
+  font-size: 0.8rem;
+}
+
+.mini-form input, .mini-form textarea {
+  padding: 6px 8px;
+}
+
+@media (max-width: 768px) {
+  .project-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
