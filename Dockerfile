@@ -10,12 +10,15 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 # Set working directory
 WORKDIR /app
 
-# Copy requirements first to leverage dependency caching
-COPY requirements.txt ./
+# Copy pyproject.toml to read dependencies
+COPY pyproject.toml ./
 
-# Upgrade pip and install third-party dependencies
+# Upgrade pip and install all third-party dependencies defined in pyproject.toml
 RUN pip install --no-cache-dir --upgrade pip && \
-    pip install --no-cache-dir -r requirements.txt
+    python -c "import tomllib, subprocess, sys; \
+    deps = tomllib.load(open('pyproject.toml', 'rb'))['project']['dependencies']; \
+    res = subprocess.run(['pip', 'install', '--no-cache-dir'] + deps); \
+    sys.exit(res.returncode)"
 
 # Pre-download the Hugging Face sentence-transformers embedding model.
 # Since this runs immediately after requirements.txt installation, it will remain
