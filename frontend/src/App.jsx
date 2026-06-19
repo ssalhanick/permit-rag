@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useState } from "react";
+import { Link } from "react-router-dom";
 import { API_BASE_URL, DEFAULT_BASE_URL, fetchAnswer, fetchHealth, fetchProjects } from "./api.js";
 import { useAuth } from "./context/AuthContext.jsx";
 import AddressAutocomplete from "./components/AddressAutocomplete.jsx";
@@ -151,10 +152,10 @@ function App() {
     setError("");
 
     const payload = {
-      query: form.query.trim(),
+      query: (form.query || "").trim(),
       top_k: Number(form.top_k),
-      municipality: form.municipality.trim() || null,
-      address: form.address.trim() || null,
+      municipality: (form.municipality || "").trim() || null,
+      address: (form.address || "").trim() || null,
       min_similarity: 0.0,
     };
     if (activeProjectId) {
@@ -213,6 +214,7 @@ function App() {
 
   const handleQuickTest = (test) => {
     setForm({
+      ...DEFAULT_FORM,
       query: test.query,
       municipality: test.municipality,
       top_k: test.top_k,
@@ -249,6 +251,22 @@ function App() {
     }
     return activeAnswer.chunks[0];
   }, [activeAnswer, activeSourceKey, sourceChunkMap]);
+
+  if (!user) {
+    return (
+      <main className="page">
+        <section className="panel" style={{ maxWidth: "600px", margin: "80px auto 40px auto", textAlign: "center", padding: "50px 30px", borderRadius: "12px", border: "1px solid rgba(255, 255, 255, 0.08)", background: "rgba(30, 41, 59, 0.7)", backdropFilter: "blur(12px)", boxShadow: "0 8px 32px 0 rgba(0, 0, 0, 0.37)" }}>
+          <h2 style={{ fontSize: "2rem", color: "#f8fafc", marginBottom: "16px", fontWeight: "700", letterSpacing: "-0.025em" }}>Ask permit_rag</h2>
+          <p className="muted" style={{ fontSize: "1.05rem", color: "#94a3b8", marginBottom: "28px", lineHeight: "1.6" }}>
+            Please sign in to search municipal ordinances, check building code compliance, and get cited RAG answers.
+          </p>
+          <Link to="/auth" className="primary-button" style={{ display: "inline-block", padding: "12px 28px", borderRadius: "8px", textDecoration: "none", fontWeight: "600", fontSize: "1rem", transition: "all 0.2s ease" }}>
+            Sign In / Register
+          </Link>
+        </section>
+      </main>
+    );
+  }
 
   return (
     <main className="page">

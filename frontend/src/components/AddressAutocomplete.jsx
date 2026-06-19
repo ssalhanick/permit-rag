@@ -150,7 +150,7 @@ export default function AddressAutocomplete({
         <input
           id={id}
           type="text"
-          value={value}
+          value={value || ""}
           onChange={(e) => onChange(e.target.value)}
           placeholder={placeholder}
           autoComplete="street-address"
@@ -168,7 +168,7 @@ export default function AddressAutocomplete({
       <input
         id={id}
         type="text"
-        value={value}
+        value={value || ""}
         onChange={handleInput}
         placeholder={placeholder}
         autoComplete="off"

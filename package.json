@@ -1,0 +1,13 @@
+{
+  "name": "permit-rag-root",
+  "version": "1.0.0",
+  "private": true,
+  "scripts": {
+    "start": "powershell -ExecutionPolicy Bypass -File scripts/dev.ps1",
+    "stop": "powershell -ExecutionPolicy Bypass -File scripts/stop.ps1",
+    "deploy": "powershell -ExecutionPolicy Bypass -File scripts/deploy.ps1",
+    "deploy:infra": "powershell -ExecutionPolicy Bypass -File scripts/deploy.ps1 -InfraOnly",
+    "deploy:backend": "powershell -ExecutionPolicy Bypass -File scripts/deploy.ps1 -BackendOnly",
+    "deploy:frontend": "powershell -ExecutionPolicy Bypass -File scripts/deploy.ps1 -FrontendOnly"
+  }
+}

@@ -165,6 +165,20 @@ Current frontend routes:
 
 ### Everyday startup (after first-time setup)
 
+To start the entire application stack (Docker databases, FastAPI backend, and Vite frontend) with a single command on Windows, run the orchestrator script from the project root:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File dev.ps1
+```
+
+To stop all services and shut down database containers:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File stop.ps1
+```
+
+*Alternatively, you can start individual services manually:*
+
 ```powershell
 # Terminal 1 — DB (if not already running)
 docker compose up -d
@@ -176,6 +190,97 @@ py -m uvicorn api.main:app --reload --port 8000
 cd frontend
 npm run dev
 ```
+
+## AWS Production Deployment
+
+The application is configured for a robust, production-grade cloud deployment on AWS utilizing infrastructure-as-code (Terraform) and automated containerized pipelines.
+
+### Cloud Architecture Overview
+*   **VPC & Networking**: Custom VPC with public subnets (hosting the ALB and S3/CloudFront entry points) and private subnets (hosting ECS Fargate container tasks).
+*   **Database Tier**: Amazon RDS PostgreSQL instance running in public subnets (to facilitate direct bootstrapping/seeding) with `pgvector` and `postgis` spatial extensions enabled.
+*   **API Tier**: ECS Fargate container cluster running FastAPI backend tasks behind an Application Load Balancer (ALB).
+*   **Frontend Tier**: Static React SPA hosted in an Amazon S3 bucket and distributed globally via a CloudFront CDN.
+*   **Security & SSL**: Traffic is fully encrypted via an ACM Wildcard SSL Certificate (`*.scottsalhanick.com`) bound to CloudFront. Runtime secrets are stored securely in AWS SSM Parameter Store as `SecureString` parameters.
+
+---
+
+### Deployment Prerequisites
+1.  **AWS CLI**: Configured locally with administrative credentials (`aws configure`).
+2.  **Docker Desktop**: Running locally to compile and build the production backend Docker container.
+3.  **Terraform**: CLI installed locally (v1.5+).
+4.  **SSM Parameters**: Ensure the following parameters are populated in the AWS Systems Manager Parameter Store as `SecureString` types:
+    *   `/permit_rag/prod/anthropic_api_key` (Claude API key)
+    *   `/permit_rag/prod/jwt_secret` (Randomly generated 32-character token signing secret)
+    *   `/permit_rag/prod/admin_token` (Secure administrative access token)
+    *   `/permit_rag/prod/neo4j_bolt_url` (AuraDB graph layer connection URI)
+    *   `/permit_rag/prod/neo4j_auth` (Graph credentials, formatted as `neo4j/<your-auradb-password>`)
+
+---
+
+### Initial Setup & Re-provisioning
+
+If you are deploying the AWS infrastructure from scratch:
+```powershell
+# Deploy all AWS resources
+npm run deploy:infra
+```
+
+#### Database Initialization
+Once Amazon RDS is provisioned, bootstrap the schema tables, custom roles, migrations, and seeds:
+1. Retrieve the master database password:
+   ```powershell
+   terraform -chdir=terraform output -raw db_password
+   ```
+2. Update the `DATABASE_URL` in your local `.env` to point to the RDS endpoint.
+3. Run the bootstrap script:
+   ```powershell
+   py scripts/init_rds_db.py
+   ```
+   *(Note: This script automatically drops and recreates the `public` schema on run to guarantee a clean, duplicate-error-free initialization).*
+
+---
+
+### Deploying Updates
+
+Automated root-level NPM commands orchestrate building, packaging, and shipping code changes to AWS:
+
+*   **Deploy Entire Stack**: Runs full infrastructure checks, builds and pushes the backend container to ECR (with ECS rolling restart), and compiles/syncs the frontend to S3 with CDN cache invalidation:
+    ```powershell
+    npm run deploy
+    ```
+*   **Deploy Backend Only**: Recompiles the FastAPI backend Docker image (which pre-caches the embedding model inside the container for faster start times), pushes to ECR, and triggers a rolling service update on ECS Fargate:
+    ```powershell
+    npm run deploy:backend
+    ```
+*   **Deploy Frontend Only**: Compiles the React static assets, syncs files to the S3 bucket with `--delete` to remove stale assets, and invalidates the CloudFront CDN cache:
+    ```powershell
+    npm run deploy:frontend
+    ```
+
+---
+
+### Production Security & DDoS Protection (WAF & Database Routing)
+
+#### 1. AWS WAF (Web Application Firewall) Setup
+To protect your FastAPI backend from API spam and prevent runaway LLM costs (via Claude API calls on the `/query/answer` endpoint), configure a Web ACL with rate-limiting:
+1. Go to the **AWS WAF & Shield** console.
+2. **Important**: Change your AWS Console region filter to **Global (CloudFront)**.
+3. Click **Create Web ACL** and associate it with your CloudFront distribution.
+4. Add a custom **Rate-based rule**:
+   *   **Rule Type**: Rate-based rule.
+   *   **Rate Limit**: `300` requests per rolling 5-minute window per IP.
+   *   **Action**: **Block** (returns an HTTP 403 Forbidden page to abusers).
+5. Complete the setup and deploy the Web ACL.
+
+#### 2. RDS Database Port Hardening
+For initial local migrations, the database was temporarily open to public traffic. Now that bootstrapping is complete, **close the public PostgreSQL port**:
+1. Remove the temporary `0.0.0.0/0` ingress block from the RDS security group in `terraform/main.tf`.
+2. Apply the firewall changes:
+   ```powershell
+   cd terraform
+   terraform apply
+   ```
+   *(Your backend ECS containers connect to the RDS database using VPC-internal routing rules, so they do not require public port ingress to function).*
 
 ---
 

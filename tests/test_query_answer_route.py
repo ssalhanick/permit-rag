@@ -113,18 +113,27 @@ def test_query_answer_returns_multi_permit_types_and_citations(monkeypatch) -> N
         lambda _m: {"dept_url": "https://example.org/permits"},
     )
 
-    client = TestClient(app)
-    response = client.post(
-        "/query/answer",
-        json={"query": "garage addition with panel and bathroom", "top_k": 5, "municipality": "dallas"},
-    )
+    app.dependency_overrides[query_route.get_current_user] = lambda: {
+        "user_id": uuid4(),
+        "role": "member",
+        "username": "tester"
+    }
 
-    assert response.status_code == 200
-    body = response.json()
-    assert body["permit_types"] == ["building", "electrical", "plumbing"]
-    assert len(body["citations"]) == 3
-    assert all(c["found_in_context"] is True for c in body["citations"])
-    assert body["ahj_disclaimer"]["learn_more_url"] == "https://example.org/permits"
+    try:
+        client = TestClient(app)
+        response = client.post(
+            "/query/answer",
+            json={"query": "garage addition with panel and bathroom", "top_k": 5, "municipality": "dallas"},
+        )
+
+        assert response.status_code == 200
+        body = response.json()
+        assert body["permit_types"] == ["building", "electrical", "plumbing"]
+        assert len(body["citations"]) == 3
+        assert all(c["found_in_context"] is True for c in body["citations"])
+        assert body["ahj_disclaimer"]["learn_more_url"] == "https://example.org/permits"
+    finally:
+        app.dependency_overrides.clear()
 
 
 def test_query_answer_classifier_failure_falls_back_to_empty_list(monkeypatch) -> None:
@@ -144,13 +153,22 @@ def test_query_answer_classifier_failure_falls_back_to_empty_list(monkeypatch) -
     monkeypatch.setattr(classifier_module, "classify_permit_types", _raise_classifier)
     monkeypatch.setattr(query_route, "get_jurisdiction", lambda _m: None)
 
-    client = TestClient(app)
-    response = client.post(
-        "/query/answer",
-        json={"query": "garage addition with panel and bathroom", "top_k": 5, "municipality": "dallas"},
-    )
+    app.dependency_overrides[query_route.get_current_user] = lambda: {
+        "user_id": uuid4(),
+        "role": "member",
+        "username": "tester"
+    }
 
-    assert response.status_code == 200
-    body = response.json()
-    assert body["permit_types"] == []
-    assert len(body["citations"]) == 3
+    try:
+        client = TestClient(app)
+        response = client.post(
+            "/query/answer",
+            json={"query": "garage addition with panel and bathroom", "top_k": 5, "municipality": "dallas"},
+        )
+
+        assert response.status_code == 200
+        body = response.json()
+        assert body["permit_types"] == []
+        assert len(body["citations"]) == 3
+    finally:
+        app.dependency_overrides.clear()

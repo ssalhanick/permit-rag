@@ -8,6 +8,29 @@
         "num_embedded": 1,
         "embedding_dim": 768
       }
+    },
+    "download": {
+      "result": "pass",
+      "detail": {
+        "raw_path": "documents\\raw\\parker-tx-1.html",
+        "file_size_bytes": 2743,
+        "checksum_sha256": "8fce7085843cceafb6debaa8520847c8ff1216bb849ef088d596d409b8279358"
+      }
+    },
+    "extraction": {
+      "result": "pass",
+      "detail": {
+        "raw_chars": 333
+      }
+    },
+    "chunking": {
+      "result": "pass",
+      "detail": {
+        "source_chars": 305,
+        "chunk_chars": 305,
+        "num_chunks": 1,
+        "coverage_ratio": 1.0
+      }
     }
   }
 }

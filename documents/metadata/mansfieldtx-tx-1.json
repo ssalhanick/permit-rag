@@ -8,6 +8,29 @@
         "num_embedded": 1,
         "embedding_dim": 768
       }
+    },
+    "download": {
+      "result": "pass",
+      "detail": {
+        "raw_path": "documents\\raw\\mansfieldtx-tx-1.pdf",
+        "file_size_bytes": 18001,
+        "checksum_sha256": "901cc45303f3d0645b1f5667f549b4d412c9aedc5d845c31cda4ea8cc40e52e3"
+      }
+    },
+    "extraction": {
+      "result": "pass",
+      "detail": {
+        "raw_chars": 262
+      }
+    },
+    "chunking": {
+      "result": "pass",
+      "detail": {
+        "source_chars": 260,
+        "chunk_chars": 260,
+        "num_chunks": 1,
+        "coverage_ratio": 1.0
+      }
     }
   }
 }

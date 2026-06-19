@@ -18,9 +18,9 @@
     "chunking": {
       "result": "pass",
       "detail": {
-        "source_chars": 8051761,
-        "chunk_chars": 8551051,
-        "num_chunks": 6854,
+        "source_chars": 8050409,
+        "chunk_chars": 8549251,
+        "num_chunks": 6852,
         "coverage_ratio": 1.062
       }
     },

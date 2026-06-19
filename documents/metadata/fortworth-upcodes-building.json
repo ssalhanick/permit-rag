@@ -47,10 +47,10 @@
     "chunking": {
       "result": "pass",
       "detail": {
-        "source_chars": 3539,
-        "chunk_chars": 3586,
+        "source_chars": 3278,
+        "chunk_chars": 3357,
         "num_chunks": 3,
-        "coverage_ratio": 1.0133
+        "coverage_ratio": 1.0241
       }
     },
     "embedding": {

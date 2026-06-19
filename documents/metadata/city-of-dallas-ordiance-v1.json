@@ -18,8 +18,8 @@
     "chunking": {
       "result": "pass",
       "detail": {
-        "source_chars": 2410565,
-        "chunk_chars": 2618588,
+        "source_chars": 2410395,
+        "chunk_chars": 2618351,
         "num_chunks": 2110,
         "coverage_ratio": 1.0863
       }
@@ -27,8 +27,8 @@
     "embedding": {
       "result": "pass",
       "detail": {
-        "num_chunks": 2111,
-        "num_embedded": 2111,
+        "num_chunks": 2110,
+        "num_embedded": 2110,
         "embedding_dim": 768
       }
     }
