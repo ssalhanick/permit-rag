@@ -133,6 +133,7 @@ def _end_trace(run: Any, outputs: dict[str, Any] | None = None, error: str | Non
         "cosine search via pgvector, and returns ranked chunks with "
         "metadata and quality diagnostics."
     ),
+)
 def query_chunks(
     body: QueryRequest,
     current_user: Annotated[dict, Depends(get_current_user)],
