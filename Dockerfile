@@ -10,10 +10,20 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 # Set working directory
 WORKDIR /app
 
-# Copy project metadata files (Hatchling requires README.md since it is defined in pyproject.toml)
-COPY pyproject.toml requirements.txt README.md ./
+# Copy requirements first to leverage dependency caching
+COPY requirements.txt ./
 
-# Copy all application directories (Hatchling requires these packages to compile the wheel)
+# Upgrade pip and install third-party dependencies
+RUN pip install --no-cache-dir --upgrade pip && \
+    pip install --no-cache-dir -r requirements.txt
+
+# Pre-download the Hugging Face sentence-transformers embedding model.
+# Since this runs immediately after requirements.txt installation, it will remain
+# fully cached unless your requirements.txt changes, saving ~500MB of download/upload traffic.
+RUN python -c "from sentence_transformers import SentenceTransformer; SentenceTransformer('nomic-ai/nomic-embed-text-v1.5')"
+
+# Copy project metadata and code files (invalidates cache only for code changes)
+COPY pyproject.toml README.md ./
 COPY api/ ./api
 COPY db/ ./db
 COPY rag/ ./rag
@@ -21,14 +31,9 @@ COPY ingestion/ ./ingestion
 COPY audit/ ./audit
 COPY evaluation/ ./evaluation
 
-# Upgrade pip, install build backend (hatchling), and compile/install the project and its dependencies
-RUN pip install --no-cache-dir --upgrade pip && \
-    pip install --no-cache-dir hatchling && \
-    pip install --no-cache-dir .
-
-# Pre-download the Hugging Face sentence-transformers embedding model
-# to ensure faster container startup and avoid network requests at runtime
-RUN python -c "from sentence_transformers import SentenceTransformer; SentenceTransformer('nomic-ai/nomic-embed-text-v1.5')"
+# Install the local project package without reinstalling dependencies
+RUN pip install --no-cache-dir hatchling && \
+    pip install --no-cache-dir --no-deps .
 
 # Expose FastAPI default port
 EXPOSE 8000

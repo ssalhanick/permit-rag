@@ -1,0 +1,33 @@
+# Git
+.git
+.gitignore
+
+# Python virtual environment and caches
+.venv
+__pycache__
+*.pyc
+*.pyo
+*.pyd
+.pytest_cache
+.mypy_cache
+.ruff_cache
+
+# Node modules and frontend build outputs
+node_modules
+frontend/node_modules
+frontend/dist
+
+# Terraform
+.terraform
+*.tfstate
+*.tfstate.backup
+.terraform.lock.hcl
+
+# Local documentation & IDEs
+.vscode
+.idea
+*.swp
+*.log
+docs
+backups
+evaluation/cache
