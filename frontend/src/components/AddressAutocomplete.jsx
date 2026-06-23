@@ -31,15 +31,27 @@ const DFW_PROXIMITY = "-96.797,32.777";
 const DEBOUNCE_MS = 300;
 const MIN_CHARS = 3;
 
+function generateUUID() {
+  if (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function") {
+    return crypto.randomUUID();
+  }
+  return "xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx".replace(/[xy]/g, (c) => {
+    const r = (Math.random() * 16) | 0;
+    const v = c === "x" ? r : (r & 0x3) | 0x8;
+    return v.toString(16);
+  });
+}
+
 /**
  * Fetch Mapbox suggestions for a query string.
- * Uses the Mapbox Search Box suggest endpoint (no session token needed for free-tier).
+ * Uses the Mapbox Search Box suggest endpoint with required session_token.
  */
-async function fetchSuggestions(query) {
+async function fetchSuggestions(query, sessionToken) {
   if (!MAPBOX_TOKEN || query.length < MIN_CHARS) return [];
   const url = new URL("https://api.mapbox.com/search/searchbox/v1/suggest");
   url.searchParams.set("q", query);
   url.searchParams.set("access_token", MAPBOX_TOKEN);
+  url.searchParams.set("session_token", sessionToken);
   url.searchParams.set("types", "address");
   url.searchParams.set("country", "US");
   url.searchParams.set("bbox", DFW_BBOX);
@@ -59,10 +71,11 @@ async function fetchSuggestions(query) {
  * Retrieve the full feature for a Mapbox suggestion (to get coordinates).
  * Returns { full_address, municipality } or null.
  */
-async function retrieveSuggestion(mapboxId) {
+async function retrieveSuggestion(mapboxId, sessionToken) {
   if (!MAPBOX_TOKEN || !mapboxId) return null;
   const url = new URL("https://api.mapbox.com/search/searchbox/v1/retrieve/" + mapboxId);
   url.searchParams.set("access_token", MAPBOX_TOKEN);
+  url.searchParams.set("session_token", sessionToken);
   try {
     const resp = await fetch(url.toString());
     if (!resp.ok) return null;
@@ -70,7 +83,7 @@ async function retrieveSuggestion(mapboxId) {
     const feat = body.features?.[0];
     if (!feat) return null;
     const ctx = feat.properties?.context || {};
-    // Try to extract city name for a hint (the API still geocodes on the backend)
+    // Try to extract city name for a hint
     const place = ctx.place?.name || ctx.locality?.name || "";
     return {
       address: feat.properties?.full_address || feat.properties?.name || "",
@@ -91,15 +104,16 @@ export default function AddressAutocomplete({
   const [suggestions, setSuggestions] = useState([]);
   const [open, setOpen] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [sessionToken, setSessionToken] = useState(() => generateUUID());
   const debounceRef = useRef(null);
   const containerRef = useRef(null);
 
   // Debounced suggestion fetch
-  const fetchDebounced = useCallback((query) => {
+  const fetchDebounced = useCallback((query, token) => {
     if (debounceRef.current) clearTimeout(debounceRef.current);
     debounceRef.current = setTimeout(async () => {
       setLoading(true);
-      const results = await fetchSuggestions(query);
+      const results = await fetchSuggestions(query, token);
       setSuggestions(results);
       setOpen(results.length > 0);
       setLoading(false);
@@ -110,7 +124,7 @@ export default function AddressAutocomplete({
     const val = e.target.value;
     onChange(val);
     if (val.length >= MIN_CHARS) {
-      fetchDebounced(val);
+      fetchDebounced(val, sessionToken);
     } else {
       setSuggestions([]);
       setOpen(false);
@@ -123,7 +137,9 @@ export default function AddressAutocomplete({
     setOpen(false);
     setSuggestions([]);
     // Retrieve full feature for municipality hint
-    const detail = await retrieveSuggestion(suggestion.mapbox_id);
+    const detail = await retrieveSuggestion(suggestion.mapbox_id, sessionToken);
+    // Cycle the session token after retrieve is complete
+    setSessionToken(generateUUID());
     if (onSelect) {
       onSelect({
         address: detail?.address || label,

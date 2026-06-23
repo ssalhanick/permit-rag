@@ -1,22 +1,21 @@
 # permit_rag — State
 
-_Updated: 2026-06-23 (Sprint 10 — Mobile styling, table scrollbars, and WCAG AAA touch targets complete)_
+_Updated: 2026-06-23 (Sprint 10 — Mobile styling, table scrollbars, WCAG AAA touch targets, and GIS autocomplete complete)_
 
 ## Phase
 
-Sprint 10 complete. **93 tests passing.** Mobile-responsive layout, collapsible navigation, table horizontal scrolling, and WCAG AAA compliance live.
+Sprint 10 complete. **93 tests passing.** Mobile-responsive layout, collapsible navigation, table horizontal scrolling, WCAG AAA compliance, and Mapbox address autocomplete live.
 
 ## Blocked on
 
-- **Mapbox token**: `VITE_MAPBOX_TOKEN` not set in `frontend/.env` — autocomplete degrades to plain text. See `frontend/.env.example`.
+*None*
 
 ## Next tasks
 
-1. **GIS Auto-address**: Implement and get GIS auto-address bar working in the frontend.
-2. **CI/CD Pipeline**: Add CI/CD pipeline to push from GitHub to AWS.
-3. **Update Documents**: Add ability/routes to update existing documents.
-4. **PostGIS**: Add remaining 8 DFW city boundary layers to PostGIS (see `docs/backlog.md`).
-5. **Optional**: Tune hybrid RRF weights (`RETRIEVAL_RRF_BM25_WEIGHT < 1.0`) and re-eval — path to promoting hybrid without faithfulness regression.
+1. **CI/CD Pipeline**: Add CI/CD pipeline to push from GitHub to AWS.
+2. **Update Documents**: Add ability/routes to update existing documents.
+3. **PostGIS**: Add remaining 8 DFW city boundary layers to PostGIS (see `docs/backlog.md`).
+4. **Optional**: Tune hybrid RRF weights (`RETRIEVAL_RRF_BM25_WEIGHT < 1.0`) and re-eval — path to promoting hybrid without faithfulness regression.
 
 ## Module status
 
@@ -74,6 +73,7 @@ ingestion ✅ db ✅ rag ✅ api ✅ eval ✅ frontend ✅ graph ✅
 - [x] Collapsible responsive navigation bar (`Nav.jsx` with burger toggle state and header wrapper).
 - [x] Table horizontal scroll wrapper (`doc-table-wrap`) applied across all data tables (Document Browser and Projects panels).
 - [x] Touch target size optimizations to meet WCAG AAA accessibility conformance (minimum 44px height for all buttons, inputs, links, list elements, and autocomplete options).
+- [x] Mapbox Search Box API integration: implemented required session_token UUID generation and rotation logic to support address geocoding suggestions and retrievals.
 
 ## Sprint 9 deliverables (closed)
 

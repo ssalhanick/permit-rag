@@ -34,14 +34,23 @@ py -m evaluation.eval_guard
 *None*
 
 ### Planned
-- [ ] [Agent Implementation Plan](file:///C:/Users/ssalh/.gemini/antigravity/brain/b552b0bd-6498-419a-a590-b4ffaa8fbefe/agent_implementation_plan.md) — Implement single-responsibility agents (Query Deconstructor, Semantic Conflict Analyzer, Citation Verification) with the `instructor` library and dynamic token truncation.
+- [ ] [Agent Implementation Plan](.gemini/antigravity/brain/b552b0bd-6498-419a-a590-b4ffaa8fbefe/agent_implementation_plan.md) — Implement single-responsibility agents (Query Deconstructor, Semantic Conflict Analyzer, Citation Verification) with the `instructor` library and dynamic token truncation.
+- [ ] [Admin Authentication Implementation Plan](.gemini/antigravity/brain/71b83e7a-7105-40cf-a37b-6d6623902b3f/admin_authentication_implementation_plan.md) - Admin access (with a token) to view logs and other features of the app.
+- [ ] [User Authentication & Profile Implementation Plan](.gemini/antigravity/brain/0e5a192a-205c-4bd2-bf71-e6b02d70159a/user_authentication__profile_implementation_plan.md) - User access (with a token) to view their projects and other features of the app.
+- [ ] [Conflict Detector Implementation Plan](.gemini/antigravity/brain/789433d3-1081-445a-89d3-05471f7e6d24/conflict_detector_implementation_plan.md) - Implement conflict detection to identify conflicts between documents.
+- [ ] [Municipalities Implementation Plan](.gemini/antigravity/brain/3cff2469-e69b-460c-a60f-95833d0f7579/municipalities_implementation_plan.md) - Add support for municipalities to the RAG-powered construction permit compliance tool.
+- [ ] [Token Optimization & Cost-Effectiveness Plan](.gemini/antigravity/brain/2f98133a-886c-4136-8cf9-e6a4d9f4a883/token_optimization__cost-effectiveness_plan.md) - Analyze prompt caching, chunking strategies, and embedding model trade-offs to minimize Claude token usage.
+- [ ] [Project Governance & Knowledge Management Plan](.gemini/antigravity/brain/1db16d63-cf9c-42df-965f-9d7c4b6ecb9f/project_governance__knowledge_management_plan.md) - Governance for project metadata, chunk status lifecycle, and knowledge base hygiene.
 
 ### Upcoming
-- [ ] Get GIS auto-address bar working
 - [ ] Add CI/CD pipeline to push from github to AWS
 - [ ] Add ability to update existing documents
+- [ ] Camera Phone (lidar Progressive Enhancement) - Use the device's camera to scan building facades and rooms to measure distances and accurately calculate square footage through the device's lidar data (or as much as doing a recording/set of pitcutres derived from the recording of the site/room)
+- [ ] 3D Map Integration - Integrate with an open-source 3D map library (e.g., CesiumJS) to display the city boundaries and proposed site
+- [ ] 
 
 ### Completed
+- [x] Get GIS auto-address bar working (Implemented Mapbox Search Box session_token management for address autocomplete suggestions and geocoding retrievals)
 - [x] Add mobile styles (SGP10: Responsive styling for mobile, tablet, and desktop viewports, scrollable data tables, and WCAG AAA touch target size conformance)
 
 ---
