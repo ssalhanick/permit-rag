@@ -30,12 +30,6 @@ export default function ProfilePage() {
   const [actionError, setActionError] = useState("");
   const [actionSuccess, setActionSuccess] = useState("");
 
-  // Redirect if not logged in
-  useEffect(() => {
-    if (!user) {
-      navigate("/auth");
-    }
-  }, [user, navigate]);
 
   // Load queries
   const loadQueries = async () => {
@@ -160,7 +154,6 @@ export default function ProfilePage() {
     }
   };
 
-  if (!user) return null;
 
   // Filter documents to show those uploaded by user (admins can see all)
   const filteredDocs = docs.filter((d) => user.role === "admin" || d.uploaded_by === user.user_id);

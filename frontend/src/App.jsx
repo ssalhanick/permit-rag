@@ -64,17 +64,21 @@ function App() {
   const [projects, setProjects] = useState([]);
   const [activeProjectId, setActiveProjectId] = useState("");
 
-  // Prefill search query if reloading from profile page
+  // Prefill search query if reloading from profile page or project dashboard
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     const q = params.get("q");
     const m = params.get("m");
+    const p = params.get("p");
     if (q) {
       setForm((prev) => ({
         ...prev,
         query: q,
         municipality: m || "",
       }));
+    }
+    if (p) {
+      setActiveProjectId(p);
     }
   }, []);
 

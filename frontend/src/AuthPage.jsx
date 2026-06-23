@@ -1,10 +1,13 @@
 import React, { useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useLocation } from "react-router-dom";
 import { useAuth } from "./context/AuthContext.jsx";
 
 export default function AuthPage() {
   const { login, register, user } = useAuth();
   const navigate = useNavigate();
+  const location = useLocation();
+
+  const from = location.state?.from?.pathname || "/";
 
   const [isRegister, setIsRegister] = useState(false);
   const [form, setForm] = useState({
@@ -21,7 +24,7 @@ export default function AuthPage() {
 
   if (user) {
     // Already logged in
-    setTimeout(() => navigate("/"), 0);
+    setTimeout(() => navigate(from, { replace: true }), 0);
     return null;
   }
 
@@ -50,7 +53,7 @@ export default function AuthPage() {
         setSuccess("Login successful!");
       }
       setTimeout(() => {
-        navigate("/");
+        navigate(from, { replace: true });
       }, 1000);
     } catch (err) {
       setError(err.message || "Authentication failed.");

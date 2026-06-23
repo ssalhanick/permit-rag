@@ -16,20 +16,20 @@ export default function Nav() {
         >
           Query
         </NavLink>
-        <NavLink
-          to="/upload"
-          className={({ isActive }) => "nav-link" + (isActive ? " nav-link-active" : "")}
-        >
-          Upload Document
-        </NavLink>
-        <NavLink
-          to="/documents"
-          className={({ isActive }) => "nav-link" + (isActive ? " nav-link-active" : "")}
-        >
-          Documents
-        </NavLink>
         {user && (
           <>
+            <NavLink
+              to="/upload"
+              className={({ isActive }) => "nav-link" + (isActive ? " nav-link-active" : "")}
+            >
+              Upload Document
+            </NavLink>
+            <NavLink
+              to="/documents"
+              className={({ isActive }) => "nav-link" + (isActive ? " nav-link-active" : "")}
+            >
+              Documents
+            </NavLink>
             <NavLink
               to="/projects"
               className={({ isActive }) => "nav-link" + (isActive ? " nav-link-active" : "")}
