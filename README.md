@@ -28,6 +28,24 @@ py -m evaluation.eval_guard
 
 ---
 
+## TODO
+
+### In Progress
+*None*
+
+### Planned
+- [ ] [Agent Implementation Plan](file:///C:/Users/ssalh/.gemini/antigravity/brain/b552b0bd-6498-419a-a590-b4ffaa8fbefe/agent_implementation_plan.md) — Implement single-responsibility agents (Query Deconstructor, Semantic Conflict Analyzer, Citation Verification) with the `instructor` library and dynamic token truncation.
+
+### Upcoming
+- [ ] Get GIS auto-address bar working
+- [ ] Add CI/CD pipeline to push from github to AWS
+- [ ] Add ability to update existing documents
+
+### Completed
+- [x] Add mobile styles (SGP10: Responsive styling for mobile, tablet, and desktop viewports, scrollable data tables, and WCAG AAA touch target size conformance)
+
+---
+
 ## Timeline
 
 | Week | Dates | Phase | Deliverables | Status |

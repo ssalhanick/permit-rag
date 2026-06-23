@@ -423,28 +423,30 @@ export default function ProjectsPage() {
                   {docs.length === 0 ? (
                     <p className="muted" style={{ fontStyle: "italic" }}>No documents shared yet. Go to the "Documents" browser tab to share.</p>
                   ) : (
-                    <table className="doc-table">
-                      <thead>
-                        <tr>
-                          <th>Doc ID</th>
-                          <th>Municipality</th>
-                          <th>Status</th>
-                          <th>Type</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {docs.map((d) => (
-                          <tr key={d.id}>
-                            <td>
-                              <strong>{d.doc_id}</strong>
-                            </td>
-                            <td>{d.municipality}</td>
-                            <td>{d.document_status}</td>
-                            <td>{d.doc_type}</td>
+                    <div className="doc-table-wrap">
+                      <table className="doc-table">
+                        <thead>
+                          <tr>
+                            <th>Doc ID</th>
+                            <th>Municipality</th>
+                            <th>Status</th>
+                            <th>Type</th>
                           </tr>
-                        ))}
-                      </tbody>
-                    </table>
+                        </thead>
+                        <tbody>
+                          {docs.map((d) => (
+                            <tr key={d.id}>
+                              <td>
+                                <strong>{d.doc_id}</strong>
+                              </td>
+                              <td>{d.municipality}</td>
+                              <td>{d.document_status}</td>
+                              <td>{d.doc_type}</td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
                   )}
                 </div>
               )}
@@ -593,51 +595,53 @@ export default function ProjectsPage() {
               {activeDetailTab === "members" && (
                 <div className="project-section" style={{ marginTop: 0, paddingTop: 0, border: "none" }}>
                   <h3>Collaborators ({members.length + 1})</h3>
-                  <table className="doc-table">
-                    <thead>
-                      <tr>
-                        <th>Collaborator</th>
-                        <th>Email</th>
-                        <th>Role</th>
-                        {canManage && <th>Action</th>}
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {/* Owner row */}
-                      <tr>
-                        <td>
-                          <strong>Creator (Owner)</strong>
-                        </td>
-                        <td>-</td>
-                        <td><span className="badge badge-owner">Owner</span></td>
-                        {canManage && <td>-</td>}
-                      </tr>
-                      {/* Other members */}
-                      {members.map((m) => (
-                        <tr key={m.user_id}>
-                          <td>{m.username} {m.user_id === user.id && "(You)"}</td>
-                          <td>{m.email}</td>
-                          <td>
-                            <span className={`badge badge-${m.role}`}>
-                              {m.role}
-                            </span>
-                          </td>
-                          {canManage && (
-                            <td>
-                              <button
-                                type="button"
-                                className="text-button delete-text"
-                                onClick={() => handleRemoveMember(m.user_id, m.username)}
-                                disabled={actionLoading}
-                              >
-                                Remove
-                              </button>
-                            </td>
-                          )}
+                  <div className="doc-table-wrap">
+                    <table className="doc-table">
+                      <thead>
+                        <tr>
+                          <th>Collaborator</th>
+                          <th>Email</th>
+                          <th>Role</th>
+                          {canManage && <th>Action</th>}
                         </tr>
-                      ))}
-                    </tbody>
-                  </table>
+                      </thead>
+                      <tbody>
+                        {/* Owner row */}
+                        <tr>
+                          <td>
+                            <strong>Creator (Owner)</strong>
+                          </td>
+                          <td>-</td>
+                          <td><span className="badge badge-owner">Owner</span></td>
+                          {canManage && <td>-</td>}
+                        </tr>
+                        {/* Other members */}
+                        {members.map((m) => (
+                          <tr key={m.user_id}>
+                            <td>{m.username} {m.user_id === user.id && "(You)"}</td>
+                            <td>{m.email}</td>
+                            <td>
+                              <span className={`badge badge-${m.role}`}>
+                                {m.role}
+                              </span>
+                            </td>
+                            {canManage && (
+                              <td>
+                                <button
+                                  type="button"
+                                  className="text-button delete-text"
+                                  onClick={() => handleRemoveMember(m.user_id, m.username)}
+                                  disabled={actionLoading}
+                                >
+                                  Remove
+                                </button>
+                              </td>
+                            )}
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
 
                   {/* Add Member Form (Owner only) */}
                   {canManage && (

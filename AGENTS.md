@@ -95,6 +95,13 @@ scripts/    →  may import: anything (one-off use only)
 
 ---
 
+## Todo and Plan Rules
+
+- When a TODO item in the `README.md` is finished, it must be moved to the **Completed** section.
+- Everything in the **Planned** section of `README.md` must be linked to a concrete markdown plan file located either in `.gemini/antigravity/brain/*/*.md` or inside the `permit_rag/docs/` directory.
+
+---
+
 ## Never Do These
 
 - Never modify a migration after it has been deployed

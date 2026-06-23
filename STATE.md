@@ -1,21 +1,22 @@
 # permit_rag — State
 
-_Updated: 2026-06-18 (Sprint 9 — JWT Auth, Projects, and Query History complete)_
+_Updated: 2026-06-23 (Sprint 10 — Mobile styling, table scrollbars, and WCAG AAA touch targets complete)_
 
 ## Phase
 
-Sprint 9 complete. **93 tests passing.** JWT Auth, Project Management, User Profiles, and Query History live.
+Sprint 10 complete. **93 tests passing.** Mobile-responsive layout, collapsible navigation, table horizontal scrolling, and WCAG AAA compliance live.
 
 ## Blocked on
 
 - **Mapbox token**: `VITE_MAPBOX_TOKEN` not set in `frontend/.env` — autocomplete degrades to plain text. See `frontend/.env.example`.
-- **RAG Query Hang**: RAG query processing gets hung up in the UI/backend pipeline and fails to log to the user's private query history.
 
 ## Next tasks
 
-1. **UX/RAG Bugfix**: Diagnose and resolve UI/backend hang during query submission, and ensure successful answers are consistently logged to the user's history.
-2. PostGIS: add remaining 8 DFW city boundary layers to PostGIS (see `docs/backlog.md`)
-3. Optional: tune hybrid RRF weights (`RETRIEVAL_RRF_BM25_WEIGHT < 1.0`) and re-eval — path to promoting hybrid without faithfulness regression
+1. **GIS Auto-address**: Implement and get GIS auto-address bar working in the frontend.
+2. **CI/CD Pipeline**: Add CI/CD pipeline to push from GitHub to AWS.
+3. **Update Documents**: Add ability/routes to update existing documents.
+4. **PostGIS**: Add remaining 8 DFW city boundary layers to PostGIS (see `docs/backlog.md`).
+5. **Optional**: Tune hybrid RRF weights (`RETRIEVAL_RRF_BM25_WEIGHT < 1.0`) and re-eval — path to promoting hybrid without faithfulness regression.
 
 ## Module status
 
@@ -67,7 +68,12 @@ ingestion ✅ db ✅ rag ✅ api ✅ eval ✅ frontend ✅ graph ✅
 - [x] `tests/test_sprint8.py` — 12 tests → **72 total** ✅
 - [x] Live validation: `GET /health` → `graph_health=True` ✅ | eval guard PASS ✅
 - [x] BM25 A/B eval: hybrid faithfulness `0.810` < gate `0.850` — dense-only `RETRIEVAL_HYBRID_ENABLED=false` retained
-- [ ] PostGIS: remaining 8 DFW city boundary layers
+## Sprint 10 deliverables (closed)
+
+- [x] Responsive layout styling for mobile, tablet, and desktop viewports using industry-standard rem breakpoints.
+- [x] Collapsible responsive navigation bar (`Nav.jsx` with burger toggle state and header wrapper).
+- [x] Table horizontal scroll wrapper (`doc-table-wrap`) applied across all data tables (Document Browser and Projects panels).
+- [x] Touch target size optimizations to meet WCAG AAA accessibility conformance (minimum 44px height for all buttons, inputs, links, list elements, and autocomplete options).
 
 ## Sprint 9 deliverables (closed)
 

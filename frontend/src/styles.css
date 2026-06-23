@@ -816,9 +816,216 @@ button:disabled {
   padding: 6px 8px;
 }
 
-@media (max-width: 768px) {
+/* ==========================================================================
+   SGP10: Mobile and Tablet Responsiveness (WCAG AAA Target Size: 44px min)
+   ========================================================================== */
+
+/* --- WCAG AAA Touch Target Optimizations (All devices) --- */
+.nav-link, 
+.quick-test-button, 
+.site-nav-links .nav-link, 
+.autocomplete-option,
+.project-list-item-btn,
+.history-item,
+.source-item,
+.quick-test-button,
+button,
+input[type="submit"],
+input[type="button"],
+.site-nav-auth .nav-link {
+  min-height: 44px; /* WCAG AAA target height for interactive components */
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* Ensure adequate spacing between touch targets in lists */
+.site-nav-links {
+  gap: 8px;
+}
+
+/* --- Mobile Navbar layout defaults --- */
+.nav-mobile-toggle {
+  display: none;
+  background: transparent;
+  border: none;
+  color: #94a3b8;
+  font-size: 1.5rem;
+  cursor: pointer;
+  padding: 8px 12px;
+  min-width: 44px;
+  min-height: 44px;
+  align-items: center;
+  justify-content: center;
+}
+
+.site-nav-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+}
+
+.site-nav-collapse {
+  display: flex;
+  flex-grow: 1;
+  align-items: center;
+  gap: 24px;
+}
+
+.site-nav-auth {
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.site-nav-user-info {
+  color: #94a3b8;
+  font-size: 0.85rem;
+}
+
+.site-nav-username {
+  color: #3b82f6;
+  text-decoration: none;
+  font-weight: bold;
+}
+
+.nav-signout-btn {
+  padding: 8px 12px;
+  font-size: 0.85rem;
+  background: #dc2626 !important; /* Force override */
+  border-radius: 6px;
+  color: #fff;
+  min-height: 44px;
+}
+
+.nav-signin-link {
+  font-size: 0.85rem;
+  padding: 8px 16px;
+}
+
+/* --- Table Scrolling (All sizes) --- */
+.doc-table-wrap {
+  width: 100%;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  margin-bottom: 16px;
+}
+
+/* --- Tablet Breakpoint (Up to 64rem / 1024px) --- */
+@media (max-width: 64rem) {
+  /* Collapsible Navigation Bar */
+  .site-nav {
+    flex-direction: column;
+    height: auto;
+    padding: 8px 16px;
+    align-items: flex-start;
+    gap: 0;
+  }
+
+  .nav-mobile-toggle {
+    display: inline-flex;
+  }
+
+  .site-nav-collapse {
+    display: none;
+    flex-direction: column;
+    width: 100%;
+    gap: 16px;
+    padding: 16px 0 8px;
+    border-top: 1px solid #334155;
+    margin-top: 8px;
+  }
+
+  .site-nav-collapse.show {
+    display: flex;
+  }
+
+  .site-nav-links {
+    flex-direction: column;
+    width: 100%;
+    gap: 8px;
+  }
+
+  .site-nav-links .nav-link {
+    width: 100%;
+    justify-content: flex-start;
+    padding: 10px 14px;
+  }
+
+  .site-nav-auth {
+    width: 100%;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 12px;
+    margin-left: 0;
+    padding-top: 12px;
+    border-top: 1px solid #334155;
+  }
+
+  .site-nav-user-info {
+    width: 100%;
+  }
+
+  .nav-signout-btn, .nav-signin-link {
+    width: 100%;
+    justify-content: center;
+  }
+
+  /* Grid Layouts Stacking */
   .project-grid {
     grid-template-columns: 1fr;
+    gap: 16px;
+  }
+
+  .row {
+    grid-template-columns: 1fr;
+    gap: 16px;
+  }
+
+  .source-grid {
+    grid-template-columns: 1fr;
+    gap: 16px;
+  }
+}
+
+/* --- Mobile Breakpoint (Up to 48rem / 768px) --- */
+@media (max-width: 48rem) {
+  .page {
+    padding: 16px 12px 24px;
+  }
+
+  .panel {
+    padding: 14px;
+    border-radius: 8px;
+  }
+
+  .doc-filter-grid {
+    grid-template-columns: 1fr;
+    gap: 12px;
+  }
+
+  /* Form & inputs stretching */
+  .form {
+    gap: 12px;
+  }
+
+  /* Quick test tags wrapping and larger targets */
+  .quick-tests {
+    gap: 10px;
+  }
+
+  .quick-test-button {
+    padding: 8px 16px;
+  }
+
+  /* Table cell optimizations */
+  .doc-table th,
+  .doc-table td {
+    padding: 12px 10px; /* Touch friendly padding */
   }
 }
 
