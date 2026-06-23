@@ -12,13 +12,13 @@ from __future__ import annotations
 import logging
 import os
 import time
-from datetime import datetime, timezone
-from typing import Any, Annotated
+from datetime import UTC, datetime
+from typing import Annotated, Any
 from uuid import UUID
 
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Request
 
-from api.auth import get_optional_current_user, get_current_user
+from api.auth import get_current_user
 from api.schemas import (
     AHJDisclaimer,
     AnswerResponse,
@@ -461,7 +461,7 @@ def query_answer(
                 query_text=body.query,
                 session_id=session_id,
                 cited_pairs=list(cited_keys),
-                cited_at_iso=datetime.now(timezone.utc).isoformat(),
+                cited_at_iso=datetime.now(UTC).isoformat(),
             )
         except Exception as exc:
             log.warning("16F: could not schedule graph enrichment task: %s", exc)
@@ -527,10 +527,13 @@ def query_answer(
 
 
 @router.get("/query/history", response_model=list[dict])
-def get_query_history(current_user: Annotated[dict, Depends(get_current_user)]) -> list[dict]:
+def get_query_history(
+    current_user: Annotated[dict, Depends(get_current_user)],
+    project_id: UUID | None = None,
+) -> list[dict]:
     """Fetch the authenticated user's private query history."""
     from db import client as db_client
-    rows = db_client.get_user_query_history(current_user["user_id"])
+    rows = db_client.get_user_query_history(current_user["user_id"], project_id=project_id)
     return [dict(r) for r in rows]
 
 

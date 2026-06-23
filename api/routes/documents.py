@@ -7,7 +7,6 @@ Provides list/detail/status routes for document governance metadata.
 from __future__ import annotations
 
 import logging
-from typing import Optional
 
 from fastapi import APIRouter, HTTPException, Query
 
@@ -54,10 +53,10 @@ def _to_document_summary(row: dict) -> DocumentSummaryResponse:
     description="List document metadata with optional municipality/status/authority/doc_type filters.",
 )
 def list_document_metadata(
-    municipality: Optional[str] = Query(default=None),
-    status: Optional[DocumentStatusType] = Query(default=None),
-    authority: Optional[AuthorityLevelType] = Query(default=None),
-    doc_type: Optional[DocTypeType] = Query(default=None),
+    municipality: str | None = Query(default=None),
+    status: DocumentStatusType | None = Query(default=None),
+    authority: AuthorityLevelType | None = Query(default=None),
+    doc_type: DocTypeType | None = Query(default=None),
 ) -> list[DocumentSummaryResponse]:
     """Return document metadata rows with optional filters."""
     try:
@@ -81,10 +80,10 @@ def list_document_metadata(
     description="Return document_status counts for optional municipality/status/authority/doc_type filters.",
 )
 def document_status_counts(
-    municipality: Optional[str] = Query(default=None),
-    status: Optional[DocumentStatusType] = Query(default=None),
-    authority: Optional[AuthorityLevelType] = Query(default=None),
-    doc_type: Optional[DocTypeType] = Query(default=None),
+    municipality: str | None = Query(default=None),
+    status: DocumentStatusType | None = Query(default=None),
+    authority: AuthorityLevelType | None = Query(default=None),
+    doc_type: DocTypeType | None = Query(default=None),
 ) -> DocumentStatusResponse:
     """Return grouped status counts for the selected document filter scope."""
     try:

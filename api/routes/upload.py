@@ -19,19 +19,27 @@ import logging
 import os
 import shutil
 from pathlib import Path
-from typing import Annotated, Optional
-
 from uuid import UUID
-from fastapi import APIRouter, BackgroundTasks, Depends, File, Form, HTTPException, UploadFile
+
+from fastapi import (
+    APIRouter,
+    BackgroundTasks,
+    Depends,
+    File,
+    Form,
+    HTTPException,
+    UploadFile,
+)
 from fastapi.security import APIKeyHeader
 from pydantic import BaseModel
+
 from api.auth import get_optional_current_user
 from db.client import (
     delete_chunks_for_document,
     insert_chunks,
     insert_document,
-    update_document_admin_fields,
     share_document_to_project,
+    update_document_admin_fields,
 )
 from ingestion.chunker import chunk_document
 from ingestion.embedder import embed_document
@@ -72,8 +80,8 @@ _token_header = APIKeyHeader(name="X-Admin-Token", auto_error=False)
 
 def _require_admin_or_jwt(
     token: str | None = Depends(_token_header),
-    current_user: Optional[dict] = Depends(get_optional_current_user),
-) -> Optional[dict]:
+    current_user: dict | None = Depends(get_optional_current_user),
+) -> dict | None:
     """Require either a valid X-Admin-Token or a valid logged-in JWT user."""
     required = os.environ.get("API_ADMIN_AUTH_REQUIRED", "true").lower() not in {"0", "false", "no"}
     if not required:
@@ -103,8 +111,8 @@ def _process_upload(
     doc_type: str,
     subject_tags: list[str],
     source_tier: int,
-    project_id: Optional[UUID] = None,
-    uploaded_by: Optional[UUID] = None,
+    project_id: UUID | None = None,
+    uploaded_by: UUID | None = None,
 ) -> None:
     """
     Run in background: insert document row, chunk, and embed.
@@ -192,7 +200,7 @@ VALID_DOC_TYPES = {
 )
 async def upload_document(
     background_tasks: BackgroundTasks,
-    auth_user: Optional[dict] = Depends(_require_admin_or_jwt),
+    auth_user: dict | None = Depends(_require_admin_or_jwt),
     file: UploadFile = File(..., description="PDF or HTML file to upload."),
     doc_id: str = Form(..., description="Unique document identifier (e.g. 'plano-pool-ordinance-2024')."),
     municipality: str = Form(..., description="Municipality string matching documents table (e.g. 'plano')."),
@@ -200,8 +208,8 @@ async def upload_document(
     doc_type: str = Form(..., description="Document type (e.g. 'zoning_ordinance')."),
     subject_tags: str = Form(default="", description="Comma-separated subject tags (e.g. 'pools,setbacks')."),
     source_tier: int = Form(default=2, description="Source tier: 1=corpus, 2=user ordinance, 3=project doc."),
-    source_url: Optional[str] = Form(default=None, description="Source URL if document was obtained online."),
-    project_id: Optional[UUID] = Form(default=None, description="Optional project UUID to bind/share document to."),
+    source_url: str | None = Form(default=None, description="Source URL if document was obtained online."),
+    project_id: UUID | None = Form(default=None, description="Optional project UUID to bind/share document to."),
 ) -> UploadResponse:
     # ── Validate inputs ──────────────────────────────────────
     suffix = Path(file.filename or "").suffix.lower()
