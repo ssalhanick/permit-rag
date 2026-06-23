@@ -12,9 +12,10 @@ from __future__ import annotations
 
 import logging
 import os
+from collections.abc import Generator
 from contextlib import contextmanager
-from datetime import date, datetime
-from typing import Any, Generator, Optional
+from datetime import date
+from typing import Any
 from uuid import UUID
 
 import psycopg
@@ -25,7 +26,7 @@ log = logging.getLogger(__name__)
 
 # ── Module-level singleton pool ──────────────────────────────
 
-_pool: Optional[ConnectionPool] = None
+_pool: ConnectionPool | None = None
 
 
 def get_pool() -> ConnectionPool:
@@ -69,7 +70,7 @@ def get_conn() -> Generator[psycopg.Connection, None, None]:
 #  JURISDICTIONS
 # ════════════════════════════════════════════════
 
-def get_jurisdiction(municipality_id: str) -> Optional[dict[str, Any]]:
+def get_jurisdiction(municipality_id: str) -> dict[str, Any] | None:
     """
     Fetch a jurisdiction row by its id (matches documents.municipality).
 
@@ -83,7 +84,7 @@ def get_jurisdiction(municipality_id: str) -> Optional[dict[str, Any]]:
 
 def list_jurisdictions(
     *,
-    level: Optional[str] = None,
+    level: str | None = None,
 ) -> list[dict[str, Any]]:
     """List all jurisdictions, optionally filtered by level."""
     if level:
@@ -108,17 +109,17 @@ def insert_document(
     authority_level: str,
     doc_type: str,
     subject_tags: list[str],
-    effective_date: Optional[date] = None,
+    effective_date: date | None = None,
     document_status: str = "active",
     is_current: bool = True,
     retrieval_weight: float = 1.0,
-    review_due: Optional[date] = None,
-    checksum_sha256: Optional[str] = None,
-    source_etag: Optional[str] = None,
-    local_path: Optional[str] = None,
+    review_due: date | None = None,
+    checksum_sha256: str | None = None,
+    source_etag: str | None = None,
+    local_path: str | None = None,
     source_tier: int = 1,  # Sprint 1: 1=corpus, 2=user ordinance, 3=project doc
-    project_id: Optional[UUID] = None,
-    uploaded_by: Optional[UUID] = None,
+    project_id: UUID | None = None,
+    uploaded_by: UUID | None = None,
 ) -> dict[str, Any]:
     """
     Insert a document row. Returns the full row as a dict.
@@ -188,14 +189,14 @@ def insert_document(
     return row
 
 
-def get_document_by_doc_id(doc_id: str) -> Optional[dict[str, Any]]:
+def get_document_by_doc_id(doc_id: str) -> dict[str, Any] | None:
     """Fetch a single document row by its human-readable doc_id."""
     sql = "SELECT * FROM documents WHERE doc_id = %s;"
     with get_conn() as conn:
         return conn.execute(sql, (doc_id,)).fetchone()
 
 
-def get_document_by_uuid(uuid: UUID) -> Optional[dict[str, Any]]:
+def get_document_by_uuid(uuid: UUID) -> dict[str, Any] | None:
     """Fetch a single document row by its primary key UUID."""
     sql = "SELECT * FROM documents WHERE id = %s;"
     with get_conn() as conn:
@@ -204,10 +205,10 @@ def get_document_by_uuid(uuid: UUID) -> Optional[dict[str, Any]]:
 
 def list_documents(
     *,
-    municipality: Optional[str] = None,
-    status: Optional[str] = None,
-    authority_level: Optional[str] = None,
-    doc_type: Optional[str] = None,
+    municipality: str | None = None,
+    status: str | None = None,
+    authority_level: str | None = None,
+    doc_type: str | None = None,
 ) -> list[dict[str, Any]]:
     """
     List documents with optional municipality/status/authority/doc_type filters.
@@ -239,10 +240,10 @@ def list_documents(
 
 def get_document_status_counts(
     *,
-    municipality: Optional[str] = None,
-    status: Optional[str] = None,
-    authority_level: Optional[str] = None,
-    doc_type: Optional[str] = None,
+    municipality: str | None = None,
+    status: str | None = None,
+    authority_level: str | None = None,
+    doc_type: str | None = None,
 ) -> list[dict[str, Any]]:
     """Return grouped document status counts for optional filters."""
     clauses: list[str] = []
@@ -275,11 +276,11 @@ def get_document_status_counts(
 def update_document_admin_fields(
     doc_id: str,
     *,
-    document_status: Optional[str] = None,
-    is_current: Optional[bool] = None,
-    retrieval_weight: Optional[float] = None,
-    review_due: Optional[date] = None,
-) -> Optional[dict[str, Any]]:
+    document_status: str | None = None,
+    is_current: bool | None = None,
+    retrieval_weight: float | None = None,
+    review_due: date | None = None,
+) -> dict[str, Any] | None:
     """Update mutable governance fields for a single document by doc_id."""
     assignments: list[str] = []
     params: dict[str, Any] = {"doc_id": doc_id}
@@ -317,7 +318,7 @@ def supersede_document(
     replacement_doc_id: str,
     *,
     superseded_weight: float = 0.1,
-) -> Optional[dict[str, Any]]:
+) -> dict[str, Any] | None:
     """Mark old_doc_id as superseded by replacement_doc_id."""
     if old_doc_id == replacement_doc_id:
         raise ValueError("replacement_doc_id must differ from doc_id")
@@ -452,7 +453,7 @@ def match_chunks(
     query_embedding: list[float],
     *,
     top_k: int = 5,
-    municipality: Optional[str] = None,
+    municipality: str | None = None,
     min_similarity: float = 0.0,
 ) -> list[dict[str, Any]]:
     """
@@ -504,7 +505,7 @@ def _search_chunks_with_tsquery(
     query_text: str,
     *,
     top_k: int,
-    municipality: Optional[str],
+    municipality: str | None,
     tsquery_func: str,
 ) -> list[dict[str, Any]]:
     """Run lexical chunk search using the provided tsquery parser."""
@@ -547,7 +548,7 @@ def search_chunks_bm25(
     query_text: str,
     *,
     top_k: int = 5,
-    municipality: Optional[str] = None,
+    municipality: str | None = None,
 ) -> list[dict[str, Any]]:
     """
     Lexical retrieval using chunks.search_vector with BM25-style ranking.
@@ -585,7 +586,7 @@ def insert_verification(
     document_id: UUID,
     stage: str,
     result: str,
-    detail: Optional[dict[str, Any]] = None,
+    detail: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     """
     Log a verification result for an ingestion stage.
@@ -643,14 +644,14 @@ def insert_query_log(
     *,
     query_text: str,
     model: str,
-    municipality: Optional[str] = None,
+    municipality: str | None = None,
     top_k: int = 5,
-    chunk_ids: Optional[list[UUID]] = None,
-    answer_text: Optional[str] = None,
-    citations: Optional[list[dict]] = None,
-    latency_ms: Optional[int] = None,
-    user_id: Optional[UUID] = None,
-    project_id: Optional[UUID] = None,
+    chunk_ids: list[UUID] | None = None,
+    answer_text: str | None = None,
+    citations: list[dict] | None = None,
+    latency_ms: int | None = None,
+    user_id: UUID | None = None,
+    project_id: UUID | None = None,
 ) -> dict[str, Any]:
     """Log a RAG query for auditing and evaluation."""
     import json as _json
@@ -744,7 +745,7 @@ def create_user(
     username: str,
     email: str,
     password_hash: str,
-    phone_number: Optional[str] = None,
+    phone_number: str | None = None,
     role: str = "member",
 ) -> dict[str, Any]:
     """Insert a new user row."""
@@ -766,7 +767,7 @@ def create_user(
     return row
 
 
-def get_user_by_identifier(identifier: str) -> Optional[dict[str, Any]]:
+def get_user_by_identifier(identifier: str) -> dict[str, Any] | None:
     """Look up user by username, email, or phone_number (lowercase username/email check)."""
     sql = """
         SELECT * FROM users 
@@ -777,7 +778,7 @@ def get_user_by_identifier(identifier: str) -> Optional[dict[str, Any]]:
         return conn.execute(sql, (identifier, identifier, identifier)).fetchone()
 
 
-def get_user_by_id(user_id: UUID) -> Optional[dict[str, Any]]:
+def get_user_by_id(user_id: UUID) -> dict[str, Any] | None:
     """Fetch user row by primary key UUID."""
     sql = "SELECT * FROM users WHERE id = %s AND is_active = true;"
     with get_conn() as conn:
@@ -786,8 +787,8 @@ def get_user_by_id(user_id: UUID) -> Optional[dict[str, Any]]:
 
 def update_refresh_token_hash(
     user_id: UUID,
-    token_hash: Optional[str],
-    family: Optional[UUID] = None,
+    token_hash: str | None,
+    family: UUID | None = None,
 ) -> None:
     """Store or clear refresh_token_hash + token_family atomically."""
     sql = """
@@ -801,14 +802,14 @@ def update_refresh_token_hash(
         conn.commit()
 
 
-def get_refresh_token_meta(user_id: UUID) -> Optional[dict[str, Any]]:
+def get_refresh_token_meta(user_id: UUID) -> dict[str, Any] | None:
     """Return {refresh_token_hash, token_family} for revocation check."""
     sql = "SELECT refresh_token_hash, token_family FROM users WHERE id = %s;"
     with get_conn() as conn:
         return conn.execute(sql, (user_id,)).fetchone()
 
 
-def deactivate_user(user_id: UUID) -> Optional[dict[str, Any]]:
+def deactivate_user(user_id: UUID) -> dict[str, Any] | None:
     """Soft-delete user: set is_active=False, clear refresh_token_hash."""
     sql = """
         UPDATE users 
@@ -830,8 +831,8 @@ def create_project(
     *,
     name: str,
     owner_user_id: UUID,
-    description: Optional[str] = None,
-    municipality: Optional[str] = None,
+    description: str | None = None,
+    municipality: str | None = None,
 ) -> dict[str, Any]:
     """Create a project and auto-enroll the owner in one transaction."""
     sql_project = """
@@ -856,7 +857,7 @@ def create_project(
     return row
 
 
-def get_project(project_id: UUID) -> Optional[dict[str, Any]]:
+def get_project(project_id: UUID) -> dict[str, Any] | None:
     """Fetch active project by UUID."""
     sql = "SELECT * FROM projects WHERE id = %s AND is_active = true;"
     with get_conn() as conn:
@@ -879,10 +880,10 @@ def list_projects_for_user(user_id: UUID) -> list[dict[str, Any]]:
 def update_project(
     project_id: UUID,
     *,
-    name: Optional[str] = None,
-    description: Optional[str] = None,
-    municipality: Optional[str] = None,
-) -> Optional[dict[str, Any]]:
+    name: str | None = None,
+    description: str | None = None,
+    municipality: str | None = None,
+) -> dict[str, Any] | None:
     """Update mutable project fields."""
     assignments: list[str] = []
     params: dict[str, Any] = {"id": project_id}
@@ -904,7 +905,7 @@ def update_project(
     return row
 
 
-def transfer_project_ownership(project_id: UUID, new_owner_id: UUID) -> Optional[dict[str, Any]]:
+def transfer_project_ownership(project_id: UUID, new_owner_id: UUID) -> dict[str, Any] | None:
     """Transfer ownership atomically: projects.owner_user_id and project_members roles."""
     with get_conn() as conn:
         proj = conn.execute("SELECT owner_user_id FROM projects WHERE id = %s;", (project_id,)).fetchone()
@@ -925,7 +926,7 @@ def transfer_project_ownership(project_id: UUID, new_owner_id: UUID) -> Optional
     return get_project(project_id)
 
 
-def archive_project(project_id: UUID) -> Optional[dict[str, Any]]:
+def archive_project(project_id: UUID) -> dict[str, Any] | None:
     """Soft-delete: set is_active=False."""
     sql = "UPDATE projects SET is_active = false WHERE id = %s RETURNING *;"
     with get_conn() as conn:
@@ -938,7 +939,7 @@ def archive_project(project_id: UUID) -> Optional[dict[str, Any]]:
 #  PROJECT MEMBERS (Sprint 9)
 # ════════════════════════════════════════════════
 
-def get_project_role(project_id: UUID, user_id: UUID) -> Optional[str]:
+def get_project_role(project_id: UUID, user_id: UUID) -> str | None:
     """Return role string or None if not a member."""
     sql = "SELECT role FROM project_members WHERE project_id = %s AND user_id = %s;"
     with get_conn() as conn:
@@ -1029,11 +1030,16 @@ def unshare_document_from_project(project_id: UUID, document_id: UUID) -> bool:
     return cur.rowcount > 0
 
 
-def get_user_query_history(user_id: UUID) -> list[dict[str, Any]]:
+def get_user_query_history(user_id: UUID, project_id: UUID | None = None) -> list[dict[str, Any]]:
     """Fetch query log history for a specific user, sorted by newest first."""
-    sql = "SELECT id, query_text, municipality, top_k, answer_text, citations, model, latency_ms, created_at, project_id FROM query_log WHERE user_id = %s ORDER BY created_at DESC;"
-    with get_conn() as conn:
-        return conn.execute(sql, (user_id,)).fetchall()
+    if project_id:
+        sql = "SELECT id, query_text, municipality, top_k, answer_text, citations, model, latency_ms, created_at, project_id FROM query_log WHERE user_id = %s AND project_id = %s ORDER BY created_at DESC;"
+        with get_conn() as conn:
+            return conn.execute(sql, (user_id, project_id)).fetchall()
+    else:
+        sql = "SELECT id, query_text, municipality, top_k, answer_text, citations, model, latency_ms, created_at, project_id FROM query_log WHERE user_id = %s ORDER BY created_at DESC;"
+        with get_conn() as conn:
+            return conn.execute(sql, (user_id,)).fetchall()
 
 
 def delete_user_query(user_id: UUID, query_id: UUID) -> bool:

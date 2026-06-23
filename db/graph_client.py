@@ -19,8 +19,9 @@ from __future__ import annotations
 
 import logging
 import os
+from collections.abc import Generator
 from contextlib import contextmanager
-from typing import Any, Generator, Optional
+from typing import Any
 
 log = logging.getLogger(__name__)
 
@@ -30,13 +31,24 @@ _driver: Any = None  # neo4j.Driver (imported lazily)
 
 
 def _parse_auth(auth_str: str) -> tuple[str, str]:
-    """Parse 'user/password' env string into (user, password) tuple."""
-    parts = auth_str.split("/", 1)
-    if len(parts) != 2 or not parts[0] or not parts[1]:
-        raise ValueError(
-            f"NEO4J_AUTH must be 'user/password', got: {auth_str!r}"
-        )
-    return parts[0], parts[1]
+    """
+    Parse auth env string into (user, password) tuple.
+    Supports:
+      - 'user/password'
+      - 'NEO4J_PASSWORD=password' (defaults user to 'neo4j')
+    """
+    auth_str = auth_str.strip()
+    if "/" in auth_str:
+        parts = auth_str.split("/", 1)
+        if parts[0] and parts[1]:
+            return parts[0], parts[1]
+    
+    if "NEO4J_PASSWORD=" in auth_str:
+        parts = auth_str.split("=", 1)
+        if parts[1]:
+            return "neo4j", parts[1]
+
+    raise ValueError(f"NEO4J_AUTH must be 'user/password' or contain 'NEO4J_PASSWORD=', got: {auth_str!r}")
 
 
 def get_driver() -> Any:
@@ -266,7 +278,7 @@ def ping() -> bool:
 # ── Read helpers ──────────────────────────────────────────────
 
 
-def get_document_node(doc_id: str) -> Optional[dict[str, Any]]:
+def get_document_node(doc_id: str) -> dict[str, Any] | None:
     """Return the Document node properties dict, or None if not found."""
     cypher = "MATCH (d:Document {doc_id: $doc_id}) RETURN properties(d) AS props"
     with get_session() as session:

@@ -8,10 +8,10 @@ Keeps route files thin and enables OpenAPI schema generation.
 from __future__ import annotations
 
 from datetime import date, datetime
-from typing import Literal, Optional
+from typing import Literal
 from uuid import UUID
 
-from pydantic import BaseModel, Field, EmailStr
+from pydantic import BaseModel, EmailStr, Field
 
 DocumentStatusType = Literal["active", "superseded", "repealed", "needs_ocr", "draft"]
 AuthorityLevelType = Literal["municipal", "county", "state", "federal"]
@@ -53,13 +53,13 @@ class QueryRequest(BaseModel):
         le=50,
         description="Maximum number of chunks to retrieve.",
     )
-    municipality: Optional[str] = Field(
+    municipality: str | None = Field(
         default=None,
         description="Optional municipality filter (e.g. 'dallas', 'plano'). "
                     "If omitted and 'address' is provided, the municipality is "
                     "auto-resolved via geocoding.",
     )
-    address: Optional[str] = Field(
+    address: str | None = Field(
         default=None,
         max_length=500,
         description=(
@@ -76,7 +76,7 @@ class QueryRequest(BaseModel):
         le=1.0,
         description="Discard results below this cosine similarity.",
     )
-    project_id: Optional[str] = Field(
+    project_id: str | None = Field(
         default=None,
         description="Optional project identifier to bind this query context to in logs and LangSmith.",
     )
@@ -120,7 +120,7 @@ class QueryResponse(BaseModel):
 
     query: str = Field(description="Original query string.")
     top_k: int = Field(description="Requested top_k.")
-    municipality: Optional[str] = Field(description="Applied municipality filter.")
+    municipality: str | None = Field(description="Applied municipality filter.")
     num_results: int = Field(description="Number of chunks returned.")
     latency_ms: int = Field(description="End-to-end retrieval latency in milliseconds.")
     model: str = Field(description="Embedding model used.")
@@ -154,7 +154,7 @@ class AHJDisclaimer(BaseModel):
             "ordinance and that the AHJ (city building department) has final authority."
         )
     )
-    learn_more_url: Optional[str] = Field(
+    learn_more_url: str | None = Field(
         default=None,
         description="URL to the building department's permit portal for the resolved jurisdiction.",
     )
@@ -187,8 +187,8 @@ class CitationResponse(BaseModel):
     doc_id: str = Field(description="Human-readable document identifier.")
     chunk_index: int = Field(description="Chunk position within the document.")
     found_in_context: bool = Field(description="True if citation matched a retrieved chunk.")
-    municipality: Optional[str] = Field(description="Source municipality.")
-    authority_level: Optional[str] = Field(description="Authority level of cited source.")
+    municipality: str | None = Field(description="Source municipality.")
+    authority_level: str | None = Field(description="Authority level of cited source.")
 
 
 class AnswerResponse(BaseModel):
@@ -233,7 +233,7 @@ class AnswerResponse(BaseModel):
         )
     )
     # Sprint 5 — Task 14C: resolved jurisdiction from address geocoding
-    resolved_municipality: Optional[str] = Field(
+    resolved_municipality: str | None = Field(
         default=None,
         description=(
             "Municipality auto-resolved from the 'address' field via geocoding + "
@@ -241,7 +241,7 @@ class AnswerResponse(BaseModel):
         ),
     )
     # Sprint 5 — Task 15: lightweight conflict detection
-    conflict_warnings: list["ConflictWarning"] = Field(
+    conflict_warnings: list[ConflictWarning] = Field(
         default_factory=list,
         description=(
             "Conflict warnings surfaced when retrieved chunks from different "
@@ -269,8 +269,8 @@ class DocumentSummaryResponse(BaseModel):
     subject_tags: list[str] = Field(description="Subject tags from registry metadata.")
     document_status: DocumentStatusType = Field(description="Lifecycle status.")
     is_current: bool = Field(description="Whether this row is the current active revision.")
-    effective_date: Optional[date] = Field(description="Effective date if known.")
-    review_due: Optional[date] = Field(description="Review due date if tracked.")
+    effective_date: date | None = Field(description="Effective date if known.")
+    review_due: date | None = Field(description="Review due date if tracked.")
     retrieval_weight: float = Field(description="Retrieval weighting factor.")
     updated_at: datetime = Field(description="Last update timestamp.")
 
@@ -278,10 +278,10 @@ class DocumentSummaryResponse(BaseModel):
 class DocumentDetailResponse(DocumentSummaryResponse):
     """Detailed metadata for a single document."""
 
-    checksum_sha256: Optional[str] = Field(description="Source checksum fingerprint.")
-    source_etag: Optional[str] = Field(description="Source ETag when available.")
-    local_path: Optional[str] = Field(description="Relative raw file path.")
-    superseded_by: Optional[UUID] = Field(description="UUID of replacement document, if any.")
+    checksum_sha256: str | None = Field(description="Source checksum fingerprint.")
+    source_etag: str | None = Field(description="Source ETag when available.")
+    local_path: str | None = Field(description="Relative raw file path.")
+    superseded_by: UUID | None = Field(description="UUID of replacement document, if any.")
     ingested_at: datetime = Field(description="Ingestion timestamp.")
     chunk_count: int = Field(description="Total number of stored chunks for this document.")
 
@@ -296,10 +296,10 @@ class DocumentStatusCountResponse(BaseModel):
 class DocumentStatusResponse(BaseModel):
     """Aggregated status totals for filtered document subsets."""
 
-    municipality: Optional[str] = Field(description="Applied municipality filter.")
-    authority: Optional[AuthorityLevelType] = Field(description="Applied authority filter.")
-    doc_type: Optional[DocTypeType] = Field(description="Applied document type filter.")
-    status: Optional[DocumentStatusType] = Field(description="Applied status filter.")
+    municipality: str | None = Field(description="Applied municipality filter.")
+    authority: AuthorityLevelType | None = Field(description="Applied authority filter.")
+    doc_type: DocTypeType | None = Field(description="Applied document type filter.")
+    status: DocumentStatusType | None = Field(description="Applied status filter.")
     total_documents: int = Field(description="Total documents matching all filters.")
     counts: list[DocumentStatusCountResponse] = Field(
         description="Counts grouped by document_status."
@@ -309,21 +309,21 @@ class DocumentStatusResponse(BaseModel):
 class DocumentAdminUpdateRequest(BaseModel):
     """Mutable governance fields for admin metadata updates."""
 
-    document_status: Optional[DocumentStatusType] = Field(
+    document_status: DocumentStatusType | None = Field(
         default=None,
         description="Lifecycle status update.",
     )
-    is_current: Optional[bool] = Field(
+    is_current: bool | None = Field(
         default=None,
         description="Whether this revision is currently active for retrieval.",
     )
-    retrieval_weight: Optional[float] = Field(
+    retrieval_weight: float | None = Field(
         default=None,
         ge=0.0,
         le=1.0,
         description="Retrieval weighting factor between 0 and 1.",
     )
-    review_due: Optional[date] = Field(
+    review_due: date | None = Field(
         default=None,
         description="Next governance review due date.",
     )
@@ -360,7 +360,7 @@ class RegisterRequest(BaseModel):
     username: str = Field(..., min_length=3, max_length=30, description="Alphanumeric username plus _ . - allowed")
     password: str = Field(..., min_length=10, description="Minimum 10 characters")
     email: EmailStr = Field(..., description="Required email address")
-    phone_number: Optional[str] = Field(default=None, description="Optional E.164 phone number")
+    phone_number: str | None = Field(default=None, description="Optional E.164 phone number")
 
 
 class LoginRequest(BaseModel):
@@ -386,7 +386,7 @@ class UserResponse(BaseModel):
     id: UUID
     username: str
     email: str
-    phone_number: Optional[str] = None
+    phone_number: str | None = None
     role: str
     created_at: datetime
 
@@ -394,17 +394,17 @@ class UserResponse(BaseModel):
 class CreateProjectRequest(BaseModel):
     """Project creation payload."""
     name: str = Field(..., min_length=1, max_length=120)
-    description: Optional[str] = Field(default=None, max_length=500)
-    municipality: Optional[str] = Field(default=None, description="Default city scope")
+    description: str | None = Field(default=None, max_length=500)
+    municipality: str | None = Field(default=None, description="Default city scope")
 
 
 class ProjectResponse(BaseModel):
     """Project representation response."""
     id: UUID
     name: str
-    description: Optional[str] = None
+    description: str | None = None
     owner_user_id: UUID
-    municipality: Optional[str] = None
+    municipality: str | None = None
     is_active: bool
     created_at: datetime
     updated_at: datetime
