@@ -11,7 +11,7 @@ import hashlib
 import os
 import re
 from datetime import UTC, datetime, timedelta
-from typing import Annotated, Optional
+from typing import Annotated
 from uuid import UUID
 
 import jwt
@@ -70,7 +70,7 @@ def validate_username(raw: str) -> str:
     return username
 
 
-def validate_phone_number(raw: Optional[str]) -> Optional[str]:
+def validate_phone_number(raw: str | None) -> str | None:
     """Validate and format phone number to E.164. Returns formatted string or raises ValueError."""
     if not raw or not raw.strip():
         return None
@@ -131,7 +131,7 @@ def decode_token(token: str, expected_type: str = "access") -> dict:
 
 def get_current_user(
     credentials: Annotated[
-        Optional[HTTPAuthorizationCredentials], Depends(_bearer)
+        HTTPAuthorizationCredentials | None, Depends(_bearer)
     ] = None,
 ) -> dict:
     """FastAPI dependency: extract + validate access token from Bearer header."""
@@ -146,7 +146,7 @@ def get_current_user(
 
 def get_optional_current_user(
     credentials: Annotated[
-        Optional[HTTPAuthorizationCredentials], Depends(_bearer)
+        HTTPAuthorizationCredentials | None, Depends(_bearer)
     ] = None,
 ) -> dict | None:
     """FastAPI dependency: extract + validate access token if present, return None if missing or invalid."""

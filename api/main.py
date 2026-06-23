@@ -15,8 +15,8 @@ from __future__ import annotations
 
 import logging
 import os
+from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
-from typing import AsyncGenerator
 
 from dotenv import load_dotenv
 from fastapi import FastAPI, HTTPException, Request
@@ -33,8 +33,8 @@ from api.routes import (
     upload_router,
 )
 from api.schemas import HealthResponse
-from db.client import close_pool, ping
 from db import graph_client as _graph_client
+from db.client import close_pool, ping
 
 log = logging.getLogger(__name__)
 

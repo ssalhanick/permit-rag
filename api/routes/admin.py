@@ -9,18 +9,15 @@ from __future__ import annotations
 import logging
 import os
 from pathlib import Path
-from typing import Optional, Annotated
-from uuid import UUID
 
-from fastapi import APIRouter, Header, HTTPException, Depends
-from api.auth import get_current_user
+from fastapi import APIRouter, Header, HTTPException
 
 from api.schemas import (
     DocumentAdminActionResponse,
     DocumentAdminUpdateRequest,
     DocumentDetailResponse,
-    DocumentSupersedeRequest,
     DocumentSummaryResponse,
+    DocumentSupersedeRequest,
     ErrorResponse,
 )
 from db import client as db_client
@@ -35,7 +32,7 @@ def _parse_role_set(env_key: str, default: str) -> set[str]:
     return {value.strip().lower() for value in raw.split(",") if value.strip()}
 
 
-def _require_admin_auth(x_admin_token: Optional[str], x_admin_role: Optional[str]) -> None:
+def _require_admin_auth(x_admin_token: str | None, x_admin_role: str | None) -> None:
     """Enforce token + role checks for admin routes when enabled."""
     required = os.environ.get("API_ADMIN_AUTH_REQUIRED", "true").strip().lower()
     auth_required = required in {"1", "true", "yes", "on"}
@@ -58,7 +55,7 @@ def _require_admin_auth(x_admin_token: Optional[str], x_admin_role: Optional[str
             raise HTTPException(status_code=403, detail="Insufficient admin role.")
 
 
-def _require_any_tier_purge_role(x_admin_role: Optional[str]) -> None:
+def _require_any_tier_purge_role(x_admin_role: str | None) -> None:
     """Require elevated role for purging non-project (non-tier-3) documents."""
     allowed_roles = _parse_role_set("API_PURGE_ANY_TIER_ROLES", "owner")
     if not allowed_roles:
@@ -108,7 +105,7 @@ def _to_document_detail(row: dict) -> DocumentDetailResponse:
     )
 
 
-def _remove_local_raw_file(local_path: Optional[str]) -> bool:
+def _remove_local_raw_file(local_path: str | None) -> bool:
     """Delete local raw file if it exists under documents/raw."""
     if not local_path:
         return False
@@ -141,8 +138,8 @@ def _remove_local_raw_file(local_path: Optional[str]) -> bool:
 def patch_document_admin(
     doc_id: str,
     body: DocumentAdminUpdateRequest,
-    x_admin_token: Optional[str] = Header(default=None),
-    x_admin_role: Optional[str] = Header(default=None),
+    x_admin_token: str | None = Header(default=None),
+    x_admin_role: str | None = Header(default=None),
 ) -> DocumentAdminActionResponse:
     """Patch mutable governance fields for an existing document."""
     _require_admin_auth(x_admin_token, x_admin_role)
@@ -176,8 +173,8 @@ def patch_document_admin(
 def supersede_document_admin(
     doc_id: str,
     body: DocumentSupersedeRequest,
-    x_admin_token: Optional[str] = Header(default=None),
-    x_admin_role: Optional[str] = Header(default=None),
+    x_admin_token: str | None = Header(default=None),
+    x_admin_role: str | None = Header(default=None),
 ) -> DocumentAdminActionResponse:
     """Supersede doc_id using replacement_doc_id and downweight old retrieval."""
     _require_admin_auth(x_admin_token, x_admin_role)
@@ -216,9 +213,9 @@ def supersede_document_admin(
 )
 def purge_project_upload_admin(
     doc_id: str,
-    x_admin_token: Optional[str] = Header(default=None),
-    x_admin_role: Optional[str] = Header(default=None),
-    x_admin_user: Optional[str] = Header(default=None),
+    x_admin_token: str | None = Header(default=None),
+    x_admin_role: str | None = Header(default=None),
+    x_admin_user: str | None = Header(default=None),
 ) -> DocumentAdminActionResponse:
     """Purge project-upload content while retaining governance document row."""
     _require_admin_auth(x_admin_token, x_admin_role)
