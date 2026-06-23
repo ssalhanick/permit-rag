@@ -30,7 +30,6 @@ from __future__ import annotations
 
 import logging
 import os
-from typing import Optional
 
 log = logging.getLogger(__name__)
 
@@ -104,8 +103,8 @@ _NLI_THRESHOLD_ENV = "PERMIT_CLASSIFIER_NLI_THRESHOLD"
 _NLI_DEFAULT_THRESHOLD = 0.50
 
 # Cached classifier instance (loaded once at first use)
-_nli_classifier: Optional[object] = None
-_nli_available: Optional[bool] = None   # True / False after first load attempt
+_nli_classifier: object | None = None
+_nli_available: bool | None = None   # True / False after first load attempt
 
 
 def _get_nli_threshold() -> float:
@@ -118,7 +117,7 @@ def _get_nli_threshold() -> float:
         return _NLI_DEFAULT_THRESHOLD
 
 
-def _load_nli_classifier() -> Optional[object]:
+def _load_nli_classifier() -> object | None:
     """
     Load the HuggingFace zero-shot classifier once and cache it.
 
@@ -188,7 +187,7 @@ def _classify_nli(
     description: str,
     *,
     threshold: float,
-) -> Optional[list[str]]:
+) -> list[str] | None:
     """
     NLI zero-shot classifier (Tier A).
 
@@ -225,7 +224,7 @@ def classify_permit_types(
     description: str,
     *,
     use_nli: bool = True,
-    threshold: Optional[float] = None,
+    threshold: float | None = None,
 ) -> list[str]:
     """
     Classify a project description into one or more permit types.

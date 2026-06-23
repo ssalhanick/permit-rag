@@ -16,25 +16,21 @@ Output:
         harvest.log   <- full run log
 """
 
-import os
-import json
 import hashlib
+import json
 import logging
 import time
-import re
-from datetime import datetime, timedelta, timezone
+from dataclasses import asdict, dataclass
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
-from dataclasses import dataclass, asdict, field
-from typing import Any, Optional
-from urllib.parse import urlparse
+from typing import Any
 
 import requests
-from bs4 import BeautifulSoup
 
 # ── optional rich logging (falls back gracefully) ──
 try:
-    from rich.logging import RichHandler
     from rich.console import Console
+    from rich.logging import RichHandler
     from rich.progress import track
     console = Console()
     logging.basicConfig(
@@ -81,20 +77,20 @@ class DocumentMetadata:
     subject_tags: list                 # ["easements","setbacks","residential"]
 
     # Temporal governance
-    effective_date: Optional[str]      # ISO date string or None if unknown
-    version: Optional[str]
+    effective_date: str | None      # ISO date string or None if unknown
+    version: str | None
     document_status: str               # active | superseded | draft | repealed
     is_current: bool
-    supersedes_doc_id: Optional[str]
+    supersedes_doc_id: str | None
     review_due: str                    # ISO date — when to re-check this source
 
     # Ingestion tracking
     ingested_at: str
     checksum_sha256: str
-    source_etag: Optional[str]         # HTTP ETag for change detection
-    source_last_modified: Optional[str]
+    source_etag: str | None         # HTTP ETag for change detection
+    source_last_modified: str | None
     file_size_bytes: int
-    page_count: Optional[int]
+    page_count: int | None
 
     # RAG weighting hints
     retrieval_weight: float            # 1.0 default; lower for superseded docs
@@ -130,7 +126,7 @@ def _validate_catalog_entry(entry: dict[str, Any], index: int) -> None:
         )
 
 
-def load_document_catalog(catalog_path: Optional[Path] = None) -> list[dict[str, Any]]:
+def load_document_catalog(catalog_path: Path | None = None) -> list[dict[str, Any]]:
     """Load and validate document catalog entries from JSON."""
     path = catalog_path or CATALOG_PATH
     if not path.exists():
@@ -182,7 +178,7 @@ HEADERS = {
 }
 
 
-def _find_existing_raw_file(doc_id: str, raw_dir: Path) -> Optional[Path]:
+def _find_existing_raw_file(doc_id: str, raw_dir: Path) -> Path | None:
     """Return existing raw file path for doc_id, if present."""
     for ext in (".pdf", ".docx", ".txt", ".md", ".markdown", ".html", ".htm"):
         candidate = raw_dir / f"{doc_id}{ext}"
@@ -228,7 +224,7 @@ def safe_filename(doc_id: str, content_type: str, url: str) -> str:
     return f"{doc_id}.html"
 
 
-def count_pdf_pages(path: Path) -> Optional[int]:
+def count_pdf_pages(path: Path) -> int | None:
     """Count pages in a PDF without heavy dependencies."""
     try:
         content = path.read_bytes()
@@ -329,7 +325,7 @@ def check_for_updates(registry: dict) -> list:
 
 def find_overdue_reviews(registry: dict) -> list:
     """Return list of doc_ids past their review_due date."""
-    today = datetime.now(timezone.utc).date().isoformat()
+    today = datetime.now(UTC).date().isoformat()
     overdue = []
     for doc_id, meta in registry.items():
         review_due = meta.get("review_due", "")
@@ -355,7 +351,7 @@ def harvest(output_dir: str = "documents", force: bool = False):
     registry_path = base / "registry.json"
 
     registry = load_registry(registry_path)
-    now_iso = datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
+    now_iso = datetime.now(UTC).isoformat().replace("+00:00", "Z")
 
     catalog = load_document_catalog()
     results = {
@@ -437,7 +433,7 @@ def harvest(output_dir: str = "documents", force: bool = False):
             REVIEW_DAYS_BY_TYPE.get(entry["doc_type"], 90)
         )
         review_due = (
-            datetime.now(timezone.utc) + timedelta(days=review_days)
+            datetime.now(UTC) + timedelta(days=review_days)
         ).date().isoformat()
 
         # Build metadata object
@@ -486,7 +482,7 @@ def harvest(output_dir: str = "documents", force: bool = False):
 
     # ── Summary ──
     log.info("\n" + "="*50)
-    log.info(f"Harvest complete")
+    log.info("Harvest complete")
     log.info(f"  Downloaded : {len(results['success'])}")
     log.info(f"  Used local raw     : {results['used_local_raw']}")
     log.info(f"  Downloaded from URL: {results['downloaded_from_url']}")
@@ -568,7 +564,7 @@ def mark_superseded(old_doc_id: str, new_doc_id: str, registry_path: str = "docu
     registry[old_doc_id]["retrieval_weight"] = 0.1
     registry[old_doc_id]["superseded_by"] = new_doc_id
     registry[old_doc_id]["superseded_date"] = datetime.now(
-        timezone.utc
+        UTC
     ).date().isoformat()
 
     if new_doc_id in registry:
@@ -597,7 +593,7 @@ def print_registry_report():
 
     catalog = load_document_catalog()
     registry = load_registry(rp)
-    today = datetime.now(timezone.utc).date().isoformat()
+    today = datetime.now(UTC).date().isoformat()
 
     catalog_doc_ids = {str(entry["doc_id"]) for entry in catalog}
     registry_doc_ids = set(registry.keys())

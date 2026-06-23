@@ -22,7 +22,7 @@ from __future__ import annotations
 
 import logging
 import os
-from typing import Any, Optional
+from typing import Any
 from uuid import UUID
 
 log = logging.getLogger(__name__)
@@ -46,7 +46,7 @@ _QUERY_PREFIX = "search_query: "
 _model = None
 
 
-def get_model(model_name: Optional[str] = None):
+def get_model(model_name: str | None = None):
     """
     Load (or return cached) SentenceTransformer model.
 
@@ -86,7 +86,7 @@ def embed_texts(
     texts: list[str],
     *,
     input_type: str = "document",
-    model_name: Optional[str] = None,
+    model_name: str | None = None,
 ) -> list[list[float]]:
     """
     Embed a list of texts using nomic-embed-text-v1.5.
@@ -119,7 +119,7 @@ def embed_texts(
 def embed_query(
     query: str,
     *,
-    model_name: Optional[str] = None,
+    model_name: str | None = None,
 ) -> list[float]:
     """
     Embed a single search query for retrieval.
@@ -139,7 +139,7 @@ def embed_query(
 def embed_document_chunks(
     chunks: list[dict[str, Any]],
     *,
-    model_name: Optional[str] = None,
+    model_name: str | None = None,
 ) -> list[list[float]]:
     """
     Embed all chunks for a single document.
@@ -213,7 +213,7 @@ def store_embeddings(
 def embed_document(
     doc_id: str,
     *,
-    model_name: Optional[str] = None,
+    model_name: str | None = None,
     dry_run: bool = False,
     force: bool = False,
 ) -> dict[str, Any]:
@@ -321,7 +321,7 @@ def embed_document(
 
 def embed_all_documents(
     *,
-    model_name: Optional[str] = None,
+    model_name: str | None = None,
     dry_run: bool = False,
     skip_failed: bool = True,
     force: bool = False,

@@ -21,7 +21,7 @@ from __future__ import annotations
 import logging
 import textwrap
 from dataclasses import dataclass
-from typing import Any, Optional
+from typing import Any
 
 from rag.retriever import RetrievalResult, retrieve
 
@@ -246,7 +246,7 @@ def retrieve_and_display(
     query: str,
     *,
     top_k: int = 5,
-    municipality: Optional[str] = None,
+    municipality: str | None = None,
     min_similarity: float = 0.0,
 ) -> RetrievalResult:
     """
@@ -267,7 +267,7 @@ def retrieve_and_display(
 # ── Batch evaluation ─────────────────────────────────────────
 
 def batch_eval(
-    queries: Optional[list[dict[str, Any]]] = None,
+    queries: list[dict[str, Any]] | None = None,
 ) -> list[QualityReport]:
     """
     Run a batch of test queries and produce a quality summary.

@@ -25,10 +25,10 @@ from __future__ import annotations
 import hashlib
 import logging
 from dataclasses import dataclass, field
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from enum import Enum
 from pathlib import Path
-from typing import Any, Optional
+from typing import Any
 from uuid import UUID
 
 log = logging.getLogger(__name__)
@@ -50,12 +50,12 @@ class ChangeStatus(Enum):
 class RescrapeResult:
     """Outcome of a single-document re-scrape attempt."""
     doc_id: str
-    status: Optional[ChangeStatus] = None
-    old_hash: Optional[str] = None
-    new_hash: Optional[str] = None
-    new_doc_id: Optional[str] = None   # set only when status == CHANGED
+    status: ChangeStatus | None = None
+    old_hash: str | None = None
+    new_hash: str | None = None
+    new_doc_id: str | None = None   # set only when status == CHANGED
     superseded: bool = False
-    error: Optional[str] = None
+    error: str | None = None
     messages: list[str] = field(default_factory=list)
 
     def ok(self) -> bool:
@@ -99,7 +99,7 @@ def sha256_bytes(data: bytes) -> str:
 def check_document_changed(
     doc_id: str,
     new_hash: str,
-) -> tuple[ChangeStatus, Optional[str]]:
+) -> tuple[ChangeStatus, str | None]:
     """
     Compare *new_hash* against what is stored in the DB for *doc_id*.
 
@@ -255,14 +255,14 @@ def rescrape_document(
         return result
 
     # ── 2. Ingest new (or first) version ─────────────────────
-    now_iso = datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
+    now_iso = datetime.now(UTC).isoformat().replace("+00:00", "Z")
     from db.client import get_document_by_doc_id, insert_document
 
     if status == ChangeStatus.NEW_DOCUMENT:
         new_doc_id_str = doc_id
     else:
         # Append a datestamp to form the new doc_id versioned copy
-        date_tag = datetime.now(timezone.utc).strftime("%Y%m%d")
+        date_tag = datetime.now(UTC).strftime("%Y%m%d")
         new_doc_id_str = f"{doc_id}-{date_tag}"
 
     result.new_doc_id = new_doc_id_str

@@ -18,7 +18,7 @@ import hashlib
 import json
 import logging
 from pathlib import Path
-from typing import Any, Optional
+from typing import Any
 from uuid import UUID
 
 log = logging.getLogger(__name__)
@@ -78,7 +78,7 @@ class VerificationResult:
 def verify_download(
     doc_id: str,
     raw_path: Path,
-    expected_checksum: Optional[str] = None,
+    expected_checksum: str | None = None,
 ) -> VerificationResult:
     """
     Verify a downloaded file exists, is non-trivial, and
@@ -238,7 +238,7 @@ def verify_embedding(
 
 def save_verification_to_registry(
     result: VerificationResult,
-    registry_dir: Optional[Path] = None,
+    registry_dir: Path | None = None,
 ) -> None:
     """
     Append a verification result to the document's metadata
@@ -309,8 +309,8 @@ def run_full_verification(
     clean_chars: int,
     chunks: list[dict[str, Any]],
     is_scanned: bool = False,
-    expected_checksum: Optional[str] = None,
-    document_id: Optional[UUID] = None,
+    expected_checksum: str | None = None,
+    document_id: UUID | None = None,
     save_to_db: bool = False,
 ) -> list[VerificationResult]:
     """

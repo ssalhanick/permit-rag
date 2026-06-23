@@ -16,7 +16,8 @@ import logging
 import os
 import re
 from pathlib import Path
-from typing import Any, Optional, Pattern
+from re import Pattern
+from typing import Any
 
 from bs4 import BeautifulSoup
 from langchain_text_splitters import RecursiveCharacterTextSplitter
@@ -288,7 +289,7 @@ def split_text(
 
 def chunk_document(
     doc_id: str,
-    raw_dir: Optional[Path] = None,
+    raw_dir: Path | None = None,
     chunk_size: int = CHUNK_SIZE,
     chunk_overlap: int = CHUNK_OVERLAP,
 ) -> dict:
@@ -386,7 +387,6 @@ def _find_raw_file(doc_id: str, raw_dir: Path) -> Path:
 
 if __name__ == "__main__":
     import argparse
-    import json
 
     parser = argparse.ArgumentParser(
         description="Extract and chunk a single document"

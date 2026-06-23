@@ -18,7 +18,6 @@ from __future__ import annotations
 import logging
 import time
 from dataclasses import dataclass, field
-from typing import Optional
 
 log = logging.getLogger(__name__)
 
@@ -56,10 +55,10 @@ class JurisdictionResolution:
     """
 
     input_address: str
-    jurisdiction_id: Optional[str] = None
+    jurisdiction_id: str | None = None
     overlay_ids: list[str] = field(default_factory=list)
-    geocode: Optional[GeocodedAddress] = None
-    error: Optional[str] = None
+    geocode: GeocodedAddress | None = None
+    error: str | None = None
 
     @property
     def resolved(self) -> bool:
@@ -69,7 +68,7 @@ class JurisdictionResolution:
 # ── Geocoding ────────────────────────────────────────────────
 
 
-def geocode(address: str) -> Optional[GeocodedAddress]:
+def geocode(address: str) -> GeocodedAddress | None:
     """
     Convert a free-text address to (lat, lng) via Census Bureau Geocoding API.
 
@@ -127,7 +126,7 @@ def geocode(address: str) -> Optional[GeocodedAddress]:
 # ── Point-in-polygon ─────────────────────────────────────────
 
 
-def _point_in_polygon(lat: float, lng: float) -> Optional[str]:
+def _point_in_polygon(lat: float, lng: float) -> str | None:
     """
     Return the jurisdiction_id of the municipal boundary containing (lat, lng),
     or None if no boundary matches.
@@ -147,16 +146,15 @@ def _point_in_polygon(lat: float, lng: float) -> Optional[str]:
     """
     try:
         pool = get_pool()
-        with pool.connection() as conn:
-            with conn.cursor() as cur:
-                cur.execute(sql, (lng, lat))   # PostGIS is (longitude, latitude)
-                row = cur.fetchone()
-                if row:
-                    jid = row[0]
-                    log.info(
-                        "_point_in_polygon: (%.6f, %.6f) → '%s'", lat, lng, jid
-                    )
-                    return jid
+        with pool.connection() as conn, conn.cursor() as cur:
+            cur.execute(sql, (lng, lat))   # PostGIS is (longitude, latitude)
+            row = cur.fetchone()
+            if row:
+                jid = row[0]
+                log.info(
+                    "_point_in_polygon: (%.6f, %.6f) → '%s'", lat, lng, jid
+                )
+                return jid
     except Exception as exc:
         log.warning("_point_in_polygon: DB query failed: %s", exc)
     return None
@@ -217,7 +215,7 @@ def resolve_jurisdiction(address: str) -> JurisdictionResolution:
     return resolution
 
 
-def municipality_from_address(address: str) -> Optional[str]:
+def municipality_from_address(address: str) -> str | None:
     """
     Convenience wrapper: return the municipality slug for an address, or None.
 

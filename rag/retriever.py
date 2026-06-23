@@ -19,7 +19,7 @@ import os
 import re
 import time
 from dataclasses import dataclass
-from typing import Any, Optional
+from typing import Any
 
 log = logging.getLogger(__name__)
 PROCEDURAL_REGEX = (
@@ -91,7 +91,7 @@ def _apply_non_municipal_authority_guardrails(
     chunks: list[dict[str, Any]],
     *,
     query: str,
-    municipality: Optional[str],
+    municipality: str | None,
     top_k: int,
 ) -> list[dict[str, Any]]:
     """Downrank municipal authority when query has no municipality filter."""
@@ -201,7 +201,7 @@ class RetrievalResult:
     query: str
     chunks: list[dict[str, Any]]
     top_k: int
-    municipality: Optional[str]
+    municipality: str | None
     latency_ms: int
     model: str = "nomic-ai/nomic-embed-text-v1.5"
 
@@ -262,7 +262,7 @@ def retrieve(
     query: str,
     *,
     top_k: int = 5,
-    municipality: Optional[str] = None,
+    municipality: str | None = None,
     min_similarity: float = 0.0,
 ) -> RetrievalResult:
     """
@@ -282,9 +282,8 @@ def retrieve(
     Returns:
         RetrievalResult with ranked chunks and diagnostics.
     """
-    from ingestion.embedder import embed_query
-
     from db.client import match_chunks, search_chunks_bm25
+    from ingestion.embedder import embed_query
 
     t0 = time.perf_counter()
 

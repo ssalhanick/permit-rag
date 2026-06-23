@@ -27,8 +27,8 @@
     "embedding": {
       "result": "pass",
       "detail": {
-        "num_chunks": 51,
-        "num_embedded": 51,
+        "num_chunks": 49,
+        "num_embedded": 49,
         "embedding_dim": 768
       }
     }

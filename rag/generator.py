@@ -17,7 +17,7 @@ import logging
 import os
 import time
 from dataclasses import dataclass
-from typing import Any, Optional
+from typing import Any
 
 from rag.llm_provider import get_provider_capabilities
 
@@ -74,7 +74,7 @@ def _env_bool(name: str, default: bool) -> bool:
     return raw.strip().lower() in {"1", "true", "yes", "on"}
 
 
-def _prompt_cache_control() -> Optional[dict[str, str]]:
+def _prompt_cache_control() -> dict[str, str] | None:
     """Build Anthropic cache_control payload from environment."""
     ttl = os.environ.get("ANTHROPIC_PROMPT_CACHE_TTL", "5m").strip().lower()
     if ttl not in {"5m", "1h"}:
@@ -265,7 +265,7 @@ def generate_answer(
     query: str,
     chunks: list[dict[str, Any]],
     *,
-    model: Optional[str] = None,
+    model: str | None = None,
     max_tokens: int = 1024,
     temperature: float = 0.0,
 ) -> GenerationResult:
@@ -307,7 +307,7 @@ def generate_answer(
             "Add it to .env before using Anthropic generation."
         )
 
-    model = model or os.environ.get("LLM_MODEL", "claude-sonnet-4-20250514")
+    model = model or os.environ.get("LLM_MODEL", "claude-haiku-4-5-20251001")
     cache_requested = _env_bool("ANTHROPIC_PROMPT_CACHE_ENABLED", False)
     cache_enabled = cache_requested and capabilities.supports_prompt_caching
     if cache_requested and not capabilities.supports_prompt_caching:
