@@ -158,6 +158,14 @@ resource "aws_security_group" "rds" {
     security_groups = [aws_security_group.ecs.id]
   }
 
+  ingress {
+    from_port   = 5432
+    to_port     = 5432
+    protocol    = "tcp"
+    cidr_blocks = ["68.20.22.215/32"]
+    description = "Allow database client access from local developer machine"
+  }
+
 
   egress {
     from_port   = 0
@@ -318,8 +326,8 @@ resource "aws_ecs_task_definition" "backend" {
   family                   = "${var.project_name}-backend"
   network_mode             = "awsvpc"
   requires_compatibilities = ["FARGATE"]
-  cpu                      = 256
-  memory                   = 512
+  cpu                      = 512
+  memory                   = 2048
   execution_role_arn       = aws_iam_role.ecs_execution_role.arn
   task_role_arn            = aws_iam_role.ecs_task_role.arn
 
@@ -339,7 +347,9 @@ resource "aws_ecs_task_definition" "backend" {
         { name = "LOG_LEVEL", value = "INFO" },
         { name = "DATABASE_URL", value = "postgresql://postgres:${random_password.db_password.result}@${aws_db_instance.postgres.endpoint}/permit_rag" },
         { name = "CORPUS_WRITER_URL", value = "postgresql://postgres:${random_password.db_password.result}@${aws_db_instance.postgres.endpoint}/permit_rag" },
-        { name = "APP_READER_URL", value = "postgresql://postgres:${random_password.db_password.result}@${aws_db_instance.postgres.endpoint}/permit_rag" }
+        { name = "APP_READER_URL", value = "postgresql://postgres:${random_password.db_password.result}@${aws_db_instance.postgres.endpoint}/permit_rag" },
+        { name = "LLM_MODEL", value = "claude-haiku-4-5-20251001" },
+        { name = "LLM_PROVIDER", value = "anthropic" }
       ]
       secrets = [
         {

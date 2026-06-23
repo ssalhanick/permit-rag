@@ -64,6 +64,16 @@ if (-not ($InfraOnly) -and (-not $ecrRepoUri -or -not $s3BucketName)) {
 # --- 2. Backend Deployment (Docker + ECR + ECS) ---
 if ($runAll -or $BackendOnly) {
     Write-Host "`n=== [2/3] Deploying Backend Container (ECS Fargate) ===" -ForegroundColor Cyan
+    
+    # 2.0 Pre-deployment Syntax Validation (Catches SyntaxErrors, IndentationErrors, etc.)
+    Write-Host "Running python syntax compilation check..." -ForegroundColor Yellow
+    & python -m compileall -q api db rag ingestion audit
+    if ($LastExitCode -ne 0) {
+        Write-Error "Python compilation check failed (SyntaxError). Please resolve syntax errors before deploying."
+        exit 1
+    }
+    Write-Host "Python syntax validation passed!" -ForegroundColor Green
+
     Write-Host "Target ECR: $ecrRepoUri" -ForegroundColor Yellow
     
     # Extract Registry URL (everything before the /repository-name)

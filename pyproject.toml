@@ -19,10 +19,12 @@ dependencies = [
     "psycopg[binary]>=3.1.0",
     "psycopg-pool>=3.1.0",
     "pgvector>=0.3.0",
+    "neo4j>=5.19.0",
 
     # --- LLM / embeddings ---
     "anthropic>=0.25.0",
     "sentence-transformers>=3.0.0",
+    "einops",
 
     # --- PDF processing ---
     "pypdf>=4.0.0",
@@ -34,6 +36,7 @@ dependencies = [
     # --- API ---
     "fastapi>=0.111.0",
     "uvicorn[standard]>=0.29.0",
+    "python-multipart>=0.0.9",
 
     # --- Config ---
     "python-dotenv>=1.0.0",

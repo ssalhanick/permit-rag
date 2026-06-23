@@ -3,10 +3,22 @@
 
 $ErrorActionPreference = "Stop"
 
+function Test-Docker {
+    $oldPreference = $ErrorActionPreference
+    $ErrorActionPreference = "SilentlyContinue"
+    try {
+        & docker ps >$null 2>&1
+        return ($LastExitCode -eq 0)
+    } catch {
+        return $false
+    } finally {
+        $ErrorActionPreference = $oldPreference
+    }
+}
+
 # 1. Verify/Start Docker
 Write-Host "Checking Docker status..." -ForegroundColor Cyan
-& docker ps >$null 2>&1
-if ($LastExitCode -ne 0) {
+if (-not (Test-Docker)) {
     Write-Host "Docker daemon is not running. Launching Docker Desktop..." -ForegroundColor Yellow
     
     $dockerPaths = @(
@@ -31,8 +43,7 @@ if ($LastExitCode -ne 0) {
         Write-Host "Waiting for Docker daemon to become responsive..." -ForegroundColor Yellow
         while ($true) {
             Start-Sleep -Seconds 3
-            & docker ps >$null 2>&1
-            if ($LastExitCode -eq 0) { break }
+            if (Test-Docker) { break }
             Write-Host "." -NoNewline
         }
         Write-Host ""
