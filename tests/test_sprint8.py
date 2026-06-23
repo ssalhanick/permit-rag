@@ -260,6 +260,7 @@ class TestQueryAnswerBackgroundTask:
                 body=mock_body,
                 request=mock_request,
                 background_tasks=mock_bg,
+                current_user={"user_id": "00000000-0000-0000-0000-000000000000", "role": "viewer"},
             )
 
         # BackgroundTasks.add_task must have been called for graph enrichment
@@ -345,6 +346,7 @@ class TestQueryAnswerBackgroundTask:
                 body=mock_body,
                 request=mock_request,
                 background_tasks=mock_bg,
+                current_user={"user_id": "00000000-0000-0000-0000-000000000000", "role": "viewer"},
             )
 
         # When no in-context citations, add_task must not be called for graph enrichment

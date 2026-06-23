@@ -345,7 +345,7 @@ class TestQueryHistoryAPI:
                 "created_at": datetime.now(timezone.utc),
             }
         ]
-        monkeypatch.setattr(db_client, "get_user_query_history", lambda u: mock_history if u == uid else [])
+        monkeypatch.setattr(db_client, "get_user_query_history", lambda u, project_id=None: mock_history if u == uid else [])
 
         client = TestClient(app)
         resp = client.get(

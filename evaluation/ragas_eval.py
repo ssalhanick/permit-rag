@@ -260,7 +260,7 @@ def _get_evaluator_llm() -> Any:
     from langchain_anthropic import ChatAnthropic
 
     eval_provider = os.environ.get("RAGAS_EVAL_PROVIDER", "anthropic").strip().lower()
-    model = os.environ.get("LLM_MODEL", "claude-sonnet-4-20250514")
+    model = os.environ.get("LLM_MODEL", "claude-haiku-4-5-20251001")
     max_tokens = int(os.environ.get("RAGAS_EVAL_MAX_TOKENS", "4096"))
     capabilities = get_provider_capabilities()
     if eval_provider in {"ollama", "local"}:
@@ -387,7 +387,7 @@ def _build_answer_cache_key(
         "query": query,
         "municipality": municipality,
         "top_k": top_k,
-        "llm_model": os.environ.get("LLM_MODEL", "claude-sonnet-4-20250514"),
+        "llm_model": os.environ.get("LLM_MODEL", "claude-haiku-4-5-20251001"),
         "prompt_version": _cache_prompt_version(),
         "chunk_fingerprint": _build_chunk_fingerprint(chunks),
     }

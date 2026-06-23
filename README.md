@@ -168,13 +168,13 @@ Current frontend routes:
 To start the entire application stack (Docker databases, FastAPI backend, and Vite frontend) with a single command on Windows, run the orchestrator script from the project root:
 
 ```powershell
-powershell -ExecutionPolicy Bypass -File dev.ps1
+powershell -ExecutionPolicy Bypass -File scripts/dev.ps1
 ```
 
 To stop all services and shut down database containers:
 
 ```powershell
-powershell -ExecutionPolicy Bypass -File stop.ps1
+powershell -ExecutionPolicy Bypass -File scripts/stop.ps1
 ```
 
 *Alternatively, you can start individual services manually:*

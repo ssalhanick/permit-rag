@@ -24,7 +24,7 @@ EVAL_SYSTEM_PROMPT = (
 class AnthropicCachedEvalLLM(BaseRagasLLM):
     """RAGAS-compatible LLM wrapper that calls Anthropic directly."""
 
-    model: str = "claude-sonnet-4-20250514"
+    model: str = "claude-haiku-4-5-20251001"
     max_tokens: int = 4096
     cache_enabled: bool = False
     cache_ttl: str = "5m"
