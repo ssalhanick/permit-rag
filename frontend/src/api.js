@@ -228,8 +228,9 @@ export async function fetchProjectDocuments(projectId) {
 
 // ── Query History Endpoints ─────────────────────────────────
 
-export async function fetchQueryHistory() {
-  return await requestJson("/query/history");
+export async function fetchQueryHistory(projectId) {
+  const query = projectId ? `?project_id=${projectId}` : "";
+  return await requestJson(`/query/history${query}`);
 }
 
 export async function deleteQueryFromHistory(queryId) {

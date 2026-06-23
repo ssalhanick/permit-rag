@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from "react";
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import { useAuth } from "./context/AuthContext.jsx";
 import {
   fetchProjects,
@@ -10,14 +10,25 @@ import {
   addProjectMember,
   removeProjectMember,
   fetchProjectDocuments,
+  fetchQueryHistory,
+  deleteQueryFromHistory,
 } from "./api.js";
 
 export default function ProjectsPage() {
   const { user } = useAuth();
+  const navigate = useNavigate();
   const [projects, setProjects] = useState([]);
   const [selectedProj, setSelectedProj] = useState(null);
   const [members, setMembers] = useState([]);
   const [docs, setDocs] = useState([]);
+  
+  // Detail tabs: "docs" | "queries" | "members"
+  const [activeDetailTab, setActiveDetailTab] = useState("docs");
+  const [queries, setQueries] = useState([]);
+  const [loadingQueries, setLoadingQueries] = useState(false);
+  const [expandedQueryId, setExpandedQueryId] = useState(null);
+  const [copyFeedback, setCopyFeedback] = useState("");
+  const [queryFilter, setQueryFilter] = useState("");
   
   // Form states
   const [newProjForm, setNewProjForm] = useState({ name: "", description: "", municipality: "" });
@@ -29,6 +40,71 @@ export default function ProjectsPage() {
   const [actionLoading, setActionLoading] = useState(false);
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
+
+  const loadQueries = async () => {
+    if (!selectedProj) return;
+    setLoadingQueries(true);
+    try {
+      const res = await fetchQueryHistory(selectedProj.id);
+      setQueries(res.data || []);
+    } catch (err) {
+      setError("Failed to fetch query history: " + err.message);
+    } finally {
+      setLoadingQueries(false);
+    }
+  };
+
+  useEffect(() => {
+    if (selectedProj && activeDetailTab === "queries") {
+      loadQueries();
+    }
+  }, [selectedProj, activeDetailTab]);
+
+  const handleReloadQuery = (queryText, municipality, projectId) => {
+    const params = new URLSearchParams();
+    params.set("q", queryText);
+    if (municipality) {
+      params.set("m", municipality);
+    }
+    if (projectId) {
+      params.set("p", projectId);
+    }
+    navigate(`/?${params.toString()}`);
+  };
+
+  const handleDeleteQuery = async (queryId, e) => {
+    e.stopPropagation();
+    if (!window.confirm("Are you sure you want to delete this query from your history?")) {
+      return;
+    }
+    try {
+      await deleteQueryFromHistory(queryId);
+      setSuccess("Query deleted from history.");
+      setQueries((prev) => prev.filter((q) => q.id !== queryId));
+    } catch (err) {
+      setError("Failed to delete query: " + err.message);
+    }
+  };
+
+  const handleCopyAnswer = (text, e) => {
+    e.stopPropagation();
+    navigator.clipboard.writeText(text);
+    setCopyFeedback("Answer copied to clipboard!");
+    setTimeout(() => setCopyFeedback(""), 3000);
+  };
+  const filteredQueries = queries.filter((q) => {
+    const term = queryFilter.toLowerCase();
+    return (
+      q.query_text.toLowerCase().includes(term) ||
+      (q.answer_text && q.answer_text.toLowerCase().includes(term))
+    );
+  });
+
+  const totalLatency = filteredQueries.reduce((acc, q) => acc + (q.latency_ms || 0), 0);
+  const avgLatency = filteredQueries.length > 0 ? Math.round(totalLatency / filteredQueries.length) : 0;
+
+  const uniqueMunis = Array.from(new Set(filteredQueries.map((q) => q.municipality).filter(Boolean)));
+  const munisQueried = uniqueMunis.length > 0 ? uniqueMunis.join(", ") : "None";
 
   const loadProjects = async () => {
     if (!user) return;
@@ -65,6 +141,8 @@ export default function ProjectsPage() {
     setSuccess("");
     setTransferOwnerId("");
     setNewMemberForm({ userId: "", role: "viewer" });
+    setExpandedQueryId(null);
+    setQueryFilter("");
     try {
       const [membersRes, docsRes] = await Promise.all([
         fetchProjectMembers(proj.id),
@@ -80,20 +158,6 @@ export default function ProjectsPage() {
   useEffect(() => {
     loadProjects();
   }, [user]);
-
-  if (!user) {
-    return (
-      <main className="page">
-        <section className="panel">
-          <h2>Projects & Collaboration</h2>
-          <p className="muted">Please sign in to manage and collaborate on projects.</p>
-          <Link to="/auth" className="button nav-link nav-link-active" style={{ display: "inline-block", textAlign: "center" }}>
-            Go to Sign In
-          </Link>
-        </section>
-      </main>
-    );
-  }
 
   // Find user's role in the active project
   const myMemberRecord = members.find(m => m.user_id === user.id);
@@ -299,117 +363,313 @@ export default function ProjectsPage() {
               {error && <div className="error-box" style={{ marginTop: "14px" }}>{error}</div>}
               {success && <div className="success-box" style={{ marginTop: "14px" }}>{success}</div>}
 
-              {/* Collaborators Section */}
-              <div className="project-section">
-                <h3>Collaborators ({members.length + 1})</h3>
-                <table className="doc-table">
-                  <thead>
-                    <tr>
-                      <th>Collaborator</th>
-                      <th>Email</th>
-                      <th>Role</th>
-                      {canManage && <th>Action</th>}
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {/* Owner row */}
-                    <tr>
-                      <td>
-                        <strong>Creator (Owner)</strong>
-                      </td>
-                      <td>-</td>
-                      <td><span className="badge badge-owner">Owner</span></td>
-                      {canManage && <td>-</td>}
-                    </tr>
-                    {/* Other members */}
-                    {members.map((m) => (
-                      <tr key={m.user_id}>
-                        <td>{m.username} {m.user_id === user.id && "(You)"}</td>
-                        <td>{m.email}</td>
-                        <td>
-                          <span className={`badge badge-${m.role}`}>
-                            {m.role}
-                          </span>
-                        </td>
-                        {canManage && (
-                          <td>
-                            <button
-                              type="button"
-                              className="text-button delete-text"
-                              onClick={() => handleRemoveMember(m.user_id, m.username)}
-                              disabled={actionLoading}
-                            >
-                              Remove
-                            </button>
-                          </td>
-                        )}
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-
-                {/* Add Member Form (Owner only) */}
-                {canManage && (
-                  <form onSubmit={handleAddMember} className="form inline-form" style={{ marginTop: "12px", display: "flex", gap: "8px", alignItems: "flex-end" }}>
-                    <div style={{ flex: 1 }}>
-                      <label htmlFor="newMemberId">Add Member (User UUID)</label>
-                      <input
-                        id="newMemberId"
-                        value={newMemberForm.userId}
-                        onChange={(e) => setNewMemberForm({ ...newMemberForm, userId: e.target.value })}
-                        placeholder="Paste user UUID here"
-                        required
-                      />
-                    </div>
-                    <div style={{ width: "120px" }}>
-                      <label htmlFor="newMemberRole">Role</label>
-                      <select
-                        id="newMemberRole"
-                        value={newMemberForm.role}
-                        onChange={(e) => setNewMemberForm({ ...newMemberForm, role: e.target.value })}
-                      >
-                        <option value="viewer">viewer</option>
-                        <option value="editor">editor</option>
-                      </select>
-                    </div>
-                    <button type="submit" disabled={actionLoading} className="secondary-button" style={{ height: "36px" }}>
-                      Add
-                    </button>
-                  </form>
-                )}
+              {/* Tabs selector */}
+              <div style={{ display: "flex", borderBottom: "2px solid #e2e8f0", marginBottom: "20px" }}>
+                <button
+                  type="button"
+                  onClick={() => setActiveDetailTab("docs")}
+                  style={{
+                    background: "none",
+                    border: "none",
+                    borderBottom: activeDetailTab === "docs" ? "3px solid #2563eb" : "3px solid transparent",
+                    color: activeDetailTab === "docs" ? "#2563eb" : "#64748b",
+                    fontWeight: "600",
+                    padding: "10px 20px",
+                    cursor: "pointer",
+                    fontSize: "0.95rem"
+                  }}
+                >
+                  Shared Documents ({docs.length})
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setActiveDetailTab("queries")}
+                  style={{
+                    background: "none",
+                    border: "none",
+                    borderBottom: activeDetailTab === "queries" ? "3px solid #2563eb" : "3px solid transparent",
+                    color: activeDetailTab === "queries" ? "#2563eb" : "#64748b",
+                    fontWeight: "600",
+                    padding: "10px 20px",
+                    cursor: "pointer",
+                    fontSize: "0.95rem"
+                  }}
+                >
+                  Query History
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setActiveDetailTab("members")}
+                  style={{
+                    background: "none",
+                    border: "none",
+                    borderBottom: activeDetailTab === "members" ? "3px solid #2563eb" : "3px solid transparent",
+                    color: activeDetailTab === "members" ? "#2563eb" : "#64748b",
+                    fontWeight: "600",
+                    padding: "10px 20px",
+                    cursor: "pointer",
+                    fontSize: "0.95rem"
+                  }}
+                >
+                  Collaborators ({members.length + 1})
+                </button>
               </div>
 
-              {/* Shared Documents Section */}
-              <div className="project-section" style={{ marginTop: "24px" }}>
-                <h3>Shared Documents ({docs.length})</h3>
-                <p className="muted">These regulatory documents are bound to this project workspace.</p>
-                {docs.length === 0 ? (
-                  <p className="muted" style={{ fontStyle: "italic" }}>No documents shared yet. Go to the "Documents" browser tab to share.</p>
-                ) : (
+              {/* Tab Panel: Docs */}
+              {activeDetailTab === "docs" && (
+                <div className="project-section" style={{ marginTop: 0, paddingTop: 0, border: "none" }}>
+                  <h3>Shared Documents ({docs.length})</h3>
+                  <p className="muted">These regulatory documents are bound to this project workspace.</p>
+                  {docs.length === 0 ? (
+                    <p className="muted" style={{ fontStyle: "italic" }}>No documents shared yet. Go to the "Documents" browser tab to share.</p>
+                  ) : (
+                    <table className="doc-table">
+                      <thead>
+                        <tr>
+                          <th>Doc ID</th>
+                          <th>Municipality</th>
+                          <th>Status</th>
+                          <th>Type</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {docs.map((d) => (
+                          <tr key={d.id}>
+                            <td>
+                              <strong>{d.doc_id}</strong>
+                            </td>
+                            <td>{d.municipality}</td>
+                            <td>{d.document_status}</td>
+                            <td>{d.doc_type}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  )}
+                </div>
+              )}
+
+              {/* Tab Panel: Queries (History) */}
+              {activeDetailTab === "queries" && (
+                <div className="project-section" style={{ marginTop: 0, paddingTop: 0, border: "none" }}>
+                  <h3>Project Query History</h3>
+                  <p className="muted">Review past questions and citations scoped to this project.</p>
+
+                  {/* Stats Cards */}
+                  <div style={{
+                    display: "grid",
+                    gridTemplateColumns: "repeat(auto-fit, minmax(140px, 1fr))",
+                    gap: "12px",
+                    marginBottom: "20px"
+                  }}>
+                    <div style={{ background: "#f8fafc", border: "1px solid #e2e8f0", borderRadius: "8px", padding: "12px", textAlign: "center" }}>
+                      <div style={{ fontSize: "1.5rem", fontWeight: "700", color: "#2563eb" }}>{filteredQueries.length}</div>
+                      <div style={{ fontSize: "0.75rem", color: "#64748b", fontWeight: "600", textTransform: "uppercase", marginTop: "4px" }}>Total Queries</div>
+                    </div>
+                    <div style={{ background: "#f8fafc", border: "1px solid #e2e8f0", borderRadius: "8px", padding: "12px", textAlign: "center" }}>
+                      <div style={{ fontSize: "1.5rem", fontWeight: "700", color: "#10b981" }}>{avgLatency}ms</div>
+                      <div style={{ fontSize: "0.75rem", color: "#64748b", fontWeight: "600", textTransform: "uppercase", marginTop: "4px" }}>Avg Latency</div>
+                    </div>
+                    <div style={{ background: "#f8fafc", border: "1px solid #e2e8f0", borderRadius: "8px", padding: "12px", textAlign: "center" }}>
+                      <div style={{ fontSize: "1rem", fontWeight: "700", color: "#6366f1", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", padding: "4px 0" }}>{munisQueried}</div>
+                      <div style={{ fontSize: "0.75rem", color: "#64748b", fontWeight: "600", textTransform: "uppercase", marginTop: "4px" }}>Jurisdictions</div>
+                    </div>
+                  </div>
+
+                  {/* Search Bar */}
+                  <div style={{ marginBottom: "16px" }}>
+                    <input
+                      type="text"
+                      value={queryFilter}
+                      onChange={(e) => setQueryFilter(e.target.value)}
+                      placeholder="🔍 Search queries or answers..."
+                      style={{
+                        padding: "8px 12px",
+                        fontSize: "0.9rem",
+                        borderRadius: "6px",
+                        border: "1px solid #cbd5e1"
+                      }}
+                    />
+                  </div>
+
+                  {loadingQueries ? (
+                    <p>Loading project query history...</p>
+                  ) : filteredQueries.length === 0 ? (
+                    <p className="muted" style={{ fontStyle: "italic" }}>No queries logged for this project yet.</p>
+                  ) : (
+                    <div style={{ display: "flex", flexDirection: "column", gap: "12px" }}>
+                      {filteredQueries.map((q) => {
+                        const isExpanded = expandedQueryId === q.id;
+                        const dateStr = new Date(q.created_at).toLocaleString();
+                        return (
+                          <div
+                            key={q.id}
+                            style={{
+                              border: "1px solid #e2e8f0",
+                              borderRadius: "8px",
+                              padding: "12px 16px",
+                              cursor: "pointer",
+                              background: isExpanded ? "#f8fafc" : "#fff",
+                              transition: "all 0.2s"
+                            }}
+                            onClick={() => setExpandedQueryId(isExpanded ? null : q.id)}
+                          >
+                            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
+                              <div>
+                                <strong style={{ fontSize: "1.05rem", color: "#1e293b" }}>{q.query_text}</strong>
+                                <div style={{ fontSize: "0.8rem", color: "#64748b", marginTop: "4px", display: "flex", gap: "12px" }}>
+                                  <span>📅 {dateStr}</span>
+                                  {q.municipality && <span>📍 {q.municipality}</span>}
+                                  {q.latency_ms && <span>⏱️ {q.latency_ms}ms</span>}
+                                </div>
+                              </div>
+                              <div style={{ display: "flex", gap: "8px" }} onClick={(e) => e.stopPropagation()}>
+                                <button
+                                  type="button"
+                                  onClick={() => handleReloadQuery(q.query_text, q.municipality, q.project_id)}
+                                  style={{ padding: "4px 8px", fontSize: "0.8rem", background: "#3b82f6" }}
+                                >
+                                  Open in Chat
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={(e) => handleDeleteQuery(q.id, e)}
+                                  style={{ padding: "4px 8px", fontSize: "0.8rem", background: "#fee2e2", color: "#991b1b" }}
+                                >
+                                  Delete
+                                </button>
+                              </div>
+                            </div>
+
+                            {isExpanded && (
+                              <div style={{ marginTop: "12px", borderTop: "1px solid #e2e8f0", paddingTop: "12px" }}>
+                                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "8px" }}>
+                                  <strong style={{ fontSize: "0.9rem", color: "#475569" }}>Answer Output:</strong>
+                                  <button
+                                    type="button"
+                                    onClick={(e) => handleCopyAnswer(q.answer_text, e)}
+                                    style={{ padding: "2px 8px", fontSize: "0.75rem", background: "#475569" }}
+                                  >
+                                    Copy Answer
+                                  </button>
+                                </div>
+                                {copyFeedback && <p style={{ color: "#059669", fontSize: "0.8rem", margin: "4px 0" }}>{copyFeedback}</p>}
+                                <pre style={{
+                                  background: "#0f172a",
+                                  color: "#f1f5f9",
+                                  padding: "12px",
+                                  borderRadius: "6px",
+                                  fontSize: "0.85rem",
+                                  whiteSpace: "pre-wrap",
+                                  overflowX: "auto",
+                                  margin: 0
+                                }}>
+                                  {q.answer_text}
+                                </pre>
+
+                                {q.citations && q.citations.length > 0 && (
+                                  <div style={{ marginTop: "12px" }}>
+                                    <strong style={{ fontSize: "0.85rem", color: "#475569", display: "block", marginBottom: "6px" }}>Citations:</strong>
+                                    <ul style={{ margin: 0, paddingLeft: "18px", fontSize: "0.8rem", color: "#475569" }}>
+                                      {q.citations.map((cit, idx) => (
+                                        <li key={idx}>
+                                          <strong>{cit.doc_id}</strong> (chunk {cit.chunk_index})
+                                        </li>
+                                      ))}
+                                    </ul>
+                                  </div>
+                                )}
+                              </div>
+                            )}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* Tab Panel: Members */}
+              {activeDetailTab === "members" && (
+                <div className="project-section" style={{ marginTop: 0, paddingTop: 0, border: "none" }}>
+                  <h3>Collaborators ({members.length + 1})</h3>
                   <table className="doc-table">
                     <thead>
                       <tr>
-                        <th>Doc ID</th>
-                        <th>Municipality</th>
-                        <th>Status</th>
-                        <th>Type</th>
+                        <th>Collaborator</th>
+                        <th>Email</th>
+                        <th>Role</th>
+                        {canManage && <th>Action</th>}
                       </tr>
                     </thead>
                     <tbody>
-                      {docs.map((d) => (
-                        <tr key={d.id}>
+                      {/* Owner row */}
+                      <tr>
+                        <td>
+                          <strong>Creator (Owner)</strong>
+                        </td>
+                        <td>-</td>
+                        <td><span className="badge badge-owner">Owner</span></td>
+                        {canManage && <td>-</td>}
+                      </tr>
+                      {/* Other members */}
+                      {members.map((m) => (
+                        <tr key={m.user_id}>
+                          <td>{m.username} {m.user_id === user.id && "(You)"}</td>
+                          <td>{m.email}</td>
                           <td>
-                            <strong>{d.doc_id}</strong>
+                            <span className={`badge badge-${m.role}`}>
+                              {m.role}
+                            </span>
                           </td>
-                          <td>{d.municipality}</td>
-                          <td>{d.document_status}</td>
-                          <td>{d.doc_type}</td>
+                          {canManage && (
+                            <td>
+                              <button
+                                type="button"
+                                className="text-button delete-text"
+                                onClick={() => handleRemoveMember(m.user_id, m.username)}
+                                disabled={actionLoading}
+                              >
+                                Remove
+                              </button>
+                            </td>
+                          )}
                         </tr>
                       ))}
                     </tbody>
                   </table>
-                )}
-              </div>
+
+                  {/* Add Member Form (Owner only) */}
+                  {canManage && (
+                    <form onSubmit={handleAddMember} className="form inline-form" style={{ marginTop: "12px", display: "flex", gap: "8px", alignItems: "flex-end" }}>
+                      <div style={{ flex: 1 }}>
+                        <label htmlFor="newMemberId">Add Member (User UUID)</label>
+                        <input
+                          id="newMemberId"
+                          value={newMemberForm.userId}
+                          onChange={(e) => setNewMemberForm({ ...newMemberForm, userId: e.target.value })}
+                          placeholder="Paste user UUID here"
+                          required
+                        />
+                      </div>
+                      <div style={{ width: "120px" }}>
+                        <label htmlFor="newMemberRole">Role</label>
+                        <select
+                          id="newMemberRole"
+                          value={newMemberForm.role}
+                          onChange={(e) => setNewMemberForm({ ...newMemberForm, role: e.target.value })}
+                        >
+                          <option value="viewer">viewer</option>
+                          <option value="editor">editor</option>
+                        </select>
+                      </div>
+                      <button type="submit" disabled={actionLoading} className="secondary-button" style={{ height: "36px" }}>
+                        Add
+                      </button>
+                    </form>
+                  )}
+                </div>
+              )}
 
               {/* Advanced Operations (Owner only) */}
               {isOwner && (

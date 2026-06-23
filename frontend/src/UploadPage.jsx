@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from "react";
+import { Link } from "react-router-dom";
 import { API_BASE_URL, fetchProjects } from "./api.js";
 import { useAuth } from "./context/AuthContext.jsx";
 import { formatUploadError, getUploadBlockers, suggestDocIdFromFilename } from "./uploadUtils.js";
