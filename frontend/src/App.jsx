@@ -4,6 +4,16 @@ import { API_BASE_URL, DEFAULT_BASE_URL, fetchAnswer, fetchHealth, fetchProjects
 import { useAuth } from "./context/AuthContext.jsx";
 import AddressAutocomplete from "./components/AddressAutocomplete.jsx";
 
+// shadcn component imports
+import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+
 const DEFAULT_FORM = {
   query: "",
   municipality: "",
@@ -258,318 +268,490 @@ function App() {
 
   if (!user) {
     return (
-      <main className="page">
-        <section className="panel" style={{ maxWidth: "600px", margin: "80px auto 40px auto", textAlign: "center", padding: "50px 30px", borderRadius: "12px", border: "1px solid rgba(255, 255, 255, 0.08)", background: "rgba(30, 41, 59, 0.7)", backdropFilter: "blur(12px)", boxShadow: "0 8px 32px 0 rgba(0, 0, 0, 0.37)" }}>
-          <h2 style={{ fontSize: "2rem", color: "#f8fafc", marginBottom: "16px", fontWeight: "700", letterSpacing: "-0.025em" }}>Ask permit_rag</h2>
-          <p className="muted" style={{ fontSize: "1.05rem", color: "#94a3b8", marginBottom: "28px", lineHeight: "1.6" }}>
-            Please sign in to search municipal ordinances, check building code compliance, and get cited RAG answers.
-          </p>
-          <Link to="/auth" className="primary-button" style={{ display: "inline-block", padding: "12px 28px", borderRadius: "8px", textDecoration: "none", fontWeight: "600", fontSize: "1rem", transition: "all 0.2s ease" }}>
-            Sign In / Register
-          </Link>
-        </section>
-      </main>
+      <div className="flex items-center justify-center min-h-[calc(100vh-100px)] p-4">
+        <Card className="w-full max-w-md p-6 text-center border-slate-200 shadow-lg">
+          <CardHeader>
+            <CardTitle className="text-3xl font-extrabold tracking-tight text-slate-900">Ask permit_rag</CardTitle>
+            <CardDescription className="text-slate-500 mt-2">
+              Please sign in to search municipal ordinances, check building code compliance, and get cited RAG answers.
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="mt-4">
+            <Link to="/auth">
+              <Button size="lg" className="w-full">
+                Sign In / Register
+              </Button>
+            </Link>
+          </CardContent>
+        </Card>
+      </div>
     );
   }
 
   return (
-    <main className="page">
-      <section className="panel">
-        <h1>permit_rag</h1>
-        <p className="muted">First interaction flow: ask question and get cited answer.</p>
-        <p className="muted">API base: {API_BASE_URL}</p>
-        <p className="muted">Default API base: {DEFAULT_BASE_URL}</p>
-        <p className="muted">Session ID: {sessionId}</p>
-        <p className="muted">Quick test set (7): click one to auto-fill.</p>
+    <div className="container mx-auto px-4 py-8 max-w-7xl">
+      <div className="grid grid-cols-1 lg:grid-cols-4 gap-8">
+        
+        {/* Left Sidebar: Projects and Query History */}
+        <div className="space-y-6 lg:col-span-1">
+          <Card className="shadow-sm">
+            <CardHeader className="pb-3">
+              <CardTitle className="text-lg">Project Context</CardTitle>
+              <CardDescription>Select workspace for LangSmith tracking</CardDescription>
+            </CardHeader>
+            <CardContent>
+              {projects.length > 0 ? (
+                <Select
+                  value={activeProjectId || "none"}
+                  onValueChange={(val) => setActiveProjectId(val === "none" ? "" : val)}
+                >
+                  <SelectTrigger className="w-full">
+                    <SelectValue placeholder="-- No project context --" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="none">-- No project context --</SelectItem>
+                    {projects.map((p) => (
+                      <SelectItem key={p.id} value={p.id}>
+                        {p.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              ) : (
+                <p className="text-sm text-slate-500">No projects found. Create one in Projects tab.</p>
+              )}
+            </CardContent>
+          </Card>
 
-        <div className="debug-toolbar">
-          <button type="button" className="secondary-button" onClick={checkHealth}>
-            {healthState.status === "loading" ? "Checking API..." : "Check API health"}
-          </button>
-          <button type="button" className="secondary-button" onClick={() => setSessionId(`web-${Date.now()}`)}>
-            New session ID
-          </button>
+          <Card className="shadow-sm">
+            <CardHeader className="pb-3">
+              <CardTitle className="text-lg">Query History</CardTitle>
+              <CardDescription>Previous questions in this session</CardDescription>
+            </CardHeader>
+            <CardContent className="px-2 max-h-[400px] overflow-y-auto">
+              {history.length ? (
+                <div className="space-y-2">
+                  {history.map((item) => {
+                    const isActive = item.id === activeAnswer?.id;
+                    return (
+                      <button
+                        key={item.id}
+                        type="button"
+                        onClick={() => {
+                          setActiveAnswerId(item.id);
+                          const firstChunk = item.chunks?.[0];
+                          setActiveSourceKey(firstChunk ? `${firstChunk.doc_id}-${firstChunk.chunk_index}` : null);
+                        }}
+                        className={`w-full text-left p-3 rounded-lg border text-sm transition-all ${
+                          isActive
+                            ? "bg-slate-900 border-slate-900 text-white font-medium shadow-sm"
+                            : "bg-background border-slate-200 hover:bg-slate-50 text-slate-700"
+                        }`}
+                      >
+                        <div className="truncate font-medium">{item.query}</div>
+                        <div className="flex justify-between items-center mt-1 text-[10px] text-slate-400">
+                          <span>{item.createdAt}</span>
+                          {item.municipality && (
+                            <span className="uppercase bg-slate-100 px-1.5 py-0.5 rounded font-semibold text-slate-600">
+                              {item.municipality}
+                            </span>
+                          )}
+                        </div>
+                      </button>
+                    );
+                  })}
+                </div>
+              ) : (
+                <p className="text-sm text-slate-500 text-center py-6">No queries yet.</p>
+              )}
+            </CardContent>
+          </Card>
         </div>
-        {healthState.detail ? <p className="muted">{healthState.detail}</p> : null}
 
-        <div className="quick-tests">
-          {QUICK_TESTS.map((test, index) => (
-            <button
-              key={`${index + 1}`}
-              type="button"
-              className="quick-test-button"
-              onClick={() => handleQuickTest(test)}
-            >
-              Q{index + 1}
-            </button>
-          ))}
-        </div>
-
-        <form onSubmit={handleSubmit} className="form">
-          <label htmlFor="query">Question</label>
-          <textarea
-            id="query"
-            name="query"
-            rows={4}
-            value={form.query}
-            onChange={handleChange}
-            placeholder="What are the setback requirements for a residential fence in Dallas?"
-            required
-          />
-
-          <div className="row">
-            <div>
-              <label htmlFor="municipality">Municipality (optional)</label>
-              <input
-                id="municipality"
-                name="municipality"
-                value={form.municipality}
-                onChange={handleChange}
-                placeholder="dallas"
-              />
-            </div>
-            <div>
-              <label htmlFor="top_k">Top K</label>
-              <input
-                id="top_k"
-                name="top_k"
-                type="number"
-                min={1}
-                max={50}
-                value={form.top_k}
-                onChange={handleChange}
-              />
-            </div>
-          </div>
-
-          <div>
-            <label htmlFor="address">
-              Project address{" "}
-              <span className="muted">(optional — auto-detects municipality)</span>
-            </label>
-            <AddressAutocomplete
-              id="address"
-              value={form.address}
-              onChange={(val) => setForm((prev) => ({ ...prev, address: val }))}
-              onSelect={({ address, municipality }) => {
-                setForm((prev) => ({
-                  ...prev,
-                  address,
-                  // Only pre-fill municipality if user hasn't already typed one
-                  municipality: prev.municipality || municipality || "",
-                }));
-              }}
-            />
-          </div>
-
-          {user && projects.length > 0 && (
-            <div style={{ marginBottom: "14px" }}>
-              <label htmlFor="activeProjectId">Project Workspace (optional)</label>
-              <select
-                id="activeProjectId"
-                value={activeProjectId}
-                onChange={(e) => setActiveProjectId(e.target.value)}
-              >
-                <option value="">-- No project context --</option>
-                {projects.map(p => (
-                  <option key={p.id} value={p.id}>{p.name}</option>
-                ))}
-              </select>
-              <p className="field-hint">Tag query metadata in LangSmith logs under this project.</p>
-            </div>
-          )}
-
-          <button type="submit" disabled={!canSubmit}>
-            {loading ? "Asking..." : "Ask permit_rag"}
-          </button>
-        </form>
-
-        {error ? <p className="error">{error}</p> : null}
-      </section>
-
-      {history.length ? (
-        <section className="panel">
-          <h2>Chat History</h2>
-          <ul className="history-list">
-            {history.map((item) => {
-              const isActive = item.id === activeAnswer?.id;
-              return (
-                <li key={item.id}>
-                  <button
-                    type="button"
-                    className={`history-item ${isActive ? "history-item-active" : ""}`}
-                    onClick={() => {
-                      setActiveAnswerId(item.id);
-                      const firstChunk = item.chunks?.[0];
-                      setActiveSourceKey(firstChunk ? `${firstChunk.doc_id}-${firstChunk.chunk_index}` : null);
-                    }}
-                  >
-                    <span>{item.query}</span>
-                    <small>
-                      {item.createdAt}
-                      {item.municipality ? ` - ${item.municipality}` : ""}
-                    </small>
-                  </button>
-                </li>
-              );
-            })}
-          </ul>
-        </section>
-      ) : null}
-
-      {activeAnswer ? (
-        <section className="panel">
-          <h2>Answer</h2>
-          <div className="answer-text">{activeAnswer.answer}</div>
-
-          {activeAnswer.ahj_disclaimer && (
-            <aside className="ahj-disclaimer">
-              <span className="ahj-disclaimer-icon">⚠️</span>
-              <div className="ahj-disclaimer-body">
-                <strong>Important — Authority Having Jurisdiction (AHJ)</strong>
-                <p>{activeAnswer.ahj_disclaimer.text}</p>
-                {activeAnswer.ahj_disclaimer.learn_more_url && (
-                  <a
-                    href={activeAnswer.ahj_disclaimer.learn_more_url}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="ahj-disclaimer-link"
-                  >
-                    Verify with your building department →
-                  </a>
-                )}
-              </div>
-            </aside>
-          )}
-
-          {activeAnswer.resolved_municipality && (
-            <p className="muted">
-              📍 Jurisdiction auto-detected from address:{" "}
-              <strong>{activeAnswer.resolved_municipality}</strong>
-            </p>
-          )}
-
-          {activeAnswer.conflict_warnings?.length > 0 && (
-            <aside className="conflict-warnings">
-              <strong>⚠️ Regulatory Conflicts Detected</strong>
-              <p className="muted">
-                The following subjects have different requirements across authority levels.
-                Verify with your AHJ before proceeding.
-              </p>
-              <ul>
-                {activeAnswer.conflict_warnings.map((w, i) => (
-                  <li key={`conflict-${i}`} className="conflict-item">
-                    <strong>{w.subject}</strong>{" — "}
-                    <span className="muted">
-                      [{w.chunk_a_doc_id}, chunk {w.chunk_a_index}] ({w.chunk_a_authority})
-                      {" vs "}
-                      [{w.chunk_b_doc_id}, chunk {w.chunk_b_index}] ({w.chunk_b_authority})
-                    </span>
-                    <p>{w.detail}</p>
-                  </li>
-                ))}
-              </ul>
-            </aside>
-          )}
-
-          <h3>Citations</h3>
-          <ul className="citation-list">
-            {(activeAnswer.citations || []).map((citation) => {
-              const citationKey = `${citation.doc_id}-${citation.chunk_index}`;
-              return (
-                <li key={citationKey}>
-                  <button
-                    type="button"
-                    className="citation-link"
-                    onClick={() => setActiveSourceKey(citationKey)}
-                  >
-                    [{citation.doc_id}, chunk {citation.chunk_index}]
-                  </button>{" "}
-                  - {citation.found_in_context ? "in retrieved context" : "not found in context"}
-                </li>
-              );
-            })}
-          </ul>
-
-          <h3>Diagnostics</h3>
-          <ul>
-            <li>top similarity: {activeAnswer.diagnostics.top_similarity?.toFixed(3)}</li>
-            <li>mean similarity: {activeAnswer.diagnostics.mean_similarity?.toFixed(3)}</li>
-            <li>unique source docs: {activeAnswer.diagnostics.unique_doc_count}</li>
-            <li>retrieval latency: {activeAnswer.latency_retrieval_ms} ms</li>
-            <li>generation latency: {activeAnswer.latency_generation_ms} ms</li>
-          </ul>
-        </section>
-      ) : null}
-
-      {activeAnswer ? (
-        <section className="panel">
-          <h2>Source Chunk Viewer</h2>
-          <p className="muted">Click a citation or pick a chunk below.</p>
-
-          <div className="source-grid">
-            <ul className="source-list">
-              {(activeAnswer.chunks || []).map((chunk) => {
-                const chunkKey = `${chunk.doc_id}-${chunk.chunk_index}`;
-                const active = activeSourceChunk
-                  ? `${activeSourceChunk.doc_id}-${activeSourceChunk.chunk_index}` === chunkKey
-                  : false;
-                const isFiltered = chunk.filtered_out === true;
-                return (
-                  <li key={chunkKey}>
-                    <button
-                      type="button"
-                      className={[
-                        "source-item",
-                        active ? "source-item-active" : "",
-                        isFiltered ? "source-item-filtered" : "",
-                      ].filter(Boolean).join(" ")}
-                      onClick={() => setActiveSourceKey(chunkKey)}
+        {/* Right Area: RAG Query Panel & Results Tabs */}
+        <div className="lg:col-span-3 space-y-6">
+          <Card className="shadow-md">
+            <CardHeader>
+              <CardTitle className="text-2xl font-bold flex items-center gap-2">
+                <span>permit_rag</span>
+                <span className="text-xs font-normal text-slate-400">Session: {sessionId}</span>
+              </CardTitle>
+              <CardDescription>
+                Ask questions about building codes and receive instant, cited regulatory compliance answers.
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              {/* Quick Tests */}
+              <div className="mb-6">
+                <span className="text-xs font-semibold text-slate-500 block mb-2">Quick Test Queries:</span>
+                <div className="flex flex-wrap gap-2">
+                  {QUICK_TESTS.map((test, index) => (
+                    <Button
+                      key={index}
+                      variant="outline"
+                      size="sm"
+                      onClick={() => handleQuickTest(test)}
+                      className="text-xs h-7 px-3 bg-slate-50 hover:bg-slate-100"
                     >
-                      [{chunk.doc_id}, chunk {chunk.chunk_index}] ({(chunk.reranked_score ?? chunk.similarity)?.toFixed(3)})
-                    </button>
-                  </li>
-                );
-              })}
-            </ul>
+                      Q{index + 1}
+                    </Button>
+                  ))}
+                </div>
+              </div>
 
-            {activeSourceChunk ? (
-              <article className="source-detail">
-                <h3>
-                  {activeSourceChunk.doc_id} - chunk {activeSourceChunk.chunk_index}
-                </h3>
-                <p className="meta">
-                  {activeSourceChunk.municipality} | {activeSourceChunk.authority_level} |{" "}
-                  {activeSourceChunk.doc_type} | {activeSourceChunk.document_status}
-                </p>
-                <pre>{activeSourceChunk.content}</pre>
-              </article>
-            ) : (
-              <p>No source chunk available.</p>
-            )}
-          </div>
-        </section>
-      ) : null}
+              {/* Main Form */}
+              <form onSubmit={handleSubmit} className="space-y-4">
+                <div className="space-y-2">
+                  <Label htmlFor="query">Your Compliance Question</Label>
+                  <Textarea
+                    id="query"
+                    name="query"
+                    rows={3}
+                    value={form.query}
+                    onChange={handleChange}
+                    placeholder="E.g., What are the setback requirements for a residential fence in Dallas?"
+                    className="resize-none"
+                    required
+                  />
+                </div>
 
-      <section className="panel">
-        <h2>Debug Logs</h2>
-        <p className="muted">
-          If you see `Failed to fetch`, usually API is down, wrong URL/port, or browser blocked CORS.
-        </p>
-        {debugLogs.length ? (
-          <ul className="debug-list">
-            {debugLogs.map((log) => (
-              <li key={`${log.requestId}-${log.createdAt}`} className={log.ok ? "debug-ok" : "debug-error"}>
-                <strong>{log.type.toUpperCase()}</strong> [{log.requestId}] {log.status} in {log.elapsedMs} ms -{" "}
-                {log.detail}
-              </li>
-            ))}
-          </ul>
-        ) : (
-          <p className="muted">No debug logs yet.</p>
-        )}
-      </section>
-    </main>
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                  <div className="space-y-2">
+                    <Label htmlFor="municipality">Municipality (Optional override)</Label>
+                    <Input
+                      id="municipality"
+                      name="municipality"
+                      value={form.municipality}
+                      onChange={handleChange}
+                      placeholder="e.g., dallas"
+                    />
+                  </div>
+                  
+                  <div className="space-y-2">
+                    <Label htmlFor="top_k">Max Source Chunks (Top K)</Label>
+                    <Input
+                      id="top_k"
+                      name="top_k"
+                      type="number"
+                      min={1}
+                      max={50}
+                      value={form.top_k}
+                      onChange={handleChange}
+                    />
+                  </div>
+
+                  <div className="space-y-2 md:col-span-1">
+                    <Label htmlFor="address">Project Address (Optional - auto-resolves city)</Label>
+                    <AddressAutocomplete
+                      id="address"
+                      value={form.address}
+                      onChange={(val) => setForm((prev) => ({ ...prev, address: val }))}
+                      onSelect={({ address, municipality }) => {
+                        setForm((prev) => ({
+                          ...prev,
+                          address,
+                          municipality: prev.municipality || municipality || "",
+                        }));
+                      }}
+                    />
+                  </div>
+                </div>
+
+                <div className="pt-2">
+                  <Button type="submit" disabled={!canSubmit} className="w-full md:w-auto px-8">
+                    {loading ? "Analyzing..." : "Ask permit_rag"}
+                  </Button>
+                </div>
+              </form>
+
+              {error && (
+                <div className="mt-4 p-3 bg-red-50 border border-red-200 text-red-700 rounded-lg text-sm font-medium">
+                  {error}
+                </div>
+              )}
+            </CardContent>
+          </Card>
+
+          {/* Results Tabs */}
+          {activeAnswer && (
+            <Tabs defaultValue="answer" className="w-full">
+              <TabsList className="grid w-full grid-cols-4 bg-slate-100 p-1 rounded-lg">
+                <TabsTrigger value="answer" className="rounded-md">Answer & Citations</TabsTrigger>
+                <TabsTrigger value="sources" className="rounded-md">Source Chunks</TabsTrigger>
+                <TabsTrigger value="diagnostics" className="rounded-md">Diagnostics</TabsTrigger>
+                <TabsTrigger value="debug" className="rounded-md">Developer Logs</TabsTrigger>
+              </TabsList>
+
+              {/* Tab 1: Answer */}
+              <TabsContent value="answer" className="mt-4 space-y-4">
+                <Card>
+                  <CardHeader>
+                    <CardTitle className="text-xl">Generated Compliance Answer</CardTitle>
+                    {activeAnswer.resolved_municipality && (
+                      <CardDescription className="text-blue-600 font-medium">
+                        📍 Auto-detected Jurisdiction: {activeAnswer.resolved_municipality.toUpperCase()}
+                      </CardDescription>
+                    )}
+                  </CardHeader>
+                  <CardContent className="space-y-4">
+                    <div className="p-4 bg-slate-50 border border-slate-200 rounded-lg whitespace-pre-wrap text-slate-800 leading-relaxed text-sm">
+                      {activeAnswer.answer}
+                    </div>
+
+                    {/* AHJ Disclaimer */}
+                    {activeAnswer.ahj_disclaimer && (
+                      <div className="flex gap-3 p-4 bg-amber-50 border-l-4 border-amber-500 rounded-r-lg text-sm text-amber-800">
+                        <span className="text-lg">⚠️</span>
+                        <div className="space-y-1">
+                          <strong className="font-semibold text-amber-900 block">Authority Having Jurisdiction (AHJ) Notice</strong>
+                          <p>{activeAnswer.ahj_disclaimer.text}</p>
+                          {activeAnswer.ahj_disclaimer.learn_more_url && (
+                            <a
+                              href={activeAnswer.ahj_disclaimer.learn_more_url}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="inline-block mt-1 underline font-semibold text-amber-900 hover:text-amber-700"
+                            >
+                              Verify with building department →
+                            </a>
+                          )}
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Conflict Warnings */}
+                    {activeAnswer.conflict_warnings?.length > 0 && (
+                      <div className="p-4 bg-orange-50 border-l-4 border-orange-500 rounded-r-lg text-sm text-orange-800 space-y-2">
+                        <strong className="font-semibold text-orange-900 block">⚠️ Regulatory Conflicts Detected</strong>
+                        <p className="text-xs text-orange-700">
+                          The following topics have differing requirements across municipal or state levels. Verify with your AHJ.
+                        </p>
+                        <ul className="space-y-2 pt-2">
+                          {activeAnswer.conflict_warnings.map((w, i) => (
+                            <li key={i} className="bg-white/80 p-3 rounded border border-orange-200">
+                              <span className="font-bold text-orange-950 block">{w.subject}</span>
+                              <span className="text-[10px] text-slate-500 block mb-1">
+                                [{w.chunk_a_doc_id}, chunk {w.chunk_a_index}] ({w.chunk_a_authority}) vs [{w.chunk_b_doc_id}, chunk {w.chunk_b_index}] ({w.chunk_b_authority})
+                              </span>
+                              <p className="text-orange-900 mt-1">{w.detail}</p>
+                            </li>
+                          ))}
+                        </ul>
+                      </div>
+                    )}
+
+                    {/* Citations List */}
+                    <div className="pt-4 border-t border-slate-100">
+                      <h4 className="font-semibold text-sm text-slate-700 mb-2">Source Citations:</h4>
+                      <div className="flex flex-wrap gap-2">
+                        {(activeAnswer.citations || []).map((citation) => {
+                          const citationKey = `${citation.doc_id}-${citation.chunk_index}`;
+                          return (
+                            <Button
+                              key={citationKey}
+                              variant="secondary"
+                              size="sm"
+                              onClick={() => {
+                                setActiveSourceKey(citationKey);
+                                // Navigate to source tab
+                                const tabTrigger = document.querySelector('[value="sources"]');
+                                if (tabTrigger) tabTrigger.click();
+                              }}
+                              className="text-xs bg-slate-100 hover:bg-slate-200 text-slate-700"
+                            >
+                              📁 {citation.doc_id} (ch {citation.chunk_index})
+                            </Button>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  </CardContent>
+                </Card>
+              </TabsContent>
+
+              {/* Tab 2: Source Chunks */}
+              <TabsContent value="sources" className="mt-4">
+                <Card>
+                  <CardHeader>
+                    <CardTitle className="text-xl">Retrieved Source Chunks</CardTitle>
+                    <CardDescription>
+                      Review the specific legal code passages retrieved from database embeddings.
+                    </CardDescription>
+                  </CardHeader>
+                  <CardContent>
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                      
+                      {/* Left list */}
+                      <div className="md:col-span-1 space-y-2 max-h-[400px] overflow-y-auto pr-2">
+                        {(activeAnswer.chunks || []).map((chunk) => {
+                          const chunkKey = `${chunk.doc_id}-${chunk.chunk_index}`;
+                          const isSelected = activeSourceChunk
+                            ? `${activeSourceChunk.doc_id}-${activeSourceChunk.chunk_index}` === chunkKey
+                            : false;
+                          const isFiltered = chunk.filtered_out === true;
+                          return (
+                            <button
+                              key={chunkKey}
+                              type="button"
+                              onClick={() => setActiveSourceKey(chunkKey)}
+                              className={`w-full text-left p-3 rounded-lg border text-xs transition-all ${
+                                isSelected
+                                  ? "bg-slate-900 border-slate-900 text-white font-medium shadow-sm"
+                                  : isFiltered
+                                  ? "opacity-50 border-dashed border-slate-200 hover:bg-slate-50 text-slate-400"
+                                  : "bg-slate-50 border-slate-200 hover:bg-slate-100 text-slate-700"
+                              }`}
+                            >
+                              <div className="font-semibold truncate">{chunk.doc_id}</div>
+                              <div className="flex justify-between items-center mt-1.5 text-[10px]">
+                                <span>Chunk {chunk.chunk_index}</span>
+                                <span className="font-mono bg-white/20 px-1 py-0.25 rounded">
+                                  Score: {(chunk.reranked_score ?? chunk.similarity)?.toFixed(3)}
+                                </span>
+                              </div>
+                            </button>
+                          );
+                        })}
+                      </div>
+
+                      {/* Right Detail Viewer */}
+                      <div className="md:col-span-2 bg-slate-50 border border-slate-200 rounded-lg p-4">
+                        {activeSourceChunk ? (
+                          <div className="space-y-4">
+                            <div>
+                              <h3 className="text-base font-bold text-slate-800">{activeSourceChunk.doc_id}</h3>
+                              <div className="flex flex-wrap gap-2 mt-1.5">
+                                <span className="text-[10px] uppercase font-bold px-2 py-0.5 bg-blue-100 text-blue-800 rounded">
+                                  {activeSourceChunk.municipality}
+                                </span>
+                                <span className="text-[10px] uppercase font-bold px-2 py-0.5 bg-slate-200 text-slate-800 rounded">
+                                  {activeSourceChunk.authority_level}
+                                </span>
+                                <span className="text-[10px] uppercase font-bold px-2 py-0.5 bg-purple-100 text-purple-800 rounded">
+                                  {activeSourceChunk.doc_type}
+                                </span>
+                                <span className="text-[10px] uppercase font-bold px-2 py-0.5 bg-green-100 text-green-800 rounded">
+                                  {activeSourceChunk.document_status}
+                                </span>
+                              </div>
+                            </div>
+                            <div className="p-3 bg-white border border-slate-200 rounded-md overflow-x-auto">
+                              <pre className="text-xs text-slate-700 whitespace-pre-wrap leading-relaxed font-sans">
+                                {activeSourceChunk.content}
+                              </pre>
+                            </div>
+                          </div>
+                        ) : (
+                          <p className="text-slate-500 text-center py-20 text-sm">Select a chunk to view details.</p>
+                        )}
+                      </div>
+                    </div>
+                  </CardContent>
+                </Card>
+              </TabsContent>
+
+              {/* Tab 3: Diagnostics */}
+              <TabsContent value="diagnostics" className="mt-4">
+                <Card>
+                  <CardHeader>
+                    <CardTitle className="text-xl">Evaluation & RAG Metrics</CardTitle>
+                    <CardDescription>
+                      Performance measurements and database retrieval stats.
+                    </CardDescription>
+                  </CardHeader>
+                  <CardContent>
+                    <Table>
+                      <TableHeader>
+                        <TableRow>
+                          <TableHead>Metric</TableHead>
+                          <TableHead>Value</TableHead>
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        <TableRow>
+                          <TableCell className="font-medium">Top Vector Similarity</TableCell>
+                          <TableCell className="font-mono text-sm">
+                            {activeAnswer.diagnostics.top_similarity?.toFixed(4)}
+                          </TableCell>
+                        </TableRow>
+                        <TableRow>
+                          <TableCell className="font-medium">Mean Vector Similarity</TableCell>
+                          <TableCell className="font-mono text-sm">
+                            {activeAnswer.diagnostics.mean_similarity?.toFixed(4)}
+                          </TableCell>
+                        </TableRow>
+                        <TableRow>
+                          <TableCell className="font-medium">Unique Source Documents</TableCell>
+                          <TableCell>{activeAnswer.diagnostics.unique_doc_count}</TableCell>
+                        </TableRow>
+                        <TableRow>
+                          <TableCell className="font-medium">Retrieval Latency</TableCell>
+                          <TableCell className="font-mono">{activeAnswer.latency_retrieval_ms} ms</TableCell>
+                        </TableRow>
+                        <TableRow>
+                          <TableCell className="font-medium">LLM Generation Latency</TableCell>
+                          <TableCell className="font-mono">{activeAnswer.latency_generation_ms} ms</TableCell>
+                        </TableRow>
+                      </TableBody>
+                    </Table>
+                  </CardContent>
+                </Card>
+              </TabsContent>
+
+              {/* Tab 4: Debug Logs */}
+              <TabsContent value="debug" className="mt-4 space-y-4">
+                <Card>
+                  <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                    <div>
+                      <CardTitle className="text-xl">Developer & API Logs</CardTitle>
+                      <CardDescription>Verify request details and server responses.</CardDescription>
+                    </div>
+                    <Button variant="outline" size="sm" onClick={checkHealth}>
+                      {healthState.status === "loading" ? "..." : "Check API Health"}
+                    </Button>
+                  </CardHeader>
+                  <CardContent className="space-y-4">
+                    {healthState.detail && (
+                      <div className={`p-3 rounded text-xs font-semibold ${
+                        healthState.status === "ok" ? "bg-green-50 text-green-800 border border-green-200" : "bg-red-50 text-red-800 border border-red-200"
+                      }`}>
+                        {healthState.detail}
+                      </div>
+                    )}
+
+                    <div className="space-y-2">
+                      <span className="text-xs font-semibold text-slate-500 block">Session History Logs (Last 20 Requests):</span>
+                      {debugLogs.length ? (
+                        <div className="space-y-2 max-h-[300px] overflow-y-auto">
+                          {debugLogs.map((log, i) => (
+                            <div
+                              key={i}
+                              className={`p-3 rounded-lg border text-xs font-mono flex flex-col gap-1 ${
+                                log.ok ? "bg-green-50/50 border-green-200 text-green-950" : "bg-red-50/50 border-red-200 text-red-950"
+                              }`}
+                            >
+                              <div className="flex justify-between items-center">
+                                <span className="font-bold">[{log.type.toUpperCase()}]</span>
+                                <span>{log.createdAt}</span>
+                              </div>
+                              <div>ID: {log.requestId}</div>
+                              <div>Status: {log.status} in {log.elapsedMs} ms</div>
+                              <div className="text-[10px] text-slate-500 mt-1 truncate">{log.detail}</div>
+                            </div>
+                          ))}
+                        </div>
+                      ) : (
+                        <p className="text-xs text-slate-400 italic">No session logs captured yet.</p>
+                      )}
+                    </div>
+                  </CardContent>
+                </Card>
+              </TabsContent>
+            </Tabs>
+          )}
+        </div>
+      </div>
+    </div>
   );
 }
 

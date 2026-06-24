@@ -20,6 +20,7 @@
  */
 
 import React, { useCallback, useEffect, useRef, useState } from "react";
+import { Input } from "@/components/ui/input";
 
 const MAPBOX_TOKEN = import.meta.env?.VITE_MAPBOX_TOKEN || "";
 
@@ -163,7 +164,7 @@ export default function AddressAutocomplete({
   if (!MAPBOX_TOKEN) {
     return (
       <div>
-        <input
+        <Input
           id={id}
           type="text"
           value={value || ""}
@@ -172,7 +173,7 @@ export default function AddressAutocomplete({
           autoComplete="street-address"
           aria-label="Project address"
         />
-        <small className="muted">
+        <small className="text-slate-400 mt-1 block">
           Address autocomplete: set VITE_MAPBOX_TOKEN in frontend/.env to enable.
         </small>
       </div>
@@ -181,7 +182,7 @@ export default function AddressAutocomplete({
 
   return (
     <div ref={containerRef} className="autocomplete-container" aria-haspopup="listbox">
-      <input
+      <Input
         id={id}
         type="text"
         value={value || ""}
@@ -224,3 +225,4 @@ export default function AddressAutocomplete({
     </div>
   );
 }
+
