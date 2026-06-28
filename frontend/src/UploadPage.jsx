@@ -3,6 +3,7 @@ import { Link } from "react-router-dom";
 import { API_BASE_URL, fetchProjects } from "./api.js";
 import { useAuth } from "./context/AuthContext.jsx";
 import { formatUploadError, getUploadBlockers, suggestDocIdFromFilename } from "./uploadUtils.js";
+import { getStoredAdminToken, setStoredAdminToken } from "./documentAdminUtils.js";
 
 const AUTHORITY_LEVELS = ["municipal", "state", "federal", "regional"];
 const DOC_TYPES = [
@@ -41,7 +42,7 @@ export default function UploadPage() {
   const [form, setForm] = useState(DEFAULT_FORM);
   const [file, setFile] = useState(null);
   const [projects, setProjects] = useState([]);
-  const [adminToken, setAdminToken] = useState("");
+  const [adminToken, setAdminToken] = useState(() => getStoredAdminToken());
   const [status, setStatus] = useState(null); // null | 'loading' | 'success' | 'error'
   const [result, setResult] = useState(null);
   const [error, setError] = useState("");
@@ -81,6 +82,12 @@ export default function UploadPage() {
     status,
   });
   const canSubmit = blockers.length === 0;
+
+  function handleAdminTokenChange(event) {
+    const value = event.target.value;
+    setAdminToken(value);
+    setStoredAdminToken(value);
+  }
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -336,7 +343,7 @@ export default function UploadPage() {
                 id="admin-token"
                 type="password"
                 value={adminToken}
-                onChange={(e) => setAdminToken(e.target.value)}
+                onChange={handleAdminTokenChange}
                 placeholder="Your API_ADMIN_TOKEN value"
                 required
               />

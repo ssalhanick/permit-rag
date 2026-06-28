@@ -9,6 +9,7 @@ import {
   fetchProjects,
   shareDocumentToProject,
 } from "./api.js";
+import { formatAdminError, getStoredAdminToken } from "./documentAdminUtils.js";
 
 export default function ProfilePage() {
   const { user } = useAuth();
@@ -145,12 +146,17 @@ export default function ProfilePage() {
     if (!window.confirm(`Are you sure you want to delete and purge all chunks for document ${docId}?`)) {
       return;
     }
+    const adminToken = getStoredAdminToken();
+    if (!adminToken.trim()) {
+      setActionError("Set X-Admin-Token on Upload or Documents page before purging.");
+      return;
+    }
     try {
-      await purgeDocumentAdmin(docId);
+      await purgeDocumentAdmin(docId, adminToken, "admin", user?.username || user?.user_id || "");
       setActionSuccess(`Document ${docId} purged successfully.`);
       loadDocuments();
     } catch (err) {
-      setActionError("Failed to purge document: " + err.message);
+      setActionError("Failed to purge document: " + formatAdminError(err));
     }
   };
 

@@ -1,3 +1,5 @@
+import { buildAdminHeaders } from "./documentAdminUtils.js";
+
 // Mock localStorage for non-browser testing environments (e.g. Node runner)
 if (typeof localStorage === "undefined") {
   global.localStorage = {
@@ -248,11 +250,36 @@ export async function deleteQueryFromHistory(queryId) {
   });
 }
 
-// ── Admin Document Purge Endpoints ─────────────────────────
+// ── Admin Document Governance ────────────────────────────────
 
-export async function purgeDocumentAdmin(docId) {
-  return await requestJson(`/admin/documents/${docId}`, {
-    method: "DELETE",
+export async function fetchDocumentDetail(docId) {
+  return await requestJson(`/documents/${encodeURIComponent(docId)}`);
+}
+
+export async function updateDocumentAdmin(docId, body, adminToken, adminRole = "admin") {
+  return await requestJson(`/admin/documents/${encodeURIComponent(docId)}`, {
+    method: "PATCH",
+    body,
+    headers: buildAdminHeaders(adminToken, adminRole),
+  });
+}
+
+export async function supersedeDocumentAdmin(docId, body, adminToken, adminRole = "admin") {
+  return await requestJson(`/admin/documents/${encodeURIComponent(docId)}/supersede`, {
+    method: "POST",
+    body,
+    headers: buildAdminHeaders(adminToken, adminRole),
+  });
+}
+
+export async function purgeDocumentAdmin(docId, adminToken, adminRole = "admin", adminUser = "") {
+  const headers = buildAdminHeaders(adminToken, adminRole);
+  if (adminUser.trim()) {
+    headers["X-Admin-User"] = adminUser.trim();
+  }
+  return await requestJson(`/admin/documents/${encodeURIComponent(docId)}/purge-project-upload`, {
+    method: "POST",
+    headers,
   });
 }
 

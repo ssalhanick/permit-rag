@@ -1,7 +1,8 @@
-import React, { useEffect, useMemo, useState } from "react";
-import { Link } from "react-router-dom";
+import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { fetchDocuments, fetchDocumentStatus, fetchProjects, shareDocumentToProject } from "./api.js";
 import { useAuth } from "./context/AuthContext.jsx";
+import DocumentAdminPanel from "./components/DocumentAdminPanel.jsx";
+import { getStoredAdminToken, setStoredAdminToken } from "./documentAdminUtils.js";
 
 const DEFAULT_FILTERS = {
   municipality: "",
@@ -20,30 +21,36 @@ export default function DocumentBrowserPage() {
   const [error, setError] = useState("");
   const [shareSuccess, setShareSuccess] = useState("");
   const [shareError, setShareError] = useState("");
+  const [adminToken, setAdminToken] = useState(() => getStoredAdminToken());
+  const [showAdminSection, setShowAdminSection] = useState(false);
+  const [editingDocId, setEditingDocId] = useState(null);
 
   const activeFilterCount = useMemo(() => {
     return Object.values(filters).filter((value) => value.trim().length > 0).length;
   }, [filters]);
 
-  useEffect(() => {
-    async function loadDocuments() {
-      setLoading(true);
-      setError("");
-      try {
-        const [docsResult, statusResult] = await Promise.all([
-          fetchDocuments(filters),
-          fetchDocumentStatus(filters),
-        ]);
-        setRows(docsResult.data || []);
-        setStatusBuckets(statusResult.data?.counts || []);
-      } catch (requestError) {
-        setError(requestError.message || "Failed to load documents.");
-      } finally {
-        setLoading(false);
-      }
+  const candidateDocIds = useMemo(() => rows.map((row) => row.doc_id), [rows]);
+
+  const loadDocuments = useCallback(async () => {
+    setLoading(true);
+    setError("");
+    try {
+      const [docsResult, statusResult] = await Promise.all([
+        fetchDocuments(filters),
+        fetchDocumentStatus(filters),
+      ]);
+      setRows(docsResult.data || []);
+      setStatusBuckets(statusResult.data?.counts || []);
+    } catch (requestError) {
+      setError(requestError.message || "Failed to load documents.");
+    } finally {
+      setLoading(false);
     }
-    loadDocuments();
   }, [filters]);
+
+  useEffect(() => {
+    loadDocuments();
+  }, [loadDocuments]);
 
   useEffect(() => {
     if (user) {
@@ -62,6 +69,12 @@ export default function DocumentBrowserPage() {
 
   function resetFilters() {
     setFilters(DEFAULT_FILTERS);
+  }
+
+  function handleAdminTokenChange(event) {
+    const value = event.target.value;
+    setAdminToken(value);
+    setStoredAdminToken(value);
   }
 
   const handleShare = async (docId, projId) => {
@@ -112,10 +125,45 @@ export default function DocumentBrowserPage() {
           </span>
         </div>
 
+        {user ? (
+          <div className="doc-admin-token-section">
+            <button
+              type="button"
+              className="secondary-button"
+              onClick={() => setShowAdminSection((prev) => !prev)}
+            >
+              {showAdminSection ? "Hide admin actions" : "Admin actions"}
+            </button>
+            {showAdminSection ? (
+              <div className="doc-admin-token-field">
+                <label htmlFor="doc-admin-token">X-Admin-Token</label>
+                <input
+                  id="doc-admin-token"
+                  type="password"
+                  value={adminToken}
+                  onChange={handleAdminTokenChange}
+                  placeholder="Your API_ADMIN_TOKEN value"
+                />
+                <p className="field-hint muted">Required to save metadata or supersede documents.</p>
+              </div>
+            ) : null}
+          </div>
+        ) : null}
+
         {error ? <p className="error">{error}</p> : null}
         {shareSuccess && <div className="success-box" style={{ marginTop: "10px" }}>{shareSuccess}</div>}
         {shareError && <div className="error-box" style={{ marginTop: "10px" }}>{shareError}</div>}
       </section>
+
+      {editingDocId ? (
+        <DocumentAdminPanel
+          docId={editingDocId}
+          adminToken={adminToken}
+          candidateDocIds={candidateDocIds}
+          onClose={() => setEditingDocId(null)}
+          onSaved={loadDocuments}
+        />
+      ) : null}
 
       <section className="panel">
         <h2>Status Summary</h2>
@@ -158,22 +206,33 @@ export default function DocumentBrowserPage() {
                     <td>{row.document_status}</td>
                     <td>{row.updated_at}</td>
                     <td>
-                      {user && projects.length > 0 ? (
-                        <select 
-                          value="" 
-                          onChange={(e) => handleShare(row.id, e.target.value)}
-                          style={{ width: "auto", fontSize: "0.8rem", padding: "2px 6px" }}
-                        >
-                          <option value="">Share with project...</option>
-                          {projects.map(p => (
-                            <option key={p.id} value={p.id}>{p.name}</option>
-                          ))}
-                        </select>
-                      ) : user ? (
-                        <span className="muted" style={{ fontSize: "0.8rem" }}>No projects</span>
-                      ) : (
-                        <span className="muted" style={{ fontSize: "0.8rem" }}>Sign in to share</span>
-                      )}
+                      <div className="doc-row-actions">
+                        {user ? (
+                          <button
+                            type="button"
+                            className="secondary-button"
+                            onClick={() => setEditingDocId(row.doc_id)}
+                          >
+                            Edit
+                          </button>
+                        ) : null}
+                        {user && projects.length > 0 ? (
+                          <select
+                            value=""
+                            onChange={(e) => handleShare(row.id, e.target.value)}
+                            style={{ width: "auto", fontSize: "0.8rem", padding: "2px 6px" }}
+                          >
+                            <option value="">Share with project...</option>
+                            {projects.map((p) => (
+                              <option key={p.id} value={p.id}>{p.name}</option>
+                            ))}
+                          </select>
+                        ) : user ? (
+                          <span className="muted" style={{ fontSize: "0.8rem" }}>No projects</span>
+                        ) : (
+                          <span className="muted" style={{ fontSize: "0.8rem" }}>Sign in to share</span>
+                        )}
+                      </div>
                     </td>
                   </tr>
                 ))}
