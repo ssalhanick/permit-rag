@@ -271,4 +271,3 @@ Common failures:
 
 - [GitHub: Configuring OpenID Connect in AWS](https://docs.github.com/en/actions/deployment/security-hardening-your-deployments/configuring-openid-connect-in-amazon-web-services)
 - Local fallback deploy: `npm run deploy` / `scripts/deploy.ps1`
-- a test push
