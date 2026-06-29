@@ -8,7 +8,7 @@
 | ECS Fargate (AWS deploy) | `production` | Terraform task env + SSM secrets |
 | Laptop + RDS debug (optional) | `production` | `.env.production` + `.env` |
 
-`load_env.py` runs at API startup and picks the profile:
+`api/load_env.py` runs at API startup and picks the profile:
 
 1. **ECS** → `production` (no dotenv files in container)
 2. **`ENVIRONMENT=production`** → production

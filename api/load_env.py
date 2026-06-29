@@ -1,6 +1,6 @@
 """
-load_env.py — Environment bootstrap for local vs production
-============================================================
+api/load_env.py — Environment bootstrap for local vs production
+==============================================================
 Load order (local laptop):
   1. `.env.local` — Docker Postgres, CORS, Neo4j, local URLs
   2. `.env` — shared secrets (API keys, JWT, admin token)
@@ -20,7 +20,7 @@ from pathlib import Path
 
 from dotenv import load_dotenv
 
-PROJECT_ROOT = Path(__file__).resolve().parent
+PROJECT_ROOT = Path(__file__).resolve().parent.parent
 
 
 def resolve_environment() -> str:

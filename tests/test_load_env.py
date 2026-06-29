@@ -6,7 +6,7 @@ from __future__ import annotations
 
 import os
 
-from load_env import bootstrap_env, resolve_environment
+from api.load_env import bootstrap_env, resolve_environment
 
 
 def test_resolve_environment_defaults_to_local(monkeypatch) -> None:
@@ -31,7 +31,7 @@ def test_bootstrap_env_loads_local_profile(monkeypatch, tmp_path) -> None:
     (tmp_path / ".env.local").write_text("DATABASE_URL=postgresql://local/test\n")
     (tmp_path / ".env").write_text("ANTHROPIC_API_KEY=sk-test\n")
 
-    import load_env as mod
+    import api.load_env as mod
 
     monkeypatch.setattr(mod, "PROJECT_ROOT", tmp_path)
     profile = mod.bootstrap_env()

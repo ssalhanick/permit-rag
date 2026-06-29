@@ -102,7 +102,35 @@ To protect your Anthropic Claude API credits from abuse or automated scraping to
 *   Deploy **AWS WAF** (Web Application Firewall) associated with your CloudFront distribution.
 *   Enforce a **rate limit** rule (e.g., maximum `300` requests per rolling 5 minutes per IP address) to block API abusers.
 
-### 5. Automated Shut Down / Teardown
+### 5. Demo Mode: Scale Down / Boot Up (Option A)
+
+When the site is idle between demos, scale compute down without tearing down infrastructure:
+
+```powershell
+npm run shutdown:prod
+```
+
+This sets ECS desired count to **0** and stops RDS. CloudFront, S3, and the ALB stay in place (~$18/mo ALB baseline).
+
+Before a demo, boot everything back up:
+
+```powershell
+npm run boot:prod
+```
+
+The boot script will:
+1. Start RDS if stopped (waits until `available`)
+2. Scale ECS to **1** task and wait for service stability
+3. Hit `https://permits.scottsalhanick.com/health` until the API responds
+
+Optional flags:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File scripts/boot-prod.ps1 -SkipRds
+powershell -ExecutionPolicy Bypass -File scripts/shutdown-prod.ps1 -KeepRdsRunning
+```
+
+### 6. Full Teardown
 If the development environment is inactive for several days (e.g., over school holidays):
 *   Tear down the temporary cloud resources with the root-level scripts or Terraform commands:
     ```powershell

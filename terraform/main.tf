@@ -451,6 +451,9 @@ resource "aws_ecs_service" "service" {
     container_port   = 8000
   }
 
+  # Allow time for uvicorn + model warm-up before ALB marks targets unhealthy
+  health_check_grace_period_seconds = 120
+
   depends_on = [aws_lb_listener.http]
 }
 

@@ -68,19 +68,17 @@ jobs:
           push: true
           tags: ${{ vars.ECR_REPOSITORY }}:latest
 
-      - name: Force ECS redeploy
+      - name: Update Lambda function
         run: |
-          aws ecs update-service \
-            --cluster "${{ vars.ECS_CLUSTER }}" \
-            --service "${{ vars.ECS_SERVICE }}" \
-            --force-new-deployment \
+          aws lambda update-function-code \
+            --function-name "${{ vars.LAMBDA_FUNCTION_NAME }}" \
+            --image-uri "${{ vars.ECR_REPOSITORY }}:latest" \
             --region "${{ vars.AWS_REGION }}"
 
-      - name: Wait for ECS stability
+      - name: Wait for Lambda update
         run: |
-          aws ecs wait services-stable \
-            --cluster "${{ vars.ECS_CLUSTER }}" \
-            --services "${{ vars.ECS_SERVICE }}" \
+          aws lambda wait function-updated \
+            --function-name "${{ vars.LAMBDA_FUNCTION_NAME }}" \
             --region "${{ vars.AWS_REGION }}"
 
   deploy-frontend:

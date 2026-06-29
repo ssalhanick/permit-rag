@@ -58,23 +58,27 @@ Write-Host "Starting Postgres (5433) and Neo4j (7687) containers..." -Foreground
 Write-Host "Verifying database connection..." -ForegroundColor Cyan
 $dbCheck = "FAIL"
 try {
-    $dbCheck = & .venv\Scripts\python -c "
-import os, sys
-from dotenv import load_dotenv
-load_dotenv()
-sys.path.append('.')
+    $dbOutput = & .venv\Scripts\python -c @"
+import sys
+sys.path.insert(0, '.')
+from api.load_env import bootstrap_env
+bootstrap_env()
 from db.client import ping
 if ping():
     print('OK')
     sys.exit(0)
-else:
-    sys.exit(1)
-"
+sys.exit(1)
+"@ 2>&1
+    if ($LastExitCode -eq 0) {
+        $dbCheck = ($dbOutput | Out-String).Trim()
+    } else {
+        Write-Host ($dbOutput | Out-String).Trim() -ForegroundColor Yellow
+    }
 } catch {
-    # Ignore initial failure
+    Write-Host "Database ping error: $_" -ForegroundColor Yellow
 }
 
-if ($dbCheck.Trim() -ne "OK") {
+if ([string]::IsNullOrWhiteSpace($dbCheck) -or $dbCheck -ne "OK") {
     Write-Host "Database is warming up, waiting 5 seconds..." -ForegroundColor Yellow
     Start-Sleep -Seconds 5
 }

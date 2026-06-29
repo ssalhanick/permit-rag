@@ -13,12 +13,13 @@ Or:
 
 from __future__ import annotations
 
-from load_env import bootstrap_env
-
-bootstrap_env()
-
 import logging
 import os
+
+if os.environ.get("AWS_LAMBDA_FUNCTION_NAME") is None:
+    from api.load_env import bootstrap_env
+
+    bootstrap_env()
 from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
 
