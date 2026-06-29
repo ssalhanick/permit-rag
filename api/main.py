@@ -13,12 +13,15 @@ Or:
 
 from __future__ import annotations
 
+from load_env import bootstrap_env
+
+bootstrap_env()
+
 import logging
 import os
 from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
 
-from dotenv import load_dotenv
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
@@ -37,6 +40,16 @@ from db import graph_client as _graph_client
 from db.client import close_pool, ping
 
 log = logging.getLogger(__name__)
+
+LOCALHOST_CORS_REGEX = r"https?://(localhost|127\.0\.0\.1)(:\d+)?"
+
+
+def _env_bool(name: str, default: bool = False) -> bool:
+    """Parse boolean environment variable values."""
+    raw = os.environ.get(name)
+    if raw is None:
+        return default
+    return raw.strip().lower() in {"1", "true", "yes", "on"}
 
 
 def _parse_cors_origins() -> list[str]:
@@ -57,13 +70,37 @@ def _parse_cors_origins() -> list[str]:
     return origins or ["http://localhost:3000"]
 
 
+def _cors_middleware_kwargs() -> dict[str, object]:
+    """Build CORSMiddleware kwargs from environment."""
+    if _env_bool("API_CORS_ALLOW_ALL"):
+        return {
+            "allow_origins": ["*"],
+            "allow_credentials": False,
+            "allow_methods": ["*"],
+            "allow_headers": ["*"],
+        }
+    if _env_bool("API_CORS_ALLOW_LOCALHOST"):
+        return {
+            "allow_origin_regex": LOCALHOST_CORS_REGEX,
+            "allow_credentials": True,
+            "allow_methods": ["*"],
+            "allow_headers": ["*"],
+        }
+    origins = _parse_cors_origins()
+    return {
+        "allow_origins": origins,
+        "allow_credentials": True,
+        "allow_methods": ["*"],
+        "allow_headers": ["*"],
+    }
+
+
 # ── Lifespan (startup / shutdown) ────────────────────────────
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
-    """Load .env on startup, close DB pool on shutdown."""
-    load_dotenv()
+    """Configure logging on startup and close DB pool on shutdown."""
     logging.basicConfig(
         level=os.environ.get("LOG_LEVEL", "INFO"),
         format="%(asctime)s [%(levelname)s] %(name)s — %(message)s",
@@ -90,16 +127,7 @@ app = FastAPI(
 
 # ── CORS (env-driven allowlist) ──────────────────────────────
 
-cors_origins = _parse_cors_origins()
-allow_all_origins = cors_origins == ["*"]
-
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=cors_origins,
-    allow_credentials=not allow_all_origins,
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
+app.add_middleware(CORSMiddleware, **_cors_middleware_kwargs())
 
 
 # ── Include routers ──────────────────────────────────────────

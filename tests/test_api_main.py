@@ -40,6 +40,17 @@ def test_parse_cors_origins_allow_all_override(monkeypatch) -> None:
     assert _parse_cors_origins() == ["*"]
 
 
+def test_cors_middleware_uses_localhost_regex(monkeypatch) -> None:
+    """Local dev should accept any localhost port when regex mode is enabled."""
+    from api.main import _cors_middleware_kwargs
+
+    monkeypatch.setenv("API_CORS_ALLOW_ALL", "false")
+    monkeypatch.setenv("API_CORS_ALLOW_LOCALHOST", "true")
+    kwargs = _cors_middleware_kwargs()
+    assert "allow_origin_regex" in kwargs
+    assert kwargs["allow_credentials"] is True
+
+
 def test_validation_error_handler_returns_string_detail() -> None:
     """Validation errors should use compact string detail payloads."""
     client = TestClient(app)

@@ -93,20 +93,31 @@ pip install sentence-transformers einops   # local embedding model
 
 ### Step 2 — Environment variables
 
+Local dev uses **split env files** — see [docs/environment_setup.md](docs/environment_setup.md).
+
 ```powershell
+Copy-Item .env.local.example .env.local
 Copy-Item .env.example .env
+Copy-Item frontend\.env.local.example frontend\.env.local
 ```
 
-Open `.env` and fill in at minimum:
+| File | Purpose |
+|------|---------|
+| `.env.local` | Docker Postgres (`localhost:5433`), CORS, Neo4j — auto-loaded locally |
+| `.env` | Secrets only: `ANTHROPIC_API_KEY`, `API_JWT_SECRET`, `API_ADMIN_TOKEN` |
+| `frontend/.env.local` | `VITE_MAPBOX_TOKEN` for address autocomplete |
+
+Production (AWS/ECS) uses Terraform task env + SSM — no dotenv files in the container.
+
+**Minimum secrets to fill in `.env`:**
 
 | Variable | What to set |
 |---|---|
-| `DATABASE_URL` | `postgresql://postgres:<your-password>@localhost:5433/permit_rag` |
 | `ANTHROPIC_API_KEY` | Your Anthropic API key (`sk-ant-...`) |
-| `CORPUS_WRITER_URL` | `postgresql://corpus_writer:changeme_rotate_corpus@localhost:5433/permit_rag` |
-| `APP_READER_URL` | `postgresql://app_reader:changeme_rotate_reader@localhost:5433/permit_rag` |
+| `API_JWT_SECRET` | Random string, 32+ characters |
+| `API_ADMIN_TOKEN` | Random string for `/admin/*` routes |
 
-All other variables have working defaults for local dev.
+Database URLs are in `.env.local` (already point at Docker on port 5433).
 
 ---
 

@@ -345,6 +345,8 @@ resource "aws_ecs_task_definition" "backend" {
       environment = [
         { name = "ENVIRONMENT", value = "production" },
         { name = "LOG_LEVEL", value = "INFO" },
+        { name = "API_CORS_ALLOW_LOCALHOST", value = "false" },
+        { name = "API_CORS_ALLOW_ORIGINS", value = "https://permits.scottsalhanick.com" },
         { name = "DATABASE_URL", value = "postgresql://postgres:${random_password.db_password.result}@${aws_db_instance.postgres.endpoint}/permit_rag" },
         { name = "CORPUS_WRITER_URL", value = "postgresql://postgres:${random_password.db_password.result}@${aws_db_instance.postgres.endpoint}/permit_rag" },
         { name = "APP_READER_URL", value = "postgresql://postgres:${random_password.db_password.result}@${aws_db_instance.postgres.endpoint}/permit_rag" },
