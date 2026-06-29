@@ -21,8 +21,10 @@ export function AuthProvider({ children }) {
     if (token) {
       const payload = parseJwt(token);
       if (payload && payload.exp * 1000 > Date.now()) {
+        const userId = payload.sub;
         setUser({
-          id: payload.sub,
+          id: userId,
+          user_id: userId,
           role: payload.role,
           username: payload.username || "User",
         });
