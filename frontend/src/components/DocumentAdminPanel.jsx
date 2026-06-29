@@ -59,7 +59,7 @@ export default function DocumentAdminPanel({
           document_status: doc.document_status || "",
           is_current: doc.is_current ?? "",
           retrieval_weight: doc.retrieval_weight ?? "",
-          review_due: doc.review_due || "",
+          review_due: doc.review_due ? String(doc.review_due).slice(0, 10) : "",
         });
       } catch (err) {
         if (!cancelled) {
@@ -157,7 +157,14 @@ export default function DocumentAdminPanel({
   }
 
   return (
-    <div className="panel doc-admin-panel" role="dialog" aria-labelledby="doc-admin-title">
+    <div className="doc-admin-overlay" onClick={onClose} role="presentation">
+      <div
+        className="panel doc-admin-panel doc-admin-modal"
+        role="dialog"
+        aria-labelledby="doc-admin-title"
+        aria-modal="true"
+        onClick={(event) => event.stopPropagation()}
+      >
       <div className="doc-admin-header">
         <h2 id="doc-admin-title">Edit Document</h2>
         <button type="button" className="secondary-button" onClick={onClose}>
@@ -293,6 +300,7 @@ export default function DocumentAdminPanel({
           </form>
         </>
       ) : null}
+      </div>
     </div>
   );
 }

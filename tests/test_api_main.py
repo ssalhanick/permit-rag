@@ -17,6 +17,7 @@ def test_parse_cors_origins_uses_default_local_allowlist(monkeypatch) -> None:
     origins = _parse_cors_origins()
     assert "http://localhost:3000" in origins
     assert "http://localhost:5173" in origins
+    assert "http://localhost:5175" in origins
 
 
 def test_parse_cors_origins_reads_csv_from_env(monkeypatch) -> None:

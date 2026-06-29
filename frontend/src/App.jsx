@@ -73,6 +73,7 @@ function App() {
   const [healthState, setHealthState] = useState({ status: "idle", detail: "" });
   const [projects, setProjects] = useState([]);
   const [activeProjectId, setActiveProjectId] = useState("");
+  const [activeResultsTab, setActiveResultsTab] = useState("answer");
 
   // Prefill search query if reloading from profile page or project dashboard
   useEffect(() => {
@@ -193,6 +194,7 @@ function App() {
       };
       setHistory((prev) => [answerItem, ...prev]);
       setActiveAnswerId(answerItem.id);
+      setActiveResultsTab("answer");
       const firstChunk = answerItem.chunks?.[0];
       setActiveSourceKey(firstChunk ? `${firstChunk.doc_id}-${firstChunk.chunk_index}` : null);
       pushDebugLog({
@@ -289,11 +291,8 @@ function App() {
   }
 
   return (
-    <div className="container mx-auto px-4 py-8 max-w-7xl">
-      <div className="grid grid-cols-1 lg:grid-cols-4 gap-8">
-        
-        {/* Left Sidebar: Projects and Query History */}
-        <div className="space-y-6 lg:col-span-1">
+    <div className="query-page-layout">
+      <aside className="query-page-sidebar space-y-6">
           <Card className="shadow-sm">
             <CardHeader className="pb-3">
               <CardTitle className="text-lg">Project Context</CardTitle>
@@ -366,10 +365,9 @@ function App() {
               )}
             </CardContent>
           </Card>
-        </div>
+        </aside>
 
-        {/* Right Area: RAG Query Panel & Results Tabs */}
-        <div className="lg:col-span-3 space-y-6">
+        <div className="query-page-main space-y-6">
           <Card className="shadow-md">
             <CardHeader>
               <CardTitle className="text-2xl font-bold flex items-center gap-2">
@@ -474,12 +472,17 @@ function App() {
 
           {/* Results Tabs */}
           {activeAnswer && (
-            <Tabs defaultValue="answer" className="w-full">
-              <TabsList className="grid w-full grid-cols-4 bg-slate-100 p-1 rounded-lg">
-                <TabsTrigger value="answer" className="rounded-md">Answer & Citations</TabsTrigger>
-                <TabsTrigger value="sources" className="rounded-md">Source Chunks</TabsTrigger>
-                <TabsTrigger value="diagnostics" className="rounded-md">Diagnostics</TabsTrigger>
-                <TabsTrigger value="debug" className="rounded-md">Developer Logs</TabsTrigger>
+            <Tabs
+              value={activeResultsTab}
+              onValueChange={setActiveResultsTab}
+              orientation="horizontal"
+              className="query-results-tabs w-full"
+            >
+              <TabsList className="query-results-tablist w-full">
+                <TabsTrigger value="answer">Answer & Citations</TabsTrigger>
+                <TabsTrigger value="sources">Source Chunks</TabsTrigger>
+                <TabsTrigger value="diagnostics">Diagnostics</TabsTrigger>
+                <TabsTrigger value="debug">Developer Logs</TabsTrigger>
               </TabsList>
 
               {/* Tab 1: Answer */}
@@ -553,9 +556,7 @@ function App() {
                               size="sm"
                               onClick={() => {
                                 setActiveSourceKey(citationKey);
-                                // Navigate to source tab
-                                const tabTrigger = document.querySelector('[value="sources"]');
-                                if (tabTrigger) tabTrigger.click();
+                                setActiveResultsTab("sources");
                               }}
                               className="text-xs bg-slate-100 hover:bg-slate-200 text-slate-700"
                             >
@@ -750,7 +751,6 @@ function App() {
             </Tabs>
           )}
         </div>
-      </div>
     </div>
   );
 }

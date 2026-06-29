@@ -155,16 +155,6 @@ export default function DocumentBrowserPage() {
         {shareError && <div className="error-box" style={{ marginTop: "10px" }}>{shareError}</div>}
       </section>
 
-      {editingDocId ? (
-        <DocumentAdminPanel
-          docId={editingDocId}
-          adminToken={adminToken}
-          candidateDocIds={candidateDocIds}
-          onClose={() => setEditingDocId(null)}
-          onSaved={loadDocuments}
-        />
-      ) : null}
-
       <section className="panel">
         <h2>Status Summary</h2>
         {statusBuckets.length ? (
@@ -243,6 +233,16 @@ export default function DocumentBrowserPage() {
           <p className="muted">No documents found for current filters.</p>
         )}
       </section>
+
+      {editingDocId ? (
+        <DocumentAdminPanel
+          docId={editingDocId}
+          adminToken={adminToken}
+          candidateDocIds={candidateDocIds}
+          onClose={() => setEditingDocId(null)}
+          onSaved={loadDocuments}
+        />
+      ) : null}
     </main>
   );
 }
