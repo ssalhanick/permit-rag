@@ -76,13 +76,15 @@ class TestCognitoVerification:
 
     def test_invalid_signature_raises(self, monkeypatch):
         """A token with a mismatched signature must raise HTTP 401."""
+        from jose import JWTError
+
         monkeypatch.setenv("COGNITO_USER_POOL_ID", "us-east-1_TESTPOOL")
         monkeypatch.setenv("COGNITO_REGION", "us-east-1")
 
         fake_key = {"kid": "test-kid", "kty": "RSA", "n": "bogus", "e": "AQAB"}
         with patch("api.auth.jwt.get_unverified_headers", return_value={"kid": "test-kid"}):
             with patch("api.auth._get_jwks_key", return_value=fake_key):
-                with patch("api.auth.jwt.decode", side_effect=Exception("bad sig")):
+                with patch("api.auth.jwt.decode", side_effect=JWTError("bad sig")):
                     with pytest.raises(HTTPException) as exc:
                         verify_cognito_token("bad.token.value")
                     assert exc.value.status_code == 401
@@ -95,8 +97,8 @@ class TestCognitoVerification:
 @pytest.fixture
 def auth_headers(monkeypatch):
     """
-    Bypass full Cognito JWT verification for integration tests by patching
-    get_current_user to return a fixed user dict.
+    Bypass full Cognito JWT verification for integration tests.
+    Uses app.dependency_overrides so FastAPI's Depends() resolves the fake.
     """
     monkeypatch.setenv("COGNITO_USER_POOL_ID", "us-east-1_TESTPOOL")
     monkeypatch.setenv("COGNITO_REGION", "us-east-1")
@@ -111,18 +113,19 @@ def auth_headers(monkeypatch):
         "created_at": datetime.now(timezone.utc),
     }
 
-    def _fake_get_current_user(credentials=None):
+    def _fake_get_current_user():
         return fake_user
 
-    monkeypatch.setattr("api.routes.projects.get_current_user", _fake_get_current_user)
-    monkeypatch.setattr("api.routes.query.get_current_user", _fake_get_current_user)
+    app.dependency_overrides[get_current_user] = _fake_get_current_user
 
-    return {
+    yield {
         "Authorization": "Bearer fake-cognito-token",
         "User-Id": str(uid),
         "_uid": uid,
         "_user": fake_user,
     }
+
+    app.dependency_overrides.pop(get_current_user, None)
 
 
 # ═══════════════════════════════════════════════════════════════

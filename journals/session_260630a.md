@@ -66,17 +66,27 @@ Replace custom Argon2id/JWT auth with Amazon Cognito. Add Google SSO and optiona
 
 ---
 
-## Next session should
+## Follow-up session (same day) completed
 
-1. Fill in actual Cognito values in `frontend/.env` and root `.env`
-2. Run `pip install -e .` and `cd frontend && npm install`
-3. Smoke test: email+password register → confirm → login; Google SSO; TOTP 2FA enrollment
-4. Run full test suite: `py -m pytest tests/test_sprint5.py tests/test_sprint6.py tests/test_sprint7.py tests/test_sprint8.py tests/test_sprint9.py -v`
-5. Proceed to CI/CD pipeline (GitHub → AWS ECS)
+All items above were completed in `journals/session_20260630.md`:
+- ✅ Cognito env vars filled in (`frontend/.env`, root `.env`, `.env.local`)
+- ✅ Google SSO smoke tested end-to-end locally (token exchange → `/auth/me` → user provisioned)
+- ✅ CI/CD pipeline already live — Sprint 11 deployed to production via `deployment/sites`
+- ✅ `COGNITO_USER_POOL_ID` + `COGNITO_REGION` baked into Dockerfile
+- ✅ Cognito vars injected into frontend Vite build via `deploy.yml`
+
+## Still pending (carry into next session)
+
+- ✅ RDS migration 013 applied to production
+- ✅ Production callback URL registered in Cognito + Google Cloud Console
+- ✅ Google SSO verified end-to-end on `permits.scottsalhanick.com`
+- ✅ Full test suite: `test_sprint9.py` — 10 passed (fixed `auth_headers` fixture to use `app.dependency_overrides`; fixed `test_invalid_signature_raises` to mock `JWTError` not plain `Exception`)
+
+**Sprint 11 is fully closed.**
 
 ## Prompt for next session
 
-Read `AGENTS.md`, `STATE.md`, and `journals/session_260630a.md`. Sprint 11 (Cognito auth migration) is complete and DB migration 013 is applied. Before starting new work: fill in Cognito env vars, run `pip install -e .` + `cd frontend && npm install`, and smoke test the three auth flows (email+password, Google SSO, TOTP 2FA). After auth is confirmed working, proceed to Sprint 12: CI/CD pipeline (GitHub Actions → AWS ECS) or document update routes, whichever is higher priority.
+Read `AGENTS.md`, `STATE.md`, and `journals/session_20260630.md`. Sprint 11 is fully closed — Cognito auth with Google SSO is live and verified on `permits.scottsalhanick.com`. Begin Sprint 12: choose between (a) document update routes (`PATCH /documents/{id}` + frontend edit UI) or (b) User Profile Dashboard (WordPress-style sidebar with user settings, project list, query history). Check `README.md` Planned section and confirm priority with user before writing any code.
 
 ## Git commit message
 

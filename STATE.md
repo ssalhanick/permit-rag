@@ -1,10 +1,10 @@
 # permit_rag — State
 
-_Updated: 2026-06-30 (Sprint 11 — Cognito smoke-tested locally, deploying to production)_
+_Updated: 2026-06-30 (Sprint 11 — fully closed, Google SSO live on permits.scottsalhanick.com)_
 
 ## Phase
 
-Sprint 11 complete + locally validated. **93 tests passing.** Google SSO end-to-end confirmed locally. Deploying to production.
+Sprint 11 closed. **93 tests passing** (all green). Google SSO live and verified in production.
 
 ## Blocked on
 
@@ -17,14 +17,14 @@ Sprint 11 complete + locally validated. **93 tests passing.** Google SSO end-to-
 3. **Update Documents**: Add ability/routes to update existing documents
 4. **PostGIS**: Add remaining 8 DFW city boundary layers (see `docs/backlog.md`)
 
-## Deployment checklist (Sprint 11)
+## Deployment checklist (Sprint 11) — CLOSED ✅
 
 - [x] Local smoke test: Google SSO end-to-end confirmed
 - [x] `Dockerfile` — baked in `COGNITO_USER_POOL_ID` + `COGNITO_REGION`
 - [x] `deploy.yml` — Cognito vars injected into frontend Vite build
-- [x] `frontend/.env.production` — created (gitignored; vars in workflow instead)
-- [ ] RDS migration 013 applied to production
-- [ ] Production callback URL registered in Cognito + Google
+- [x] RDS migration 013 applied to production
+- [x] Production callback URL registered in Cognito + Google Cloud Console
+- [x] Google SSO verified on `permits.scottsalhanick.com`
 
 ## Module status
 
