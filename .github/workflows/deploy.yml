@@ -106,6 +106,12 @@ jobs:
         working-directory: frontend
         env:
           VITE_MAPBOX_TOKEN: ${{ secrets.VITE_MAPBOX_TOKEN }}
+          VITE_API_BASE_URL: ""
+          VITE_COGNITO_USER_POOL_ID: us-east-1_HF3i1xgNF
+          VITE_COGNITO_APP_CLIENT_ID: 21admh46opa2gaaii3oaq0nlgd
+          VITE_COGNITO_REGION: us-east-1
+          VITE_COGNITO_DOMAIN: us-east-1hf3i1xgnf.auth.us-east-1.amazoncognito.com
+          VITE_COGNITO_GOOGLE_ENABLED: "true"
         run: |
           npm ci
           npm run build
