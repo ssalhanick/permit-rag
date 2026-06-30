@@ -36,6 +36,11 @@ COPY evaluation/ ./evaluation
 RUN pip install --no-cache-dir hatchling && \
     pip install --no-cache-dir --no-deps .
 
+# Non-sensitive Cognito config — baked in so ECS works without manual task-def vars.
+# Rotate by rebuilding the image; no secrets here (pool ID + region are public).
+ENV COGNITO_USER_POOL_ID=us-east-1_HF3i1xgNF
+ENV COGNITO_REGION=us-east-1
+
 EXPOSE 8000
 
 CMD ["uvicorn", "api.main:app", "--host", "0.0.0.0", "--port", "8000"]
