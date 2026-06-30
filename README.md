@@ -7,17 +7,21 @@ plus Texas state and federal regulations.
 
 ---
 
-## Current Status (2026-06-16)
+## Current Status (2026-06-30)
 
-- **Sprint 8 in progress** — Task 16F (graph citation signals) complete.
-- **72 tests passing** (Sprint 5: 16 · Sprint 6: 24 · Sprint 7: 20 · Sprint 8: 12).
-- `GET /health` returns `status=healthy graph_health=True`; eval guard PASS (faithfulness `0.910`).
-- After every `/query/answer` call, cited `Chunk` nodes are tagged in Neo4j via a non-blocking `BackgroundTask` (`record_cited_chunks()`).
-- Next: BM25 A/B eval (hybrid vs dense-only retrieval quality delta).
+- **Sprint 11 complete + smoke-tested** — Cognito Google SSO confirmed working locally. 93 tests passing.
+- Custom JWT/Argon2id auth replaced with Cognito RS256 JWKS verification.
+- Google SSO + optional TOTP 2FA supported. Vite proxy added for local dev.
+- DB migration 013 applied locally: `cognito_sub` column live.
+- `frontend/.env.production` created with Cognito vars for CI/CD build.
+- Next: apply migration 013 to RDS, register production callback URLs, push to `deployment/sites`.
 
 ```powershell
 # Full test suite
-py -m pytest tests/test_sprint5.py tests/test_sprint6.py tests/test_sprint7.py tests/test_sprint8.py -v
+py -m pytest tests/test_sprint5.py tests/test_sprint6.py tests/test_sprint7.py tests/test_sprint8.py tests/test_sprint9.py -v
+
+# Apply DB migration
+py scripts/run_migration.py 013_cognito_auth.sql
 
 # Health check (API must be running)
 Invoke-RestMethod -Uri "http://localhost:8000/health" -Method Get
@@ -48,6 +52,7 @@ py -m evaluation.eval_guard
 - [ ] 
 
 ### Completed
+- [x] Cognito Auth Migration (Sprint 11) — Replaced custom JWT/Argon2id with Amazon Cognito RS256 JWKS verification, Google SSO, optional TOTP 2FA, lazy RDS user provisioning via `GET /auth/me`
 - [x] Get GIS auto-address bar working (Implemented Mapbox Search Box session_token management for address autocomplete suggestions and geocoding retrievals)
 - [x] Add mobile styles (SGP10: Responsive styling for mobile, tablet, and desktop viewports, scrollable data tables, and WCAG AAA touch target size conformance)
 

@@ -167,6 +167,16 @@ def handle_http_exception(_request: Request, exc: HTTPException) -> JSONResponse
     return JSONResponse(status_code=exc.status_code, content={"detail": detail})
 
 
+@app.exception_handler(Exception)
+def handle_unexpected_error(_request: Request, exc: Exception) -> JSONResponse:
+    """Catch-all: log the traceback and return 500 with detail visible to caller."""
+    log.exception("Unhandled exception: %s", exc)
+    return JSONResponse(
+        status_code=500,
+        content={"detail": f"{type(exc).__name__}: {exc}"},
+    )
+
+
 # ── Health endpoint (lives on main app, not a router) ────────
 
 

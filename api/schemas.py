@@ -434,3 +434,13 @@ class ShareDocumentRequest(BaseModel):
     """Request to share a document to a project."""
     document_id: UUID = Field(..., description="UUID of the document to share")
 
+
+class UserMeResponse(BaseModel):
+    """Response for GET /auth/me — current user profile."""
+    id: UUID
+    username: str
+    email: str
+    role: str
+    cognito_sub: str
+    created_at: datetime
+

@@ -9,12 +9,23 @@ if (typeof localStorage === "undefined") {
   };
 }
 
+// Token refresher registered by AuthContext so requestJson can refresh Cognito sessions on 401
+let _tokenRefresher = null;
+export function registerTokenRefresher(fn) {
+  _tokenRefresher = fn;
+}
+
 const DEFAULT_BASE_URL = "http://localhost:8000";
-const API_BASE_URL = import.meta.env?.VITE_API_BASE_URL
-  ? import.meta.env.VITE_API_BASE_URL
-  : (typeof window !== "undefined" && (window.location.hostname === "localhost" || window.location.hostname === "127.0.0.1")
+// When VITE_API_BASE_URL is explicitly set (even to ""), use it. Blank string
+// means "same origin" so the Vite dev-server proxy handles routing to the backend.
+const API_BASE_URL =
+  import.meta.env?.VITE_API_BASE_URL !== undefined
+    ? (import.meta.env.VITE_API_BASE_URL ?? "")
+    : typeof window !== "undefined" &&
+        (window.location.hostname === "localhost" ||
+          window.location.hostname === "127.0.0.1")
       ? DEFAULT_BASE_URL
-      : "");
+      : "";
 
 function safeJsonParse(text) {
   if (!text) {
@@ -46,34 +57,20 @@ export async function requestJson(path, options = {}) {
     body: options.body ? JSON.stringify(options.body) : undefined,
   });
 
-  // Auto-refresh token if 401 and refresh_token exists
-  if (response.status === 401 && path !== "/auth/login" && path !== "/auth/register" && path !== "/auth/refresh") {
-    const refreshToken = localStorage.getItem("refresh_token");
-    if (refreshToken) {
-      try {
-        const refreshResp = await fetch(`${API_BASE_URL}/auth/refresh`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ refresh_token: refreshToken }),
+  // Auto-refresh Cognito token on 401 via registered callback
+  if (response.status === 401 && _tokenRefresher) {
+    try {
+      const newToken = await _tokenRefresher();
+      if (newToken) {
+        headers["Authorization"] = `Bearer ${newToken}`;
+        response = await fetch(`${API_BASE_URL}${path}`, {
+          method: options.method || "GET",
+          headers,
+          body: options.body ? JSON.stringify(options.body) : undefined,
         });
-        if (refreshResp.ok) {
-          const tokens = await refreshResp.json();
-          localStorage.setItem("access_token", tokens.access_token);
-          localStorage.setItem("refresh_token", tokens.refresh_token);
-          
-          headers["Authorization"] = `Bearer ${tokens.access_token}`;
-          response = await fetch(`${API_BASE_URL}${path}`, {
-            method: options.method || "GET",
-            headers,
-            body: options.body ? JSON.stringify(options.body) : undefined,
-          });
-        } else {
-          localStorage.removeItem("access_token");
-          localStorage.removeItem("refresh_token");
-        }
-      } catch {
-        // network error during refresh
       }
+    } catch {
+      // refresh failed — let the original 401 propagate
     }
   }
 
@@ -144,39 +141,11 @@ export async function fetchDocumentStatus(filters = {}, headers = {}) {
 }
 
 // ── Auth Endpoints ───────────────────────────────────────────
+// Login, register, and logout are handled directly by the Cognito SDK in AuthContext.
+// Only /auth/me (profile fetch) goes through the API.
 
-export async function registerUser(payload) {
-  const result = await requestJson("/auth/register", {
-    method: "POST",
-    body: payload,
-  });
-  if (result.data?.access_token) {
-    localStorage.setItem("access_token", result.data.access_token);
-    localStorage.setItem("refresh_token", result.data.refresh_token);
-  }
-  return result;
-}
-
-export async function loginUser(payload) {
-  const result = await requestJson("/auth/login", {
-    method: "POST",
-    body: payload,
-  });
-  if (result.data?.access_token) {
-    localStorage.setItem("access_token", result.data.access_token);
-    localStorage.setItem("refresh_token", result.data.refresh_token);
-  }
-  return result;
-}
-
-export async function logoutUser() {
-  try {
-    await requestJson("/auth/logout-all", { method: "POST" });
-  } catch {
-    // ignore if token already expired/invalid
-  }
-  localStorage.removeItem("access_token");
-  localStorage.removeItem("refresh_token");
+export async function fetchMe() {
+  return await requestJson("/auth/me");
 }
 
 // ── Project Endpoints ────────────────────────────────────────

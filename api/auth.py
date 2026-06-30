@@ -1,132 +1,160 @@
 """
-api/auth.py — JWT, password hashing, and user identifier validation.
+api/auth.py — Cognito JWT verification and FastAPI auth dependencies.
 =====================================================================
-All authentication and authorization primitives live here.
-No other module may issue token operations (see AGENTS.md).
+Verifies RS256 JWTs issued by Amazon Cognito via cached JWKS endpoint.
+No password hashing or token minting — Cognito owns all credential operations.
 """
 
 from __future__ import annotations
 
-import hashlib
 import os
-import re
-from datetime import UTC, datetime, timedelta
+import time
 from typing import Annotated
 from uuid import UUID
 
-import jwt
-import phonenumbers
-from argon2 import PasswordHasher
-from argon2.exceptions import VerifyMismatchError
+import requests
 from fastapi import Depends, HTTPException
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
+from jose import JWTError, jwt
 
-_ph = PasswordHasher()
 _bearer = HTTPBearer(auto_error=False)
 
-# Username validation regexes
-_USERNAME_RE = re.compile(r"^[a-z0-9][a-z0-9_.\-]{1,28}[a-z0-9]$")
-_CONSECUTIVE_SPECIAL_RE = re.compile(r"[_\.\-]{2,}")
-
-_RESERVED_USERNAMES: frozenset[str] = frozenset({
-    "api", "auth", "login", "logout", "register", "me", "self",
-    "admin", "administrator", "root", "superuser", "system", "service",
-    "null", "undefined", "true", "false", "none",
-    "support", "help", "billing", "security", "abuse", "noreply",
-    "permitrag", "permit_rag", "permit.rag",
-})
+# JWKS key cache: {kid: jwk_dict}, refreshed on unknown kid or TTL expiry.
+_jwks_cache: dict[str, dict] = {}
+_jwks_last_fetched: float = 0.0
+_JWKS_TTL: float = 3600.0  # re-fetch at most once per hour
 
 
-def hash_password(plaintext: str) -> str:
-    """Hash a plaintext password with Argon2id. Returns the encoded hash."""
-    return _ph.hash(plaintext)
+# ── Environment helpers ───────────────────────────────────────
 
 
-def verify_password(plaintext: str, hashed: str) -> bool:
-    """Return True if plaintext matches the Argon2id hash."""
+def _pool_id() -> str:
+    """Return Cognito User Pool ID from env."""
+    pool_id = os.environ.get("COGNITO_USER_POOL_ID", "")
+    if not pool_id:
+        raise RuntimeError("COGNITO_USER_POOL_ID env var is required.")
+    return pool_id
+
+
+def _region() -> str:
+    """Return AWS region from env (defaults to us-east-1)."""
+    return os.environ.get("COGNITO_REGION", "us-east-1")
+
+
+
+def _jwks_url() -> str:
+    """Build the Cognito JWKS endpoint URL."""
+    return (
+        f"https://cognito-idp.{_region()}.amazonaws.com"
+        f"/{_pool_id()}/.well-known/jwks.json"
+    )
+
+
+# ── JWKS fetching and caching ─────────────────────────────────
+
+
+def _fetch_jwks() -> None:
+    """Fetch fresh JWKS keys from Cognito and populate the cache."""
+    global _jwks_cache, _jwks_last_fetched
     try:
-        return _ph.verify(hashed, plaintext)
-    except VerifyMismatchError:
-        return False
+        resp = requests.get(_jwks_url(), timeout=5)
+        resp.raise_for_status()
+    except Exception as exc:
+        raise HTTPException(
+            status_code=503,
+            detail=f"Unable to fetch Cognito JWKS: {exc}",
+        ) from exc
+    keys = resp.json().get("keys", [])
+    _jwks_cache = {k["kid"]: k for k in keys}
+    _jwks_last_fetched = time.monotonic()
 
 
-def hash_for_storage(token: str) -> str:
-    """Return SHA-256 hex digest of a token for secure database storage."""
-    return hashlib.sha256(token.encode()).hexdigest()
+def _get_jwks_key(kid: str) -> dict:
+    """Return the JWK dict for the given kid, refreshing the cache if needed."""
+    stale = time.monotonic() - _jwks_last_fetched > _JWKS_TTL
+    if kid not in _jwks_cache or stale:
+        _fetch_jwks()
+    if kid not in _jwks_cache:
+        raise HTTPException(status_code=401, detail="Unknown token signing key.")
+    return _jwks_cache[kid]
 
 
-def validate_username(raw: str) -> str:
-    """Normalize and validate a username. Returns lowercase value or raises ValueError."""
-    username = raw.strip().lower()
-    if not _USERNAME_RE.match(username):
-        raise ValueError(
-            "Username must be 3-30 characters, start and end with a letter or digit, "
-            "and contain only letters, digits, underscores, dots, or hyphens."
+# ── Token verification ────────────────────────────────────────
+
+
+def verify_cognito_token(token: str) -> dict:
+    """Decode and verify a Cognito-issued RS256 JWT. Returns the payload dict."""
+    try:
+        headers = jwt.get_unverified_headers(token)
+    except JWTError:
+        raise HTTPException(status_code=401, detail="Invalid token headers.")
+
+    kid = headers.get("kid")
+    if not kid:
+        raise HTTPException(status_code=401, detail="Token missing kid header.")
+
+    key = _get_jwks_key(kid)
+    issuer = f"https://cognito-idp.{_region()}.amazonaws.com/{_pool_id()}"
+
+    # RS256 signature + issuer together prove the token came from our pool.
+    # Audience verification (app client ID) is skipped here; add COGNITO_APP_CLIENT_ID
+    # to env and pass audience=os.environ["COGNITO_APP_CLIENT_ID"] if stricter checking
+    # is required in the future.
+    try:
+        payload = jwt.decode(
+            token,
+            key,
+            algorithms=["RS256"],
+            issuer=issuer,
+            options={"verify_at_hash": False, "verify_aud": False},
         )
-    if _CONSECUTIVE_SPECIAL_RE.search(username):
-        raise ValueError("Username may not contain consecutive special characters.")
-    if username in _RESERVED_USERNAMES:
-        raise ValueError(f"Username '{username}' is reserved.")
-    return username
+    except JWTError as exc:
+        raise HTTPException(status_code=401, detail=f"Token verification failed: {exc}")
+
+    return payload
 
 
-def validate_phone_number(raw: str | None) -> str | None:
-    """Validate and format phone number to E.164. Returns formatted string or raises ValueError."""
-    if not raw or not raw.strip():
+# ── Internal user extraction ──────────────────────────────────
+
+
+def _extract_user(credentials: HTTPAuthorizationCredentials | None) -> dict | None:
+    """
+    Verify credentials, get-or-create the RDS user row, and return a user info dict.
+    Returns None on any failure (missing header, bad token, DB error).
+    """
+    if credentials is None:
         return None
     try:
-        parsed = phonenumbers.parse(raw.strip(), "US")
-        if not phonenumbers.is_valid_number(parsed):
-            raise ValueError("Invalid phone number structure.")
-        return phonenumbers.format_number(parsed, phonenumbers.PhoneNumberFormat.E164)
-    except Exception as exc:
-        raise ValueError(f"Invalid phone number format: {exc}") from exc
+        payload = verify_cognito_token(credentials.credentials)
+    except HTTPException:
+        return None
 
+    cognito_sub = payload.get("sub")
+    if not cognito_sub:
+        return None
 
-def _jwt_secret() -> str:
-    secret = os.environ.get("API_JWT_SECRET", "")
-    if len(secret) < 32:
-        raise RuntimeError("API_JWT_SECRET must be at least 32 characters.")
-    return secret
-
-
-def create_access_token(user_id: UUID, role: str, username: str | None = None) -> str:
-    """Mint a short-lived JWT access token for user_id."""
-    ttl = int(os.environ.get("API_JWT_ACCESS_TTL_MIN", "15"))
-    payload = {
-        "sub": str(user_id),
-        "role": role,
-        "type": "access",
-        "exp": datetime.now(UTC) + timedelta(minutes=ttl),
-    }
-    if username:
-        payload["username"] = username
-    return jwt.encode(payload, _jwt_secret(), algorithm="HS256")
-
-
-def create_refresh_token(user_id: UUID, family: UUID) -> str:
-    """Mint a long-lived refresh token with token family."""
-    ttl = int(os.environ.get("API_JWT_REFRESH_TTL_DAYS", "7"))
-    payload = {
-        "sub": str(user_id),
-        "family": str(family),
-        "type": "refresh",
-        "exp": datetime.now(UTC) + timedelta(days=ttl),
-    }
-    return jwt.encode(payload, _jwt_secret(), algorithm="HS256")
-
-
-def decode_token(token: str, expected_type: str = "access") -> dict:
-    """Decode and validate a JWT. Raises HTTPException 401 on failure."""
     try:
-        payload = jwt.decode(token, _jwt_secret(), algorithms=["HS256"])
-    except jwt.ExpiredSignatureError:
-        raise HTTPException(status_code=401, detail="Token expired.")
-    except jwt.InvalidTokenError:
-        raise HTTPException(status_code=401, detail="Invalid token.")
-    if payload.get("type") != expected_type:
-        raise HTTPException(status_code=401, detail="Wrong token type.")
-    return payload
+        from db import client as db_client  # late import — avoids circular dep at module load
+
+        user = db_client.get_or_create_cognito_user(
+            cognito_sub=cognito_sub,
+            email=payload.get("email", ""),
+            display_name=payload.get("name") or payload.get("preferred_username"),
+        )
+    except Exception:
+        return None
+
+    return {
+        "user_id": user["id"],
+        "role": user["role"],
+        "cognito_sub": cognito_sub,
+        "username": user.get("username"),
+        "email": user.get("email"),
+        "created_at": user.get("created_at"),
+    }
+
+
+# ── FastAPI dependencies ──────────────────────────────────────
 
 
 def get_current_user(
@@ -134,14 +162,35 @@ def get_current_user(
         HTTPAuthorizationCredentials | None, Depends(_bearer)
     ] = None,
 ) -> dict:
-    """FastAPI dependency: extract + validate access token from Bearer header."""
+    """FastAPI dependency: verify Cognito token, provision RDS user. Raises 401 on failure."""
     if credentials is None:
         raise HTTPException(status_code=401, detail="Authorization header missing.")
-    payload = decode_token(credentials.credentials, expected_type="access")
-    res = {"user_id": UUID(payload["sub"]), "role": payload["role"]}
-    if "username" in payload:
-        res["username"] = payload["username"]
-    return res
+    payload = verify_cognito_token(credentials.credentials)
+    cognito_sub = payload.get("sub")
+    if not cognito_sub:
+        raise HTTPException(status_code=401, detail="Token missing sub claim.")
+
+    from db import client as db_client
+
+    try:
+        user = db_client.get_or_create_cognito_user(
+            cognito_sub=cognito_sub,
+            email=payload.get("email", ""),
+            display_name=payload.get("name") or payload.get("preferred_username"),
+        )
+    except Exception as exc:
+        raise HTTPException(
+            status_code=503,
+            detail=f"Database error provisioning user: {exc}",
+        ) from exc
+    return {
+        "user_id": user["id"],
+        "role": user["role"],
+        "cognito_sub": cognito_sub,
+        "username": user.get("username"),
+        "email": user.get("email"),
+        "created_at": user.get("created_at"),
+    }
 
 
 def get_optional_current_user(
@@ -149,14 +198,5 @@ def get_optional_current_user(
         HTTPAuthorizationCredentials | None, Depends(_bearer)
     ] = None,
 ) -> dict | None:
-    """FastAPI dependency: extract + validate access token if present, return None if missing or invalid."""
-    if credentials is None:
-        return None
-    try:
-        payload = decode_token(credentials.credentials, expected_type="access")
-        res = {"user_id": UUID(payload["sub"]), "role": payload["role"]}
-        if "username" in payload:
-            res["username"] = payload["username"]
-        return res
-    except Exception:
-        return None
+    """FastAPI dependency: verify Cognito token if present; return None if missing or invalid."""
+    return _extract_user(credentials)

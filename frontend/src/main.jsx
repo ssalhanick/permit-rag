@@ -6,6 +6,7 @@ import UploadPage from "./UploadPage.jsx";
 import DocumentBrowserPage from "./DocumentBrowserPage.jsx";
 import ProjectsPage from "./ProjectsPage.jsx";
 import AuthPage from "./AuthPage.jsx";
+import AuthCallback from "./AuthCallback.jsx";
 import ProfilePage from "./ProfilePage.jsx";
 import ProfileDashboardPage from "./profile/pages/ProfileDashboardPage.jsx";
 import ProfileHistoryPage from "./profile/pages/ProfileHistoryPage.jsx";
@@ -63,6 +64,7 @@ ReactDOM.createRoot(document.getElementById("root")).render(
             <Route path="account" element={<ProfileAccountPage />} />
           </Route>
           <Route path="/auth" element={<AuthPage />} />
+          <Route path="/auth/callback" element={<AuthCallback />} />
           <Route path="*" element={<NotFoundPage />} />
         </Routes>
       </AuthProvider>
