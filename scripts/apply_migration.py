@@ -8,9 +8,11 @@ from __future__ import annotations
 import sys
 from pathlib import Path
 
-from dotenv import load_dotenv
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-load_dotenv()
+from api.load_env import bootstrap_env
+
+bootstrap_env()
 
 from db.client import get_conn
 
