@@ -9,19 +9,22 @@ plus Texas state and federal regulations.
 
 ## Current Status (2026-06-30)
 
-- **Sprint 11 complete + smoke-tested** — Cognito Google SSO confirmed working locally. 93 tests passing.
-- Custom JWT/Argon2id auth replaced with Cognito RS256 JWKS verification.
-- Google SSO + optional TOTP 2FA supported. Vite proxy added for local dev.
-- DB migration 013 applied locally: `cognito_sub` column live.
-- `frontend/.env.production` created with Cognito vars for CI/CD build.
-- Next: apply migration 013 to RDS, register production callback URLs, push to `deployment/sites`.
+- **Sprint 11 deployed** — Cognito auth live in production. Google SSO + optional TOTP 2FA.
+- Custom JWT/Argon2id replaced with Cognito RS256 JWKS verification. 93 tests passing.
+- `cognito_sub` column added to users table (migration 013). Vite proxy for local dev.
+- ECS: `COGNITO_USER_POOL_ID` + `COGNITO_REGION` baked into Docker image.
+- CI/CD: Cognito vars injected into frontend Vite build via `deploy.yml`.
+- Pending: apply migration 013 to RDS, register `https://permits.scottsalhanick.com/auth/callback` in Cognito + Google.
 
 ```powershell
 # Full test suite
 py -m pytest tests/test_sprint5.py tests/test_sprint6.py tests/test_sprint7.py tests/test_sprint8.py tests/test_sprint9.py -v
 
-# Apply DB migration
-py scripts/run_migration.py 013_cognito_auth.sql
+# Apply DB migration (local)
+py scripts\run_migration.py db\migrations\013_cognito_auth.sql
+
+# Apply DB migration (production RDS)
+$env:ENVIRONMENT = "production"; py scripts\run_migration.py db\migrations\013_cognito_auth.sql
 
 # Health check (API must be running)
 Invoke-RestMethod -Uri "http://localhost:8000/health" -Method Get
@@ -45,7 +48,6 @@ py -m evaluation.eval_guard
 - [ ] [CMS Admin Dashboard](.gemini\antigravity\brain\acda4bb1-53b2-4cf2-b710-5e93089c1fab\cms_admin_dashboard_plan.md)
 
 ### Upcoming
-- [ ] Add CI/CD pipeline to push from github to AWS
 - [ ] Add ability to update existing documents
 - [ ] Camera Phone (lidar Progressive Enhancement) - Use the device's camera to scan building facades and rooms to measure distances and accurately calculate square footage through the device's lidar data (or as much as doing a recording/set of pitcutres derived from the recording of the site/room)
 - [ ] 3D Map Integration - Integrate with an open-source 3D map library (e.g., CesiumJS) to display the city boundaries and proposed site

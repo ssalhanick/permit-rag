@@ -12,11 +12,19 @@ Sprint 11 complete + locally validated. **93 tests passing.** Google SSO end-to-
 
 ## Next tasks
 
-1. **Apply RDS migration**: `$env:ENVIRONMENT="production"; py scripts\run_migration.py db\migrations\013_cognito_auth.sql`
-2. **Register production callback URLs** in Cognito App Client and Google Cloud Console: `https://permits.scottsalhanick.com/auth/callback`
-3. **Push to `deployment/sites`** — CI/CD deploys backend (ECS) + frontend (S3/CloudFront).
-4. **Update Documents**: Add ability/routes to update existing documents.
-5. **PostGIS**: Add remaining 8 DFW city boundary layers to PostGIS (see `docs/backlog.md`).
+1. **RDS migration pending**: `$env:ENVIRONMENT="production"; py scripts\run_migration.py db\migrations\013_cognito_auth.sql` (needs RDS SG open to local IP)
+2. **Register production callback URL**: Add `https://permits.scottsalhanick.com/auth/callback` to Cognito App Client + Google Cloud Console authorized redirect URIs
+3. **Update Documents**: Add ability/routes to update existing documents
+4. **PostGIS**: Add remaining 8 DFW city boundary layers (see `docs/backlog.md`)
+
+## Deployment checklist (Sprint 11)
+
+- [x] Local smoke test: Google SSO end-to-end confirmed
+- [x] `Dockerfile` — baked in `COGNITO_USER_POOL_ID` + `COGNITO_REGION`
+- [x] `deploy.yml` — Cognito vars injected into frontend Vite build
+- [x] `frontend/.env.production` — created (gitignored; vars in workflow instead)
+- [ ] RDS migration 013 applied to production
+- [ ] Production callback URL registered in Cognito + Google
 
 ## Module status
 
