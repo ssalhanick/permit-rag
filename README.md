@@ -14,7 +14,7 @@ plus Texas state and federal regulations.
 - `cognito_sub` column added to users table (migration 013). Vite proxy for local dev.
 - ECS: `COGNITO_USER_POOL_ID` + `COGNITO_REGION` baked into Docker image.
 - CI/CD: Cognito vars injected into frontend Vite build via `deploy.yml`.
-- Pending: apply migration 013 to RDS, register `https://permits.scottsalhanick.com/auth/callback` in Cognito + Google.
+- Production Google SSO fully working on `permits.scottsalhanick.com`.
 
 ```powershell
 # Full test suite
@@ -111,7 +111,7 @@ Copy-Item frontend\.env.local.example frontend\.env.local
 | File | Purpose |
 |------|---------|
 | `.env.local` | Docker Postgres (`localhost:5433`), CORS, Neo4j — auto-loaded locally |
-| `.env` | Secrets only: `ANTHROPIC_API_KEY`, `API_JWT_SECRET`, `API_ADMIN_TOKEN` |
+| `.env` | Secrets only: `ANTHROPIC_API_KEY`, `API_ADMIN_TOKEN`; also `COGNITO_USER_POOL_ID`, `COGNITO_APP_CLIENT_ID`, `COGNITO_REGION` |
 | `frontend/.env.local` | `VITE_MAPBOX_TOKEN` for address autocomplete |
 
 Production (AWS/ECS) uses Terraform task env + SSM — no dotenv files in the container.
@@ -121,8 +121,10 @@ Production (AWS/ECS) uses Terraform task env + SSM — no dotenv files in the co
 | Variable | What to set |
 |---|---|
 | `ANTHROPIC_API_KEY` | Your Anthropic API key (`sk-ant-...`) |
-| `API_JWT_SECRET` | Random string, 32+ characters |
 | `API_ADMIN_TOKEN` | Random string for `/admin/*` routes |
+| `COGNITO_USER_POOL_ID` | e.g. `us-east-1_HF3i1xgNF` (from AWS Cognito) |
+| `COGNITO_APP_CLIENT_ID` | e.g. `21admh46opa2gaaii3oaq0nlgd` (from AWS Cognito) |
+| `COGNITO_REGION` | e.g. `us-east-1` |
 
 Database URLs are in `.env.local` (already point at Docker on port 5433).
 
@@ -253,7 +255,6 @@ The application is configured for a robust, production-grade cloud deployment on
 3.  **Terraform**: CLI installed locally (v1.5+).
 4.  **SSM Parameters**: Ensure the following parameters are populated in the AWS Systems Manager Parameter Store as `SecureString` types:
     *   `/permit_rag/prod/anthropic_api_key` (Claude API key)
-    *   `/permit_rag/prod/jwt_secret` (Randomly generated 32-character token signing secret)
     *   `/permit_rag/prod/admin_token` (Secure administrative access token)
     *   `/permit_rag/prod/neo4j_bolt_url` (AuraDB graph layer connection URI)
     *   `/permit_rag/prod/neo4j_auth` (Graph credentials, formatted as `neo4j/<your-auradb-password>`)
@@ -393,6 +394,7 @@ Project docs in `docs/`:
 | File | Purpose |
 |---|---|
 | `docs/api.md` | API endpoint usage, auth headers, and runtime config notes |
+| `docs/env_secrets_strategy.md` | Plan for migrating hardcoded config → GitHub vars and secrets → SSM |
 | `docs/offboarding_runbook.md` | User offboarding purge procedure (single + bulk) and verification |
 | `docs/postgis_migration_checklist.md` | Sprint 4 GIS/PostGIS rollout checklist (planning-only gates) |
 | `docs/task14ab_execution_checklist.md` | Step-by-step execution/rollback checklist for Task 14A/14B |
