@@ -106,7 +106,9 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
         level=os.environ.get("LOG_LEVEL", "INFO"),
         format="%(asctime)s [%(levelname)s] %(name)s — %(message)s",
     )
-    log.info("permit_rag API starting up")
+    db_url = os.environ.get("DATABASE_URL", "")
+    db_host = db_url.split("@")[-1].split("/")[0] if "@" in db_url else "not set"
+    log.info("permit_rag API starting up — DB host: %s", db_host)
     yield
     close_pool()
     log.info("permit_rag API shut down")

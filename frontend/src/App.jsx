@@ -672,18 +672,18 @@ function App() {
                         <TableRow>
                           <TableCell className="font-medium">Top Vector Similarity</TableCell>
                           <TableCell className="font-mono text-sm">
-                            {activeAnswer.diagnostics.top_similarity?.toFixed(4)}
+                            {activeAnswer.diagnostics?.top_similarity?.toFixed(4)}
                           </TableCell>
                         </TableRow>
                         <TableRow>
                           <TableCell className="font-medium">Mean Vector Similarity</TableCell>
                           <TableCell className="font-mono text-sm">
-                            {activeAnswer.diagnostics.mean_similarity?.toFixed(4)}
+                            {activeAnswer.diagnostics?.mean_similarity?.toFixed(4)}
                           </TableCell>
                         </TableRow>
                         <TableRow>
                           <TableCell className="font-medium">Unique Source Documents</TableCell>
-                          <TableCell>{activeAnswer.diagnostics.unique_doc_count}</TableCell>
+                          <TableCell>{activeAnswer.diagnostics?.unique_doc_count}</TableCell>
                         </TableRow>
                         <TableRow>
                           <TableCell className="font-medium">Retrieval Latency</TableCell>
