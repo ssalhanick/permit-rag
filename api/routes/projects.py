@@ -41,6 +41,10 @@ def create_project(body: CreateProjectRequest, current_user: CurrentUser) -> dic
         owner_user_id=current_user["user_id"],
         description=body.description,
         municipality=body.municipality,
+        address=body.address,
+        spaces=body.spaces,
+        work_types=body.work_types,
+        recommended_permits=body.recommended_permits,
     )
     return dict(project)
 

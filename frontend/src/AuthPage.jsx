@@ -12,11 +12,15 @@ import { useAuth } from "./context/AuthContext.jsx";
  */
 
 export default function AuthPage() {
-  const { login, register, confirmSignUp, confirmMfa, beginMfaSetup, confirmMfaSetup, loginWithGoogle, user } =
+  const { login, register, confirmSignUp, confirmMfa, beginMfaSetup, confirmMfaSetup,
+          forgotPassword, confirmForgotPassword, loginWithGoogle, user } =
     useAuth();
   const navigate = useNavigate();
   const location = useLocation();
   const from = location.state?.from?.pathname || "/";
+  // Redirect new/fresh sign-ins to the project kickoff wizard.
+  // Preserve the original destination when the user was mid-navigation to a protected page.
+  const dest = from === "/" ? "/kickoff" : from;
 
   const [screen, setScreen] = useState("login");
   const [pendingEmail, setPendingEmail] = useState("");
@@ -28,7 +32,7 @@ export default function AuthPage() {
   const [success, setSuccess] = useState("");
 
   if (user) {
-    setTimeout(() => navigate(from, { replace: true }), 0);
+    setTimeout(() => navigate(dest, { replace: true }), 0);
     return null;
   }
 
@@ -51,7 +55,7 @@ export default function AuthPage() {
       if (result.screen === "mfa") {
         reset("mfa");
       } else {
-        navigate(from, { replace: true });
+        navigate(dest, { replace: true });
       }
     } catch (err) {
       setError(err.message || "Sign-in failed.");
@@ -92,7 +96,7 @@ export default function AuthPage() {
     setError("");
     try {
       await confirmSignUp(pendingEmail, form.code);
-      navigate(from, { replace: true });
+      navigate(dest, { replace: true });
     } catch (err) {
       setError(err.message || "Confirmation failed. Check your code.");
     } finally {
@@ -108,7 +112,7 @@ export default function AuthPage() {
     setError("");
     try {
       await confirmMfa(form.code);
-      navigate(from, { replace: true });
+      navigate(dest, { replace: true });
     } catch (err) {
       setError(err.message || "Invalid code. Try again.");
     } finally {
@@ -140,9 +144,46 @@ export default function AuthPage() {
       await confirmMfaSetup(form.code);
       setSuccess("Two-factor authentication enabled.");
       setMfaSetupData(null);
-      navigate(from, { replace: true });
+      navigate(dest, { replace: true });
     } catch (err) {
       setError(err.message || "Setup failed. Check the code.");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // ── Forgot password ───────────────────────────────────────────
+
+  const handleForgotPassword = async (e) => {
+    e.preventDefault();
+    setLoading(true);
+    setError("");
+    try {
+      await forgotPassword(form.email);
+      setPendingEmail(form.email);
+      reset("reset");
+      setSuccess("Check your email for a 6-digit reset code.");
+    } catch (err) {
+      setError(err.message || "Could not send reset code. Check the email address.");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleResetPassword = async (e) => {
+    e.preventDefault();
+    if (form.password !== form.confirmPassword) {
+      setError("Passwords do not match.");
+      return;
+    }
+    setLoading(true);
+    setError("");
+    try {
+      await confirmForgotPassword(pendingEmail, form.code, form.password);
+      reset("login");
+      setSuccess("Password reset! Sign in with your new password.");
+    } catch (err) {
+      setError(err.message || "Reset failed. Check the code and try again.");
     } finally {
       setLoading(false);
     }
@@ -218,6 +259,9 @@ export default function AuthPage() {
             <div className="auth-toggle">
               <button type="button" className="text-button" onClick={() => reset("register")}>
                 Don&apos;t have an account? Sign Up
+              </button>
+              <button type="button" className="text-button" onClick={() => reset("forgot")}>
+                Forgot your password?
               </button>
             </div>
           </>
@@ -398,15 +442,117 @@ export default function AuthPage() {
             </form>
 
             <div className="auth-toggle">
-              <button type="button" className="text-button" onClick={() => navigate(from, { replace: true })}>
+              <button type="button" className="text-button" onClick={() => navigate(dest, { replace: true })}>
                 Skip for now
               </button>
             </div>
           </>
         )}
 
-        {/* ── MFA setup entry point (post-login) */}
-        {screen === "login" || screen === "register" ? null : null}
+        {/* ── Forgot password — request reset code ────── */}
+        {screen === "forgot" && (
+          <>
+            <h2>Reset Your Password</h2>
+            <p className="muted">
+              Enter your email and we&apos;ll send you a 6-digit reset code.
+            </p>
+
+            {error && <div className="error-box">{error}</div>}
+
+            <form onSubmit={handleForgotPassword} className="form">
+              <div>
+                <label htmlFor="email">Email Address</label>
+                <input
+                  id="email"
+                  name="email"
+                  type="email"
+                  value={form.email}
+                  onChange={handleChange}
+                  placeholder="you@example.com"
+                  required
+                  autoFocus
+                />
+              </div>
+              <button type="submit" disabled={loading} className="primary-button">
+                {loading ? "Sending code…" : "Send Reset Code"}
+              </button>
+            </form>
+
+            <div className="auth-toggle">
+              <button type="button" className="text-button" onClick={() => reset("login")}>
+                Back to Sign In
+              </button>
+            </div>
+          </>
+        )}
+
+        {/* ── Forgot password — enter code + new password ─ */}
+        {screen === "reset" && (
+          <>
+            <h2>Enter New Password</h2>
+            <p className="muted">
+              We sent a 6-digit code to <strong>{pendingEmail}</strong>. Enter it below along
+              with your new password.
+            </p>
+
+            {error && <div className="error-box">{error}</div>}
+            {success && <div className="success-box">{success}</div>}
+
+            <form onSubmit={handleResetPassword} className="form">
+              <div>
+                <label htmlFor="code">Reset Code</label>
+                <input
+                  id="code"
+                  name="code"
+                  type="text"
+                  inputMode="numeric"
+                  maxLength={6}
+                  value={form.code}
+                  onChange={handleChange}
+                  placeholder="123456"
+                  required
+                  autoFocus
+                />
+              </div>
+              <div>
+                <label htmlFor="password">New Password</label>
+                <input
+                  id="password"
+                  name="password"
+                  type="password"
+                  value={form.password}
+                  onChange={handleChange}
+                  placeholder="Minimum 8 characters"
+                  required
+                />
+              </div>
+              <div>
+                <label htmlFor="confirmPassword">Confirm New Password</label>
+                <input
+                  id="confirmPassword"
+                  name="confirmPassword"
+                  type="password"
+                  value={form.confirmPassword}
+                  onChange={handleChange}
+                  placeholder="••••••••••••"
+                  required
+                />
+              </div>
+              <button type="submit" disabled={loading} className="primary-button">
+                {loading ? "Resetting…" : "Reset Password"}
+              </button>
+            </form>
+
+            <div className="auth-toggle">
+              <button type="button" className="text-button" onClick={() => reset("forgot")}>
+                Resend code
+              </button>
+              <button type="button" className="text-button" onClick={() => reset("login")}>
+                Back to Sign In
+              </button>
+            </div>
+          </>
+        )}
 
       </section>
     </main>

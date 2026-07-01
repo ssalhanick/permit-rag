@@ -1,10 +1,10 @@
 # permit_rag — State
 
-_Updated: 2026-06-30 (Sprint 11 — fully closed, Google SSO live on permits.scottsalhanick.com)_
+_Updated: 2026-06-30 (Sprint 12 — project kickoff wizard live)_
 
 ## Phase
 
-Sprint 11 closed. **93 tests passing** (all green). Google SSO live and verified in production.
+Sprint 11 closed. Sprint 12 in progress. **93 tests passing** (all green). Google SSO live on `permits.scottsalhanick.com`.
 
 ## Blocked on
 
@@ -12,10 +12,23 @@ Sprint 11 closed. **93 tests passing** (all green). Google SSO live and verified
 
 ## Next tasks
 
-1. **RDS migration pending**: `$env:ENVIRONMENT="production"; py scripts\run_migration.py db\migrations\013_cognito_auth.sql` (needs RDS SG open to local IP)
-2. **Register production callback URL**: Add `https://permits.scottsalhanick.com/auth/callback` to Cognito App Client + Google Cloud Console authorized redirect URIs
-3. **Update Documents**: Add ability/routes to update existing documents
-4. **PostGIS**: Add remaining 8 DFW city boundary layers (see `docs/backlog.md`)
+1. **Apply migration 014**: `$env:ENVIRONMENT="production"; py scripts\run_migration.py db\migrations\014_project_fields.sql` (run locally first, then against RDS)
+2. **Update Documents**: Add ability/routes to update existing documents
+3. **PostGIS**: Add remaining 8 DFW city boundary layers (see `docs/backlog.md`)
+4. **Permit determination upgrade**: Swap rule-based `projectPermitRules.js` → RAG query against corpus for smarter permit suggestions
+
+## Sprint 12 deliverables (in progress)
+
+- [x] `db/migrations/014_project_fields.sql` — adds `address TEXT`, `spaces JSONB`, `work_types JSONB`, `recommended_permits JSONB` to projects table
+- [x] `db/client.py` `create_project()` — accepts 4 new optional fields; JSON-serialises JSONB columns
+- [x] `api/schemas.py` — `CreateProjectRequest` + `ProjectResponse` extended with 4 new optional fields
+- [x] `api/routes/projects.py` — passes new fields through to `db.create_project()`
+- [x] `frontend/src/projectPermitRules.js` — rule-based `recommendPermits(workTypes)`, `isCosmeticOnly()`, `WORK_TYPE_OPTIONS`, `SPACE_OPTIONS`
+- [x] `frontend/src/ProjectKickoffPage.jsx` — 5-step guided wizard (address → name → spaces → work types → permit preview + confirm), basic form opt-out, existing project picker, skip option
+- [x] `frontend/src/AuthPage.jsx` — all sign-in paths redirect to `/kickoff` instead of `/` (fresh logins only; saved destination preserved)
+- [x] `frontend/src/AuthCallback.jsx` — Google SSO callback redirects to `/kickoff`
+- [x] `frontend/src/main.jsx` — `/kickoff` route added (ProtectedRoute)
+- [x] `frontend/src/styles.css` — kickoff wizard styles (mode cards, chat bubble, checkbox grid, permit tags, progress dots, step summary)
 
 ## Deployment checklist (Sprint 11) — CLOSED ✅
 

@@ -5,6 +5,7 @@ import App from "./App.jsx";
 import UploadPage from "./UploadPage.jsx";
 import DocumentBrowserPage from "./DocumentBrowserPage.jsx";
 import ProjectsPage from "./ProjectsPage.jsx";
+import ProjectKickoffPage from "./ProjectKickoffPage.jsx";
 import AuthPage from "./AuthPage.jsx";
 import AuthCallback from "./AuthCallback.jsx";
 import ProfilePage from "./ProfilePage.jsx";
@@ -63,6 +64,14 @@ ReactDOM.createRoot(document.getElementById("root")).render(
             <Route path="documents" element={<ProfileDocumentsPage />} />
             <Route path="account" element={<ProfileAccountPage />} />
           </Route>
+          <Route
+            path="/kickoff"
+            element={
+              <ProtectedRoute>
+                <ProjectKickoffPage />
+              </ProtectedRoute>
+            }
+          />
           <Route path="/auth" element={<AuthPage />} />
           <Route path="/auth/callback" element={<AuthCallback />} />
           <Route path="*" element={<NotFoundPage />} />

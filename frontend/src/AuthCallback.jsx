@@ -64,7 +64,7 @@ export default function AuthCallback() {
         }
         setStatus("Loading profile…");
         await handleOAuthCallback(tokens.id_token, tokens.access_token, tokens.refresh_token);
-        navigate("/", { replace: true });
+        navigate("/kickoff", { replace: true });
       })
       .catch((err) => {
         setError(err.message || "Token exchange failed.");

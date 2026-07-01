@@ -300,6 +300,37 @@ export function AuthProvider({ children }) {
     });
   }, []);
 
+  // ── Forgot password ───────────────────────────────────────────
+
+  /**
+   * Initiate a Cognito forgot-password flow for the given email.
+   * Cognito emails the user a 6-digit reset code.
+   * Returns { screen: "reset" } — caller should show the code + new-password UI.
+   */
+  const forgotPassword = useCallback((email) => {
+    return new Promise((resolve, reject) => {
+      const cognitoUser = new CognitoUser({ Username: email, Pool: userPool });
+      cognitoUser.forgotPassword({
+        onSuccess: () => resolve({ screen: "reset" }),
+        onFailure: (err) => reject(err),
+      });
+    });
+  }, []);
+
+  /**
+   * Complete a forgot-password flow with the emailed code and a new password.
+   * Returns { screen: "login" } on success — caller should redirect to login.
+   */
+  const confirmForgotPassword = useCallback((email, code, newPassword) => {
+    return new Promise((resolve, reject) => {
+      const cognitoUser = new CognitoUser({ Username: email, Pool: userPool });
+      cognitoUser.confirmPassword(code, newPassword, {
+        onSuccess: () => resolve({ screen: "login" }),
+        onFailure: (err) => reject(err),
+      });
+    });
+  }, []);
+
   // ── Google SSO ────────────────────────────────────────────────
 
   /**
@@ -354,6 +385,8 @@ export function AuthProvider({ children }) {
         confirmMfa,
         beginMfaSetup,
         confirmMfaSetup,
+        forgotPassword,
+        confirmForgotPassword,
         loginWithGoogle,
         handleOAuthCallback,
         logout,

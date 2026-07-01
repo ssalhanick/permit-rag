@@ -850,11 +850,23 @@ def create_project(
     owner_user_id: UUID,
     description: str | None = None,
     municipality: str | None = None,
+    address: str | None = None,
+    spaces: list[str] | None = None,
+    work_types: list[str] | None = None,
+    recommended_permits: list[str] | None = None,
 ) -> dict[str, Any]:
     """Create a project and auto-enroll the owner in one transaction."""
+    import json as _json
+
     sql_project = """
-        INSERT INTO projects (name, owner_user_id, description, municipality)
-        VALUES (%(name)s, %(owner_user_id)s, %(description)s, %(municipality)s)
+        INSERT INTO projects (
+            name, owner_user_id, description, municipality,
+            address, spaces, work_types, recommended_permits
+        )
+        VALUES (
+            %(name)s, %(owner_user_id)s, %(description)s, %(municipality)s,
+            %(address)s, %(spaces)s, %(work_types)s, %(recommended_permits)s
+        )
         RETURNING *;
     """
     sql_member = """
@@ -867,6 +879,10 @@ def create_project(
             "owner_user_id": owner_user_id,
             "description": description,
             "municipality": municipality,
+            "address": address,
+            "spaces": _json.dumps(spaces) if spaces is not None else None,
+            "work_types": _json.dumps(work_types) if work_types is not None else None,
+            "recommended_permits": _json.dumps(recommended_permits) if recommended_permits is not None else None,
         }).fetchone()
         conn.execute(sql_member, {"project_id": row["id"], "user_id": owner_user_id})
         conn.commit()
