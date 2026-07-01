@@ -44,20 +44,6 @@ export default function Nav() {
                 Upload Document
               </NavLink>
               <NavLink
-                to="/documents"
-                className={({ isActive }) => "nav-link" + (isActive ? " nav-link-active" : "")}
-                onClick={closeMenu}
-              >
-                Documents
-              </NavLink>
-              <NavLink
-                to="/projects"
-                className={({ isActive }) => "nav-link" + (isActive ? " nav-link-active" : "")}
-                onClick={closeMenu}
-              >
-                Projects
-              </NavLink>
-              <NavLink
                 to="/profile"
                 className={({ isActive }) => "nav-link" + (isActive ? " nav-link-active" : "")}
                 onClick={closeMenu}

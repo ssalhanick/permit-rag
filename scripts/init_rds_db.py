@@ -2,22 +2,25 @@
 scripts/init_rds_db.py — Fully bootstrap and migrate the production RDS database
 ================================================================================
 Usage:
-    1. Temporarily set DATABASE_URL in .env to the RDS connection string, e.g.:
-       DATABASE_URL=postgresql://postgres:<your_db_password>@<rds_endpoint_address>:5432/permit_rag
+    1. Put RDS connection string in `.env.production` (see `.env.production.example`).
     2. Run:
+       $env:ENVIRONMENT="production"
        py scripts/init_rds_db.py
 """
 
 from __future__ import annotations
 
 import os
+import sys
 from pathlib import Path
-from dotenv import load_dotenv
 
-# Load environmental variables from .env
-load_dotenv()
+# Ensure project root is importable when invoked as `py scripts/init_rds_db.py`
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-# We need to import get_conn after load_dotenv so that psycopg connects to the right DATABASE_URL
+from api.load_env import bootstrap_env
+
+bootstrap_env()
+
 from db.client import get_conn
 
 
@@ -35,7 +38,7 @@ def main() -> None:
     db_url = os.environ.get("DATABASE_URL")
     if not db_url or "localhost" in db_url or "127.0.0.1" in db_url:
         print("WARNING: DATABASE_URL points to localhost/127.0.0.1.")
-        print("If you want to initialize the RDS instance, please set DATABASE_URL in your .env to the RDS endpoint first.")
+        print("If you want to initialize RDS, set DATABASE_URL in `.env.production` and run with ENVIRONMENT=production.")
         confirm = input("Do you still want to proceed with local database initialization? (y/n): ")
         if confirm.lower() != 'y':
             print("Aborted.")

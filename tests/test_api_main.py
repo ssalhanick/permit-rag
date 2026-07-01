@@ -17,6 +17,7 @@ def test_parse_cors_origins_uses_default_local_allowlist(monkeypatch) -> None:
     origins = _parse_cors_origins()
     assert "http://localhost:3000" in origins
     assert "http://localhost:5173" in origins
+    assert "http://localhost:5175" in origins
 
 
 def test_parse_cors_origins_reads_csv_from_env(monkeypatch) -> None:
@@ -37,6 +38,17 @@ def test_parse_cors_origins_allow_all_override(monkeypatch) -> None:
     monkeypatch.setenv("API_CORS_ALLOW_ALL", "true")
     monkeypatch.setenv("API_CORS_ALLOW_ORIGINS", "https://ignored.example.com")
     assert _parse_cors_origins() == ["*"]
+
+
+def test_cors_middleware_uses_localhost_regex(monkeypatch) -> None:
+    """Local dev should accept any localhost port when regex mode is enabled."""
+    from api.main import _cors_middleware_kwargs
+
+    monkeypatch.setenv("API_CORS_ALLOW_ALL", "false")
+    monkeypatch.setenv("API_CORS_ALLOW_LOCALHOST", "true")
+    kwargs = _cors_middleware_kwargs()
+    assert "allow_origin_regex" in kwargs
+    assert kwargs["allow_credentials"] is True
 
 
 def test_validation_error_handler_returns_string_detail() -> None:

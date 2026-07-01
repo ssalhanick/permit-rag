@@ -1,10 +1,10 @@
 # permit_rag — State
 
-_Updated: 2026-06-23 (Sprint 10 — Mobile styling, table scrollbars, WCAG AAA touch targets, and GIS autocomplete complete)_
+_Updated: 2026-06-30 (Sprint 12 — project kickoff wizard live)_
 
 ## Phase
 
-Sprint 10 complete. **93 tests passing.** Mobile-responsive layout, collapsible navigation, table horizontal scrolling, WCAG AAA compliance, and Mapbox address autocomplete live.
+Sprint 11 closed. Sprint 12 in progress. **93 tests passing** (all green). Google SSO live on `permits.scottsalhanick.com`.
 
 ## Blocked on
 
@@ -12,10 +12,32 @@ Sprint 10 complete. **93 tests passing.** Mobile-responsive layout, collapsible 
 
 ## Next tasks
 
-1. **CI/CD Pipeline**: Add CI/CD pipeline to push from GitHub to AWS.
-2. **Update Documents**: Add ability/routes to update existing documents.
-3. **PostGIS**: Add remaining 8 DFW city boundary layers to PostGIS (see `docs/backlog.md`).
-4. **Optional**: Tune hybrid RRF weights (`RETRIEVAL_RRF_BM25_WEIGHT < 1.0`) and re-eval — path to promoting hybrid without faithfulness regression.
+1. **Apply migration 014**: `$env:ENVIRONMENT="production"; py scripts\run_migration.py db\migrations\014_project_fields.sql` (run locally first, then against RDS)
+2. **Update Documents**: Add ability/routes to update existing documents
+3. **PostGIS**: Add remaining 8 DFW city boundary layers (see `docs/backlog.md`)
+4. **Permit determination upgrade**: Swap rule-based `projectPermitRules.js` → RAG query against corpus for smarter permit suggestions
+
+## Sprint 12 deliverables (in progress)
+
+- [x] `db/migrations/014_project_fields.sql` — adds `address TEXT`, `spaces JSONB`, `work_types JSONB`, `recommended_permits JSONB` to projects table
+- [x] `db/client.py` `create_project()` — accepts 4 new optional fields; JSON-serialises JSONB columns
+- [x] `api/schemas.py` — `CreateProjectRequest` + `ProjectResponse` extended with 4 new optional fields
+- [x] `api/routes/projects.py` — passes new fields through to `db.create_project()`
+- [x] `frontend/src/projectPermitRules.js` — rule-based `recommendPermits(workTypes)`, `isCosmeticOnly()`, `WORK_TYPE_OPTIONS`, `SPACE_OPTIONS`
+- [x] `frontend/src/ProjectKickoffPage.jsx` — 5-step guided wizard (address → name → spaces → work types → permit preview + confirm), basic form opt-out, existing project picker, skip option
+- [x] `frontend/src/AuthPage.jsx` — all sign-in paths redirect to `/kickoff` instead of `/` (fresh logins only; saved destination preserved)
+- [x] `frontend/src/AuthCallback.jsx` — Google SSO callback redirects to `/kickoff`
+- [x] `frontend/src/main.jsx` — `/kickoff` route added (ProtectedRoute)
+- [x] `frontend/src/styles.css` — kickoff wizard styles (mode cards, chat bubble, checkbox grid, permit tags, progress dots, step summary)
+
+## Deployment checklist (Sprint 11) — CLOSED ✅
+
+- [x] Local smoke test: Google SSO end-to-end confirmed
+- [x] `Dockerfile` — baked in `COGNITO_USER_POOL_ID` + `COGNITO_REGION`
+- [x] `deploy.yml` — Cognito vars injected into frontend Vite build
+- [x] RDS migration 013 applied to production
+- [x] Production callback URL registered in Cognito + Google Cloud Console
+- [x] Google SSO verified on `permits.scottsalhanick.com`
 
 ## Module status
 
@@ -25,10 +47,10 @@ ingestion ✅ db ✅ rag ✅ api ✅ eval ✅ frontend ✅ graph ✅
 |--------|---------------|
 | db | pgvector + PostGIS live; `corpus_writer`/`app_reader` roles; migrations 001–010 applied; `db/graph_client.py` singleton Bolt driver |
 | rag | Hybrid retrieval; provenance reranker; multi-permit classifier; jurisdiction resolver; conflict detector (lightweight + graph-backed) |
-| api | `/query`, `/query/answer`, `/health` (+ `graph_health`), `/documents/*`, `/admin/*`, `/upload`; LangSmith tracing; BackgroundTask graph citation signals |
+| api | `/query`, `/query/answer`, `/health` (+ `graph_health`), `/documents/*`, `/admin/*`, `/upload`, `/auth/me`; LangSmith tracing; BackgroundTask graph citation signals; Cognito RS256 JWT verification |
 | graph | Neo4j CE in docker-compose; constraints + indexes applied; Postgres→Graph sync via `scripts/sync_graph.py`; cross-authority Cypher traversal; citation signal enrichment (`record_cited_chunks`) |
 | eval | RAGAs eval + guard live; baseline `ragas_20260531_122639.json`; faithfulness gate `>= 0.85` |
-| frontend | Vite+React; chat/citation viewer; document browser; upload UX; address autocomplete; conflict warnings panel |
+| frontend | Vite+React; chat/citation viewer; document browser; upload UX; address autocomplete; conflict warnings panel; Cognito auth (email+password, Google SSO, TOTP 2FA) |
 
 ## Current operational snapshot
 
@@ -47,10 +69,26 @@ ingestion ✅ db ✅ rag ✅ api ✅ eval ✅ frontend ✅ graph ✅
 - Eval guard: **PASS** — `py -m evaluation.eval_guard`
 - Cache policy: `RAGAS_ANSWER_CACHE_ENABLED=false` for all eval runs
 
+## Sprint 11 deliverables (closed)
+
+- [x] DB migration `013_cognito_auth.sql` — TRUNCATE users, drop `password_hash`/`refresh_token_hash`/`token_family`, add `cognito_sub TEXT UNIQUE NOT NULL`
+- [x] `api/auth.py` — full rewrite: `verify_cognito_token()` with cached JWKS, `get_current_user` lazy-provisions RDS row via `get_or_create_cognito_user()`
+- [x] `api/routes/auth.py` — stripped to `GET /auth/me` only
+- [x] `db/client.py` — replaced 5 password-based helpers with `get_or_create_cognito_user()` (email fallback for account linking)
+- [x] `pyproject.toml` — swapped `argon2-cffi` + `PyJWT` + `phonenumbers` → `python-jose[cryptography]`
+- [x] `frontend/src/context/AuthContext.jsx` — Cognito SDK: email+password, Google SSO redirect, TOTP MFA challenge + enrollment, auto-refresh via `getSession()`
+- [x] `frontend/src/AuthPage.jsx` — 5-screen state machine: login, register, email confirm, MFA challenge, MFA setup QR
+- [x] `frontend/src/AuthCallback.jsx` — new file: handles `/auth/callback` OAuth2 code exchange
+- [x] `frontend/src/main.jsx` — added `/auth/callback` route
+- [x] `frontend/src/api.js` — `registerTokenRefresher` callback, removed custom `/auth/refresh` logic
+- [x] `scripts/run_migration.py` — utility for applying SQL migration files
+- [x] `tests/test_sprint9.py` — replaced Argon2id/JWT unit tests with `TestCognitoVerification`; updated `auth_headers` fixture
+
 ## Active decisions
 
 - **Governance**: documents never deleted — `active/superseded/repealed/needs_ocr/draft` lifecycle only.
 - **Retrieval**: hybrid dense+BM25 enabled by default; env toggle for rollback.
+- **Auth**: Cognito RS256 JWKS verification (`python-jose`). JWKS cached 1 hour, re-fetched on unknown `kid`. `get_current_user` lazy-provisions RDS row on first login. Google SSO via Authorization code grant + Cognito hosted UI. TOTP MFA optional (user self-enrolls).
 - **Security**: admin routes require token + role allowlist (`API_ADMIN_AUTH_REQUIRED=true`). Rotate `API_ADMIN_TOKEN` every 30 days.
 - **Purge tiers**: `source_tier=3` purge = normal admin; lower tiers need `API_PURGE_ANY_TIER_ROLES`.
 - **CORS**: env-driven allowlist (`API_CORS_ALLOW_ORIGINS`); wildcard only via `API_CORS_ALLOW_ALL=true`.

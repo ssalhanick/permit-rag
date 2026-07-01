@@ -737,86 +737,103 @@ def ping() -> bool:
 
 
 # ════════════════════════════════════════════════
-#  USERS (Sprint 9)
+#  USERS (Cognito-backed, Sprint 11)
 # ════════════════════════════════════════════════
 
-def create_user(
-    *,
-    username: str,
+import random
+import re
+import string
+
+
+def _derive_username(email: str) -> str:
+    """
+    Derive a clean, DB-safe username from an email address prefix.
+    Strips non-alphanumeric chars and trims to 28 characters.
+    """
+    prefix = email.split("@")[0].lower()
+    clean = re.sub(r"[^a-z0-9_.\-]", "_", prefix)[:28].strip("_.-")
+    return clean if len(clean) >= 2 else "user"
+
+
+def _rand_suffix(n: int = 4) -> str:
+    """Return a short random alphanumeric suffix."""
+    return "".join(random.choices(string.ascii_lowercase + string.digits, k=n))
+
+
+def get_or_create_cognito_user(
+    cognito_sub: str,
     email: str,
-    password_hash: str,
-    phone_number: str | None = None,
-    role: str = "member",
+    display_name: str | None = None,
 ) -> dict[str, Any]:
-    """Insert a new user row."""
-    sql = """
-        INSERT INTO users (username, email, phone_number, password_hash, role)
-        VALUES (%(username)s, %(email)s, %(phone_number)s, %(password_hash)s, %(role)s)
-        RETURNING *;
     """
-    with get_conn() as conn:
-        row = conn.execute(sql, {
-            "username": username,
-            "email": email,
-            "phone_number": phone_number,
-            "password_hash": password_hash,
-            "role": role,
-        }).fetchone()
-        conn.commit()
-    log.info("Created user: %s (role=%s)", username, role)
-    return row
+    Look up a user by Cognito sub. On first login, create the RDS row.
 
-
-def get_user_by_identifier(identifier: str) -> dict[str, Any] | None:
-    """Look up user by username, email, or phone_number (lowercase username/email check)."""
-    sql = """
-        SELECT * FROM users 
-        WHERE (username = lower(%s) OR email = lower(%s) OR phone_number = %s)
-          AND is_active = true;
+    Falls back to email lookup to handle Cognito account linking (e.g. a user
+    who registered with email+password and later signs in via Google with the
+    same address — Cognito may issue a new sub if accounts are not linked).
     """
+    norm_email = email.lower().strip()
+
     with get_conn() as conn:
-        return conn.execute(sql, (identifier, identifier, identifier)).fetchone()
+        row = conn.execute(
+            "SELECT * FROM users WHERE cognito_sub = %s AND is_active = true;",
+            (cognito_sub,),
+        ).fetchone()
+        if row:
+            return row
+
+        # Email-based fallback (catches Cognito account-linking edge case)
+        row = conn.execute(
+            "SELECT * FROM users WHERE email = %s AND is_active = true;",
+            (norm_email,),
+        ).fetchone()
+        if row:
+            # Adopt the new Cognito sub for this account
+            conn.execute(
+                "UPDATE users SET cognito_sub = %s WHERE id = %s;",
+                (cognito_sub, row["id"]),
+            )
+            conn.commit()
+            return dict(row) | {"cognito_sub": cognito_sub}
+
+    # New user — derive a username, retry with random suffix on conflict
+    base = _derive_username(display_name or norm_email)
+    for attempt in range(6):
+        suffix = "" if attempt == 0 else f"_{_rand_suffix()}"
+        username = (base + suffix)[:30]
+        sql_insert = """
+            INSERT INTO users (username, email, cognito_sub, role)
+            VALUES (%(username)s, %(email)s, %(cognito_sub)s, 'member')
+            RETURNING *;
+        """
+        try:
+            with get_conn() as conn:
+                row = conn.execute(sql_insert, {
+                    "username": username,
+                    "email": norm_email,
+                    "cognito_sub": cognito_sub,
+                }).fetchone()
+                conn.commit()
+            log.info("Created cognito user: %s (sub=%.8s…)", username, cognito_sub)
+            return row
+        except Exception:
+            if attempt == 5:
+                raise
+            continue
+
+    raise RuntimeError("Failed to create user after 6 attempts.")  # unreachable
 
 
 def get_user_by_id(user_id: UUID) -> dict[str, Any] | None:
-    """Fetch user row by primary key UUID."""
+    """Fetch active user row by primary key UUID."""
     sql = "SELECT * FROM users WHERE id = %s AND is_active = true;"
     with get_conn() as conn:
         return conn.execute(sql, (user_id,)).fetchone()
 
 
-def update_refresh_token_hash(
-    user_id: UUID,
-    token_hash: str | None,
-    family: UUID | None = None,
-) -> None:
-    """Store or clear refresh_token_hash + token_family atomically."""
-    sql = """
-        UPDATE users 
-        SET refresh_token_hash = %(hash)s,
-            token_family = %(family)s
-        WHERE id = %(id)s;
-    """
-    with get_conn() as conn:
-        conn.execute(sql, {"hash": token_hash, "family": family, "id": user_id})
-        conn.commit()
-
-
-def get_refresh_token_meta(user_id: UUID) -> dict[str, Any] | None:
-    """Return {refresh_token_hash, token_family} for revocation check."""
-    sql = "SELECT refresh_token_hash, token_family FROM users WHERE id = %s;"
-    with get_conn() as conn:
-        return conn.execute(sql, (user_id,)).fetchone()
-
-
 def deactivate_user(user_id: UUID) -> dict[str, Any] | None:
-    """Soft-delete user: set is_active=False, clear refresh_token_hash."""
-    sql = """
-        UPDATE users 
-        SET is_active = false, refresh_token_hash = NULL 
-        WHERE id = %s 
-        RETURNING *;
-    """
+    """Soft-delete user: set is_active=False."""
+    sql = "UPDATE users SET is_active = false WHERE id = %s RETURNING *;"
     with get_conn() as conn:
         row = conn.execute(sql, (user_id,)).fetchone()
         conn.commit()
@@ -833,11 +850,23 @@ def create_project(
     owner_user_id: UUID,
     description: str | None = None,
     municipality: str | None = None,
+    address: str | None = None,
+    spaces: list[str] | None = None,
+    work_types: list[str] | None = None,
+    recommended_permits: list[str] | None = None,
 ) -> dict[str, Any]:
     """Create a project and auto-enroll the owner in one transaction."""
+    import json as _json
+
     sql_project = """
-        INSERT INTO projects (name, owner_user_id, description, municipality)
-        VALUES (%(name)s, %(owner_user_id)s, %(description)s, %(municipality)s)
+        INSERT INTO projects (
+            name, owner_user_id, description, municipality,
+            address, spaces, work_types, recommended_permits
+        )
+        VALUES (
+            %(name)s, %(owner_user_id)s, %(description)s, %(municipality)s,
+            %(address)s, %(spaces)s, %(work_types)s, %(recommended_permits)s
+        )
         RETURNING *;
     """
     sql_member = """
@@ -850,6 +879,10 @@ def create_project(
             "owner_user_id": owner_user_id,
             "description": description,
             "municipality": municipality,
+            "address": address,
+            "spaces": _json.dumps(spaces) if spaces is not None else None,
+            "work_types": _json.dumps(work_types) if work_types is not None else None,
+            "recommended_permits": _json.dumps(recommended_permits) if recommended_permits is not None else None,
         }).fetchone()
         conn.execute(sql_member, {"project_id": row["id"], "user_id": owner_user_id})
         conn.commit()
@@ -1053,7 +1086,7 @@ def delete_user_query(user_id: UUID, query_id: UUID) -> bool:
 
 def get_all_users() -> list[dict[str, Any]]:
     """List all users in the system."""
-    sql = "SELECT id, username, email, phone_number, role, is_active, created_at FROM users ORDER BY username ASC;"
+    sql = "SELECT id, username, email, cognito_sub, role, is_active, created_at FROM users ORDER BY username ASC;"
     with get_conn() as conn:
         return conn.execute(sql).fetchall()
 

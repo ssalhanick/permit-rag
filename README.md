@@ -7,17 +7,24 @@ plus Texas state and federal regulations.
 
 ---
 
-## Current Status (2026-06-16)
+## Current Status (2026-06-30)
 
-- **Sprint 8 in progress** — Task 16F (graph citation signals) complete.
-- **72 tests passing** (Sprint 5: 16 · Sprint 6: 24 · Sprint 7: 20 · Sprint 8: 12).
-- `GET /health` returns `status=healthy graph_health=True`; eval guard PASS (faithfulness `0.910`).
-- After every `/query/answer` call, cited `Chunk` nodes are tagged in Neo4j via a non-blocking `BackgroundTask` (`record_cited_chunks()`).
-- Next: BM25 A/B eval (hybrid vs dense-only retrieval quality delta).
+- **Sprint 11 deployed** — Cognito auth live in production. Google SSO + optional TOTP 2FA.
+- Custom JWT/Argon2id replaced with Cognito RS256 JWKS verification. 93 tests passing.
+- `cognito_sub` column added to users table (migration 013). Vite proxy for local dev.
+- ECS: `COGNITO_USER_POOL_ID` + `COGNITO_REGION` baked into Docker image.
+- CI/CD: Cognito vars injected into frontend Vite build via `deploy.yml`.
+- Production Google SSO fully working on `permits.scottsalhanick.com`.
 
 ```powershell
 # Full test suite
-py -m pytest tests/test_sprint5.py tests/test_sprint6.py tests/test_sprint7.py tests/test_sprint8.py -v
+py -m pytest tests/test_sprint5.py tests/test_sprint6.py tests/test_sprint7.py tests/test_sprint8.py tests/test_sprint9.py -v
+
+# Apply DB migration (local)
+py scripts\run_migration.py db\migrations\013_cognito_auth.sql
+
+# Apply DB migration (production RDS)
+$env:ENVIRONMENT = "production"; py scripts\run_migration.py db\migrations\013_cognito_auth.sql
 
 # Health check (API must be running)
 Invoke-RestMethod -Uri "http://localhost:8000/health" -Method Get
@@ -34,18 +41,20 @@ py -m evaluation.eval_guard
 *None*
 
 ### Planned
+- [ ] [Sprint 12: User Profile Dashboard](docs/sprint12_user_profile_dashboard.md) — WordPress-style sidebar + subpages for base users (`feat/sprint-12-user-profile-dashboard`)
+- [ ] [Sprint 11: Document Governance UI](docs/sprint11_document_updates.md) — metadata edit + supersede on `/documents`
 - [ ] [Agent Implementation Plan](../..\.gemini\antigravity\brain\acda4bb1-53b2-4cf2-b710-5e93089c1fab/agent_implementation_plan.md) — Implement single-responsibility agents (Query Deconstructor, Semantic Conflict Analyzer, Citation Verification) with the `instructor` library and dynamic token truncation.
 - [ ] [Token Optimization & Cost-Effectiveness Plan](../..\.gemini\antigravity\brain\acda4bb1-53b2-4cf2-b710-5e93089c1fab\token_optimization_plan.md) - Analyze prompt caching, chunking strategies, and embedding model trade-offs to minimize Claude token usage.
 - [ ] [CMS Admin Dashboard](.gemini\antigravity\brain\acda4bb1-53b2-4cf2-b710-5e93089c1fab\cms_admin_dashboard_plan.md)
 
 ### Upcoming
-- [ ] Add CI/CD pipeline to push from github to AWS
 - [ ] Add ability to update existing documents
 - [ ] Camera Phone (lidar Progressive Enhancement) - Use the device's camera to scan building facades and rooms to measure distances and accurately calculate square footage through the device's lidar data (or as much as doing a recording/set of pitcutres derived from the recording of the site/room)
 - [ ] 3D Map Integration - Integrate with an open-source 3D map library (e.g., CesiumJS) to display the city boundaries and proposed site
 - [ ] 
 
 ### Completed
+- [x] Cognito Auth Migration (Sprint 11) — Replaced custom JWT/Argon2id with Amazon Cognito RS256 JWKS verification, Google SSO, optional TOTP 2FA, lazy RDS user provisioning via `GET /auth/me`
 - [x] Get GIS auto-address bar working (Implemented Mapbox Search Box session_token management for address autocomplete suggestions and geocoding retrievals)
 - [x] Add mobile styles (SGP10: Responsive styling for mobile, tablet, and desktop viewports, scrollable data tables, and WCAG AAA touch target size conformance)
 
@@ -91,20 +100,33 @@ pip install sentence-transformers einops   # local embedding model
 
 ### Step 2 — Environment variables
 
+Local dev uses **split env files** — see [docs/environment_setup.md](docs/environment_setup.md).
+
 ```powershell
+Copy-Item .env.local.example .env.local
 Copy-Item .env.example .env
+Copy-Item frontend\.env.local.example frontend\.env.local
 ```
 
-Open `.env` and fill in at minimum:
+| File | Purpose |
+|------|---------|
+| `.env.local` | Docker Postgres (`localhost:5433`), CORS, Neo4j — auto-loaded locally |
+| `.env` | Secrets only: `ANTHROPIC_API_KEY`, `API_ADMIN_TOKEN`; also `COGNITO_USER_POOL_ID`, `COGNITO_APP_CLIENT_ID`, `COGNITO_REGION` |
+| `frontend/.env.local` | `VITE_MAPBOX_TOKEN` for address autocomplete |
+
+Production (AWS/ECS) uses Terraform task env + SSM — no dotenv files in the container.
+
+**Minimum secrets to fill in `.env`:**
 
 | Variable | What to set |
 |---|---|
-| `DATABASE_URL` | `postgresql://postgres:<your-password>@localhost:5433/permit_rag` |
 | `ANTHROPIC_API_KEY` | Your Anthropic API key (`sk-ant-...`) |
-| `CORPUS_WRITER_URL` | `postgresql://corpus_writer:changeme_rotate_corpus@localhost:5433/permit_rag` |
-| `APP_READER_URL` | `postgresql://app_reader:changeme_rotate_reader@localhost:5433/permit_rag` |
+| `API_ADMIN_TOKEN` | Random string for `/admin/*` routes |
+| `COGNITO_USER_POOL_ID` | e.g. `us-east-1_HF3i1xgNF` (from AWS Cognito) |
+| `COGNITO_APP_CLIENT_ID` | e.g. `21admh46opa2gaaii3oaq0nlgd` (from AWS Cognito) |
+| `COGNITO_REGION` | e.g. `us-east-1` |
 
-All other variables have working defaults for local dev.
+Database URLs are in `.env.local` (already point at Docker on port 5433).
 
 ---
 
@@ -233,7 +255,6 @@ The application is configured for a robust, production-grade cloud deployment on
 3.  **Terraform**: CLI installed locally (v1.5+).
 4.  **SSM Parameters**: Ensure the following parameters are populated in the AWS Systems Manager Parameter Store as `SecureString` types:
     *   `/permit_rag/prod/anthropic_api_key` (Claude API key)
-    *   `/permit_rag/prod/jwt_secret` (Randomly generated 32-character token signing secret)
     *   `/permit_rag/prod/admin_token` (Secure administrative access token)
     *   `/permit_rag/prod/neo4j_bolt_url` (AuraDB graph layer connection URI)
     *   `/permit_rag/prod/neo4j_auth` (Graph credentials, formatted as `neo4j/<your-auradb-password>`)
@@ -373,6 +394,7 @@ Project docs in `docs/`:
 | File | Purpose |
 |---|---|
 | `docs/api.md` | API endpoint usage, auth headers, and runtime config notes |
+| `docs/env_secrets_strategy.md` | Plan for migrating hardcoded config → GitHub vars and secrets → SSM |
 | `docs/offboarding_runbook.md` | User offboarding purge procedure (single + bulk) and verification |
 | `docs/postgis_migration_checklist.md` | Sprint 4 GIS/PostGIS rollout checklist (planning-only gates) |
 | `docs/task14ab_execution_checklist.md` | Step-by-step execution/rollback checklist for Task 14A/14B |

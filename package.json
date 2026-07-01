@@ -8,6 +8,8 @@
     "deploy": "powershell -ExecutionPolicy Bypass -File scripts/deploy.ps1",
     "deploy:infra": "powershell -ExecutionPolicy Bypass -File scripts/deploy.ps1 -InfraOnly",
     "deploy:backend": "powershell -ExecutionPolicy Bypass -File scripts/deploy.ps1 -BackendOnly",
-    "deploy:frontend": "powershell -ExecutionPolicy Bypass -File scripts/deploy.ps1 -FrontendOnly"
+    "deploy:frontend": "powershell -ExecutionPolicy Bypass -File scripts/deploy.ps1 -FrontendOnly",
+    "boot:prod": "powershell -ExecutionPolicy Bypass -File scripts/boot-prod.ps1",
+    "shutdown:prod": "powershell -ExecutionPolicy Bypass -File scripts/shutdown-prod.ps1"
   }
 }

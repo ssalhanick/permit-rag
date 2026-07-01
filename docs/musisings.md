@@ -1,0 +1,3 @@
+- how do i get the inference compute processing to take place on the user device? is it possible?
+- make sure to do in and out token usage tracking at all levels, especially per question and per user.
+- 

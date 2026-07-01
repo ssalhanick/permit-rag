@@ -396,6 +396,10 @@ class CreateProjectRequest(BaseModel):
     name: str = Field(..., min_length=1, max_length=120)
     description: str | None = Field(default=None, max_length=500)
     municipality: str | None = Field(default=None, description="Default city scope")
+    address: str | None = Field(default=None, max_length=500, description="Full civic address")
+    spaces: list[str] | None = Field(default=None, description="Selected space labels from kickoff wizard")
+    work_types: list[str] | None = Field(default=None, description="Selected work-type labels from kickoff wizard")
+    recommended_permits: list[str] | None = Field(default=None, description="Permit categories recommended at creation time")
 
 
 class ProjectResponse(BaseModel):
@@ -408,6 +412,10 @@ class ProjectResponse(BaseModel):
     is_active: bool
     created_at: datetime
     updated_at: datetime
+    address: str | None = None
+    spaces: list[str] | None = None
+    work_types: list[str] | None = None
+    recommended_permits: list[str] | None = None
 
 
 class ProjectMemberResponse(BaseModel):
@@ -433,4 +441,14 @@ class TransferOwnershipRequest(BaseModel):
 class ShareDocumentRequest(BaseModel):
     """Request to share a document to a project."""
     document_id: UUID = Field(..., description="UUID of the document to share")
+
+
+class UserMeResponse(BaseModel):
+    """Response for GET /auth/me — current user profile."""
+    id: UUID
+    username: str
+    email: str
+    role: str
+    cognito_sub: str
+    created_at: datetime
 

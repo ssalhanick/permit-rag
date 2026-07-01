@@ -15,10 +15,14 @@ from __future__ import annotations
 
 import logging
 import os
+
+if os.environ.get("AWS_LAMBDA_FUNCTION_NAME") is None:
+    from api.load_env import bootstrap_env
+
+    bootstrap_env()
 from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
 
-from dotenv import load_dotenv
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
@@ -38,6 +42,16 @@ from db.client import close_pool, ping
 
 log = logging.getLogger(__name__)
 
+LOCALHOST_CORS_REGEX = r"https?://(localhost|127\.0\.0\.1)(:\d+)?"
+
+
+def _env_bool(name: str, default: bool = False) -> bool:
+    """Parse boolean environment variable values."""
+    raw = os.environ.get(name)
+    if raw is None:
+        return default
+    return raw.strip().lower() in {"1", "true", "yes", "on"}
+
 
 def _parse_cors_origins() -> list[str]:
     """Return CORS origins from env, defaulting to local dev origins."""
@@ -45,10 +59,41 @@ def _parse_cors_origins() -> list[str]:
         return ["*"]
     raw = os.environ.get(
         "API_CORS_ALLOW_ORIGINS",
-        "http://localhost:3000,http://127.0.0.1:3000,http://localhost:5173,http://127.0.0.1:5173",
+        (
+            "http://localhost:3000,http://127.0.0.1:3000,"
+            "http://localhost:5173,http://127.0.0.1:5173,"
+            "http://localhost:5174,http://127.0.0.1:5174,"
+            "http://localhost:5175,http://127.0.0.1:5175,"
+            "http://localhost:5176,http://127.0.0.1:5176"
+        ),
     )
     origins = [value.strip() for value in raw.split(",") if value.strip()]
     return origins or ["http://localhost:3000"]
+
+
+def _cors_middleware_kwargs() -> dict[str, object]:
+    """Build CORSMiddleware kwargs from environment."""
+    if _env_bool("API_CORS_ALLOW_ALL"):
+        return {
+            "allow_origins": ["*"],
+            "allow_credentials": False,
+            "allow_methods": ["*"],
+            "allow_headers": ["*"],
+        }
+    if _env_bool("API_CORS_ALLOW_LOCALHOST"):
+        return {
+            "allow_origin_regex": LOCALHOST_CORS_REGEX,
+            "allow_credentials": True,
+            "allow_methods": ["*"],
+            "allow_headers": ["*"],
+        }
+    origins = _parse_cors_origins()
+    return {
+        "allow_origins": origins,
+        "allow_credentials": True,
+        "allow_methods": ["*"],
+        "allow_headers": ["*"],
+    }
 
 
 # ── Lifespan (startup / shutdown) ────────────────────────────
@@ -56,13 +101,14 @@ def _parse_cors_origins() -> list[str]:
 
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
-    """Load .env on startup, close DB pool on shutdown."""
-    load_dotenv()
+    """Configure logging on startup and close DB pool on shutdown."""
     logging.basicConfig(
         level=os.environ.get("LOG_LEVEL", "INFO"),
         format="%(asctime)s [%(levelname)s] %(name)s — %(message)s",
     )
-    log.info("permit_rag API starting up")
+    db_url = os.environ.get("DATABASE_URL", "")
+    db_host = db_url.split("@")[-1].split("/")[0] if "@" in db_url else "not set"
+    log.info("permit_rag API starting up — DB host: %s", db_host)
     yield
     close_pool()
     log.info("permit_rag API shut down")
@@ -84,16 +130,7 @@ app = FastAPI(
 
 # ── CORS (env-driven allowlist) ──────────────────────────────
 
-cors_origins = _parse_cors_origins()
-allow_all_origins = cors_origins == ["*"]
-
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=cors_origins,
-    allow_credentials=not allow_all_origins,
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
+app.add_middleware(CORSMiddleware, **_cors_middleware_kwargs())
 
 
 # ── Include routers ──────────────────────────────────────────
@@ -130,6 +167,16 @@ def handle_http_exception(_request: Request, exc: HTTPException) -> JSONResponse
     else:
         detail = str(raw)
     return JSONResponse(status_code=exc.status_code, content={"detail": detail})
+
+
+@app.exception_handler(Exception)
+def handle_unexpected_error(_request: Request, exc: Exception) -> JSONResponse:
+    """Catch-all: log the traceback and return 500 with detail visible to caller."""
+    log.exception("Unhandled exception: %s", exc)
+    return JSONResponse(
+        status_code=500,
+        content={"detail": f"{type(exc).__name__}: {exc}"},
+    )
 
 
 # ── Health endpoint (lives on main app, not a router) ────────
