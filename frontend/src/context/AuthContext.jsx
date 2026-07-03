@@ -2,9 +2,11 @@ import React, { createContext, useCallback, useContext, useEffect, useRef, useSt
 import {
   AuthenticationDetails,
   CognitoUser,
+  CognitoUserAttribute,
   CognitoUserPool,
 } from "amazon-cognito-identity-js";
 import { registerTokenRefresher, requestJson } from "../api.js";
+import { usernameFromEmail } from "../authUsername.js";
 
 // ── Cognito User Pool singleton ───────────────────────────────
 
@@ -141,15 +143,23 @@ export function AuthProvider({ children }) {
 
   /**
    * Register a new Cognito user with email and password.
-   * Returns { screen: "confirm" } — caller should show the confirmation code UI.
+   *
+   * The pool uses email as an ALIAS, so the Cognito Username must not be in
+   * email format — we generate an internal username from the email local part.
+   * Users still sign in with their email address.
+   *
+   * Returns { screen: "confirm", email, username } — caller should show the
+   * confirmation code UI and keep `username` for confirmSignUp().
    */
   const register = useCallback((email, password) => {
+    const username = usernameFromEmail(email);
+    const attributes = [new CognitoUserAttribute({ Name: "email", Value: email })];
     return new Promise((resolve, reject) => {
-      userPool.signUp(email, password, [], null, (err) => {
+      userPool.signUp(username, password, attributes, null, (err) => {
         if (err) {
           reject(err);
         } else {
-          resolve({ screen: "confirm", email });
+          resolve({ screen: "confirm", email, username });
         }
       });
     });
@@ -158,19 +168,28 @@ export function AuthProvider({ children }) {
   // ── Confirm email after sign-up ───────────────────────────────
 
   /**
-   * Confirm the 6-digit code Cognito emailed after sign-up, then auto-login.
-   * Returns the RDS user profile on success.
+   * Confirm the 6-digit code Cognito emailed after sign-up.
+   *
+   * `username` must be the generated username returned by register() — the
+   * email alias is not active until the account is confirmed, so confirming
+   * by email would fail.
+   *
+   * If `password` is provided, auto-login with the (now active) email alias
+   * and return login's result. Otherwise returns { screen: "login" } and the
+   * caller should send the user to the sign-in form.
    */
-  const confirmSignUp = useCallback(async (email, code) => {
+  const confirmSignUp = useCallback(async (username, code, email, password) => {
     await new Promise((resolve, reject) => {
-      const cognitoUser = new CognitoUser({ Username: email, Pool: userPool });
+      const cognitoUser = new CognitoUser({ Username: username, Pool: userPool });
       cognitoUser.confirmRegistration(code, true, (err) => {
         if (err) reject(err);
         else resolve();
       });
     });
-    // Auto-login after confirmation (returns same shape as login)
-    return login(email, "_cognito_confirm_placeholder_");
+    if (email && password) {
+      return login(email, password);
+    }
+    return { screen: "login" };
   }, []);
 
   // ── Email + password login ────────────────────────────────────

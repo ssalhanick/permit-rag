@@ -24,6 +24,9 @@ export default function AuthPage() {
 
   const [screen, setScreen] = useState("login");
   const [pendingEmail, setPendingEmail] = useState("");
+  // Generated (non-email) Cognito username from register(); required by
+  // confirmSignUp() because the email alias is inactive until confirmation.
+  const [pendingUsername, setPendingUsername] = useState("");
   const [mfaSetupData, setMfaSetupData] = useState(null); // { secretCode, qrUri }
 
   const [form, setForm] = useState({ email: "", password: "", confirmPassword: "", code: "" });
@@ -78,6 +81,7 @@ export default function AuthPage() {
       const result = await register(form.email, form.password);
       if (result.screen === "confirm") {
         setPendingEmail(form.email);
+        setPendingUsername(result.username);
         reset("confirm");
         setSuccess("Check your email for a 6-digit confirmation code.");
       }
@@ -95,8 +99,20 @@ export default function AuthPage() {
     setLoading(true);
     setError("");
     try {
-      await confirmSignUp(pendingEmail, form.code);
-      navigate(dest, { replace: true });
+      // form.password survives from the register screen; if it's gone
+      // (e.g. page reload), confirmSignUp skips auto-login.
+      const result = await confirmSignUp(
+        pendingUsername,
+        form.code,
+        pendingEmail,
+        form.password,
+      );
+      if (result.screen === "login") {
+        reset("login");
+        setSuccess("Email confirmed! Sign in with your email and password.");
+      } else {
+        navigate(dest, { replace: true });
+      }
     } catch (err) {
       setError(err.message || "Confirmation failed. Check your code.");
     } finally {
