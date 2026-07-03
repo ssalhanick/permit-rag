@@ -203,7 +203,7 @@ function App() {
         ok: true,
         status: result.status,
         elapsedMs: result.elapsedMs,
-        detail: `chunks=${data.num_chunks} top_similarity=${data.diagnostics?.top_similarity?.toFixed(3) || "n/a"}`,
+        detail: `chunks=${data?.num_chunks ?? "n/a"} top_similarity=${data?.diagnostics?.top_similarity?.toFixed(3) || "n/a"}`,
         createdAt: new Date().toLocaleTimeString(),
       });
     } catch (requestError) {

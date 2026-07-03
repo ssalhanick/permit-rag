@@ -516,6 +516,26 @@ resource "aws_s3_bucket_policy" "frontend" {
 #  CloudFront CDN Routing Layer
 # ==========================================
 
+# SPA routing for the S3 default behavior only (not API paths).
+resource "aws_cloudfront_function" "spa_routing" {
+  name    = "${var.project_name}-spa-routing"
+  runtime = "cloudfront-js-2.0"
+  comment = "Rewrite non-file SPA routes to /index.html on S3 origin"
+  publish = true
+  code    = <<-EOF
+function handler(event) {
+    var request = event.request;
+    var uri = request.uri;
+    if (uri.endsWith("/")) {
+        request.uri += "index.html";
+    } else if (!uri.includes(".")) {
+        request.uri = "/index.html";
+    }
+    return request;
+}
+EOF
+}
+
 data "aws_acm_certificate" "cert" {
   domain      = "*.scottsalhanick.com"
   statuses    = ["ISSUED"]
@@ -565,6 +585,14 @@ resource "aws_cloudfront_distribution" "cdn" {
     min_ttl                = 0
     default_ttl            = 3600
     max_ttl                = 86400
+
+    # SPA client-side routing: rewrite bare paths to index.html on S3 only.
+    # Do NOT use distribution-level custom_error_response — that rewrites API
+    # 404s from the ALB into index.html (P0-2).
+    function_association {
+      event_type   = "viewer-request"
+      function_arn = aws_cloudfront_function.spa_routing.arn
+    }
   }
 
   # Order Cache Behaviors: Route all backend paths directly to the ALB (bypass caching)
@@ -708,21 +736,6 @@ resource "aws_cloudfront_distribution" "cdn" {
     acm_certificate_arn      = data.aws_acm_certificate.cert.arn
     ssl_support_method       = "sni-only"
     minimum_protocol_version = "TLSv1.2_2021"
-  }
-
-  # Support client-side routing fallback in React App (SPA)
-  custom_error_response {
-    error_code            = 403
-    response_code         = 200
-    response_page_path    = "/index.html"
-    error_caching_min_ttl = 300
-  }
-
-  custom_error_response {
-    error_code            = 404
-    response_code         = 200
-    response_page_path    = "/index.html"
-    error_caching_min_ttl = 300
   }
 
   tags = {

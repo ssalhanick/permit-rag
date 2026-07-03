@@ -172,3 +172,38 @@ def test_query_answer_classifier_failure_falls_back_to_empty_list(monkeypatch) -
         assert len(body["citations"]) == 3
     finally:
         app.dependency_overrides.clear()
+
+
+def test_query_answer_empty_corpus_returns_422(monkeypatch) -> None:
+    """Empty retrieval must return 422 (not 404) so CloudFront does not rewrite to SPA index.html."""
+    from api.routes import query as query_route
+
+    empty_result = SimpleNamespace(
+        query="test",
+        top_k=5,
+        municipality=None,
+        chunks=[],
+        num_results=0,
+        top_similarity=0.0,
+        mean_similarity=0.0,
+        unique_documents=[],
+        latency_ms=10,
+    )
+    monkeypatch.setattr(query_route, "retrieve", lambda *_a, **_k: empty_result)
+
+    app.dependency_overrides[query_route.get_current_user] = lambda: {
+        "user_id": uuid4(),
+        "role": "member",
+        "username": "tester",
+    }
+
+    try:
+        client = TestClient(app)
+        response = client.post(
+            "/query/answer",
+            json={"query": "fence permit in Dallas", "top_k": 5},
+        )
+        assert response.status_code == 422
+        assert "No relevant chunks" in response.json()["detail"]
+    finally:
+        app.dependency_overrides.clear()

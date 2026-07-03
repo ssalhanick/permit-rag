@@ -308,7 +308,7 @@ def query_answer(
     if not result.chunks:
         _end_trace(root_trace, error="No relevant chunks found.")
         raise HTTPException(
-            status_code=404,
+            status_code=422,
             detail="No relevant chunks found for this query.",
         )
 

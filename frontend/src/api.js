@@ -77,6 +77,25 @@ export async function requestJson(path, options = {}) {
   const rawText = await response.text();
   const data = safeJsonParse(rawText);
   const elapsedMs = Date.now() - startedAt;
+  const contentType = response.headers?.get("content-type") || "";
+  const looksLikeHtml =
+    /text\/html/i.test(contentType) || rawText.trim().startsWith("<!doctype") || rawText.trim().startsWith("<!DOCTYPE");
+
+  if (response.ok && looksLikeHtml) {
+    const error = new Error(
+      "Server returned a web page instead of API data. Try again in a moment.",
+    );
+    error.meta = {
+      ok: false,
+      status: response.status,
+      data: null,
+      rawText,
+      elapsedMs,
+      requestId,
+    };
+    throw error;
+  }
+
   const result = {
     ok: response.ok,
     status: response.status,
