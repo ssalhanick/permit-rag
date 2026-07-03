@@ -1,21 +1,39 @@
 # permit_rag — State
 
-_Updated: 2026-06-30 (Sprint 12 — project kickoff wizard live)_
+_Updated: 2026-07-03 (Production UX audit — 4 P0 launch blockers found)_
 
 ## Phase
 
-Sprint 11 closed. Sprint 12 in progress. **93 tests passing** (all green). Google SSO live on `permits.scottsalhanick.com`.
+Sprint 11 closed. Sprint 12 in progress. **93 tests passing** (all green). Google SSO live on `permits.scottsalhanick.com`. Full production UX audit completed 2026-07-03 — see `docs/ux_audit_260703.md`.
 
 ## Blocked on
 
-*None*
+**Production is launch-blocked by 4 P0 defects** (found in UX audit, `docs/ux_audit_260703.md`):
+
+1. **Registration broken** — `register()` in `frontend/src/context/AuthContext.jsx` passes email as Cognito Username; pool uses email alias → every email+password signup fails with "Username cannot be of email format". Fix: generate non-email username, keep email attribute.
+2. **Queries never answer on prod** — prod RDS corpus is EMPTY (`GET /documents` → `[]`). API 4xx from `/query/answer` gets rewritten by CloudFront SPA custom-error mapping into `index.html` w/ status 200 → frontend crashes with raw "Cannot read properties of null (reading 'num_chunks')". Fix: ingest corpus to RDS (check embed budget first) + scope CloudFront error pages to frontend only + frontend response-shape guard.
+3. **Mapbox token missing from prod build** — address autocomplete dead; dev instruction text ("set VITE_MAPBOX_TOKEN in frontend/.env") shown to end users; municipality never captured on new projects. Fix: inject `VITE_MAPBOX_TOKEN` in `deploy.yml` like Cognito vars.
+4. **`/projects` route collision** — hard refresh/deep link on `/projects` hits API route through CloudFront → raw JSON `{"detail":"Authorization header missing."}`. Fix: namespace API under `/api/*` or fix CloudFront behaviors.
 
 ## Next tasks
 
-1. **Apply migration 014**: `$env:ENVIRONMENT="production"; py scripts\run_migration.py db\migrations\014_project_fields.sql` (run locally first, then against RDS)
-2. **Update Documents**: Add ability/routes to update existing documents
-3. **PostGIS**: Add remaining 8 DFW city boundary layers (see `docs/backlog.md`)
-4. **Permit determination upgrade**: Swap rule-based `projectPermitRules.js` → RAG query against corpus for smarter permit suggestions
+1. **Fix P0-1**: registration username generation in `AuthContext.jsx` `register()`
+2. **Fix P0-2**: ingest corpus into prod RDS (budget check in this file first) + CloudFront error-page scoping + frontend error guard
+3. **Fix P0-3**: bake `VITE_MAPBOX_TOKEN` into prod frontend build via `deploy.yml`
+4. **Fix P0-4**: resolve `/projects` SPA/API route collision
+5. **Apply migration 014**: `$env:ENVIRONMENT="production"; py scripts\run_migration.py db\migrations\014_project_fields.sql` (run locally first, then against RDS) — audit confirmed wizard fields don't display on project detail (P1-5)
+6. **P1 UX fixes**: wizard data on project card, collaborator dedupe, invite-by-email, jargon copy pass (see audit doc §P1)
+7. **Update Documents**: Add ability/routes to update existing documents
+8. **PostGIS**: Add remaining 8 DFW city boundary layers (see `docs/backlog.md`)
+9. **Permit determination upgrade**: Swap rule-based `projectPermitRules.js` → RAG query against corpus for smarter permit suggestions
+
+## UX audit deliverables (2026-07-03) — DONE ✅
+
+- [x] Playwright walkthrough of all major paths on prod (auth, kickoff wizard, query, upload, profile, projects, collaborators, history, mobile)
+- [x] Report: `docs/ux_audit_260703.md` (P0/P1/P2 + fix order)
+- [x] Verification: each P0 confirmed via direct API probes (`/health`, `/documents`, `/query`, `/query/answer`, raw Cognito `SignUp`)
+- Audit artifacts: scripts + screenshots in `C:\Users\ssalh\permit_rag_ux_audit\` (outside repo)
+- Cleanup pending: Cognito test user `uxaudit_user1`; test project `22cd04d1-a1b8-4b8f-b44a-5287ed09c0bc` ("UX Audit Test Project")
 
 ## Sprint 12 deliverables (in progress)
 

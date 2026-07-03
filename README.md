@@ -7,8 +7,9 @@ plus Texas state and federal regulations.
 
 ---
 
-## Current Status (2026-06-30)
+## Current Status (2026-07-03)
 
+- **Production UX audit completed** — full Playwright walkthrough of every user path on `permits.scottsalhanick.com`. Four P0 launch blockers found (registration broken, empty prod corpus + CloudFront error rewriting, Mapbox token missing from prod build, `/projects` route collision). See [docs/ux_audit_260703.md](docs/ux_audit_260703.md).
 - **Sprint 11 deployed** — Cognito auth live in production. Google SSO + optional TOTP 2FA.
 - Custom JWT/Argon2id replaced with Cognito RS256 JWKS verification. 93 tests passing.
 - `cognito_sub` column added to users table (migration 013). Vite proxy for local dev.
@@ -394,6 +395,7 @@ Project docs in `docs/`:
 | File | Purpose |
 |---|---|
 | `docs/api.md` | API endpoint usage, auth headers, and runtime config notes |
+| `docs/ux_audit_260703.md` | Production UX audit — P0 blockers, confusion points, fix order (2026-07-03) |
 | `docs/env_secrets_strategy.md` | Plan for migrating hardcoded config → GitHub vars and secrets → SSM |
 | `docs/offboarding_runbook.md` | User offboarding purge procedure (single + bulk) and verification |
 | `docs/postgis_migration_checklist.md` | Sprint 4 GIS/PostGIS rollout checklist (planning-only gates) |
