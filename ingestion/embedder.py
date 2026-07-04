@@ -383,10 +383,13 @@ def embed_all_documents(
 
 if __name__ == "__main__":
     import argparse
+    import sys
+    from pathlib import Path
 
-    from dotenv import load_dotenv
+    sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+    from api.load_env import bootstrap_env
 
-    load_dotenv()
+    bootstrap_env()
 
     parser = argparse.ArgumentParser(
         description="Embed document chunks via nomic-embed-text"
