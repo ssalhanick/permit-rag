@@ -23,7 +23,7 @@ if os.environ.get("AWS_LAMBDA_FUNCTION_NAME") is None:
 from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI, HTTPException, Request
+from fastapi import APIRouter, FastAPI, HTTPException, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
@@ -133,14 +133,16 @@ app = FastAPI(
 app.add_middleware(CORSMiddleware, **_cors_middleware_kwargs())
 
 
-# ── Include routers ──────────────────────────────────────────
+# ── Include routers (namespaced under /api for CloudFront SPA separation) ──
 
-app.include_router(query_router)
-app.include_router(documents_router)
-app.include_router(admin_router)
-app.include_router(upload_router)
-app.include_router(auth_router)
-app.include_router(projects_router)
+api_router = APIRouter(prefix="/api")
+api_router.include_router(query_router)
+api_router.include_router(documents_router)
+api_router.include_router(admin_router)
+api_router.include_router(upload_router)
+api_router.include_router(auth_router)
+api_router.include_router(projects_router)
+app.include_router(api_router)
 
 
 # ── Error handling (uniform payload shape) ───────────────────
@@ -188,6 +190,12 @@ def handle_unexpected_error(_request: Request, exc: Exception) -> JSONResponse:
     tags=["system"],
     summary="Health check",
     description="Returns service status, database connectivity, and graph layer health.",
+)
+@app.get(
+    "/api/health",
+    response_model=HealthResponse,
+    tags=["system"],
+    include_in_schema=False,
 )
 def health_check() -> HealthResponse:
     """Check API, database, and graph (Neo4j) health.

@@ -54,7 +54,7 @@ def test_cors_middleware_uses_localhost_regex(monkeypatch) -> None:
 def test_validation_error_handler_returns_string_detail() -> None:
     """Validation errors should use compact string detail payloads."""
     client = TestClient(app)
-    response = client.get("/documents", params={"authority": "city"})
+    response = client.get("/api/documents", params={"authority": "city"})
     assert response.status_code == 422
     body = response.json()
     assert isinstance(body.get("detail"), str)
@@ -66,7 +66,7 @@ def test_http_exception_handler_returns_string_detail(monkeypatch) -> None:
     monkeypatch.setenv("API_ADMIN_AUTH_REQUIRED", "true")
     monkeypatch.delenv("API_ADMIN_TOKEN", raising=False)
     client = TestClient(app)
-    response = client.patch("/admin/documents/demo-doc", json={})
+    response = client.patch("/api/admin/documents/demo-doc", json={})
     assert response.status_code == 503
     body = response.json()
     assert isinstance(body.get("detail"), str)

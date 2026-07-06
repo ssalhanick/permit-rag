@@ -62,7 +62,7 @@ def test_list_documents_applies_all_filters(monkeypatch) -> None:
     monkeypatch.setattr(documents_route.db_client, "list_documents", _fake_list_documents)
     client = TestClient(app)
     response = client.get(
-        "/documents",
+        "/api/documents",
         params={
             "municipality": "dallas",
             "status": "active",
@@ -87,7 +87,7 @@ def test_list_documents_applies_all_filters(monkeypatch) -> None:
 def test_list_documents_rejects_invalid_authority_filter() -> None:
     """FastAPI should return 422 for invalid authority values."""
     client = TestClient(app)
-    response = client.get("/documents", params={"authority": "city"})
+    response = client.get("/api/documents", params={"authority": "city"})
     assert response.status_code == 422
     assert isinstance(response.json().get("detail"), str)
 
@@ -105,7 +105,7 @@ def test_get_document_detail_returns_chunk_count(monkeypatch) -> None:
     monkeypatch.setattr(documents_route.db_client, "count_chunks", lambda _doc_uuid: 42)
 
     client = TestClient(app)
-    response = client.get("/documents/tx-electrical-statute")
+    response = client.get("/api/documents/tx-electrical-statute")
 
     assert response.status_code == 200
     body = response.json()
@@ -123,7 +123,7 @@ def test_get_document_detail_404_when_missing(monkeypatch) -> None:
     )
 
     client = TestClient(app)
-    response = client.get("/documents/missing-doc")
+    response = client.get("/api/documents/missing-doc")
 
     assert response.status_code == 404
     assert "Document not found" in response.json()["detail"]
@@ -145,7 +145,7 @@ def test_document_status_counts_response_shape(monkeypatch) -> None:
 
     client = TestClient(app)
     response = client.get(
-        "/documents/status",
+        "/api/documents/status",
         params={"municipality": "dallas", "authority": "municipal"},
     )
 
@@ -181,7 +181,7 @@ def test_patch_admin_document_updates_metadata(monkeypatch) -> None:
 
     client = TestClient(app)
     response = client.patch(
-        "/admin/documents/tx-admin-doc",
+        "/api/admin/documents/tx-admin-doc",
         json={"document_status": "draft", "retrieval_weight": 0.55},
     )
 
@@ -206,7 +206,7 @@ def test_patch_admin_document_requires_token_when_configured(monkeypatch) -> Non
     monkeypatch.setenv("API_ADMIN_TOKEN", "secret-token")
     client = TestClient(app)
     response = client.patch(
-        "/admin/documents/tx-admin-doc",
+        "/api/admin/documents/tx-admin-doc",
         json={"document_status": "draft"},
     )
     assert response.status_code == 403
@@ -220,7 +220,7 @@ def test_patch_admin_document_requires_allowed_role(monkeypatch) -> None:
     monkeypatch.setenv("API_ADMIN_ALLOWED_ROLES", "admin,owner")
     client = TestClient(app)
     response = client.patch(
-        "/admin/documents/tx-admin-doc",
+        "/api/admin/documents/tx-admin-doc",
         json={"document_status": "draft"},
         headers={"X-Admin-Token": "secret-token", "X-Admin-Role": "viewer"},
     )
@@ -244,7 +244,7 @@ def test_patch_admin_document_allows_valid_role(monkeypatch) -> None:
 
     client = TestClient(app)
     response = client.patch(
-        "/admin/documents/tx-admin-doc",
+        "/api/admin/documents/tx-admin-doc",
         json={"document_status": "draft"},
         headers={"X-Admin-Token": "secret-token", "X-Admin-Role": "admin"},
     )
@@ -262,7 +262,7 @@ def test_patch_admin_document_404_when_missing(monkeypatch) -> None:
 
     client = TestClient(app)
     response = client.patch(
-        "/admin/documents/missing-doc",
+        "/api/admin/documents/missing-doc",
         json={"document_status": "draft"},
     )
 
@@ -293,7 +293,7 @@ def test_supersede_admin_document_success(monkeypatch) -> None:
 
     client = TestClient(app)
     response = client.post(
-        "/admin/documents/old-doc/supersede",
+        "/api/admin/documents/old-doc/supersede",
         json={"replacement_doc_id": "new-doc", "superseded_weight": 0.1},
     )
 
@@ -320,7 +320,7 @@ def test_supersede_admin_document_rejects_invalid_request(monkeypatch) -> None:
 
     client = TestClient(app)
     response = client.post(
-        "/admin/documents/old-doc/supersede",
+        "/api/admin/documents/old-doc/supersede",
         json={"replacement_doc_id": "new-doc"},
     )
 
@@ -363,7 +363,7 @@ def test_purge_project_upload_success(monkeypatch) -> None:
 
     client = TestClient(app)
     response = client.post(
-        "/admin/documents/project-doc-1/purge-project-upload",
+        "/api/admin/documents/project-doc-1/purge-project-upload",
         headers={"X-Admin-Role": "owner", "X-Admin-User": "qa-user"},
     )
 
@@ -398,7 +398,7 @@ def test_purge_project_upload_rejects_non_project_tier(monkeypatch) -> None:
     monkeypatch.setattr(admin_route.db_client, "get_document_by_doc_id", lambda _doc_id: row)
 
     client = TestClient(app)
-    response = client.post("/admin/documents/city-code-doc/purge-project-upload")
+    response = client.post("/api/admin/documents/city-code-doc/purge-project-upload")
 
     assert response.status_code == 403
     assert "requires elevated role" in response.json()["detail"]
@@ -432,7 +432,7 @@ def test_purge_project_upload_allows_non_project_tier_with_elevated_role(monkeyp
 
     client = TestClient(app)
     response = client.post(
-        "/admin/documents/city-code-doc/purge-project-upload",
+        "/api/admin/documents/city-code-doc/purge-project-upload",
         headers={"X-Admin-Role": "owner"},
     )
 

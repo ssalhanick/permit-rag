@@ -1,60 +1,65 @@
 # permit_rag — State
 
-_Updated: 2026-07-03 (Production UX audit — 4 P0 launch blockers found)_
+_Updated: 2026-07-06 (P0 code complete — deploy + prod verify next)_
 
 ## Phase
 
-Sprint 11 closed. Sprint 12 in progress. **93 tests passing** (all green). Google SSO live on `permits.scottsalhanick.com`. Full production UX audit completed 2026-07-03 — see `docs/ux_audit_260703.md`.
+Sprint 11 closed. Sprint 12 in progress. Google SSO live on `permits.scottsalhanick.com`. Production UX audit completed 2026-07-03 (`docs/ux_audit_260703.md`). **All P0 fixes coded** — prod corpus ingested; migration 014 applied (local + RDS). **Launch blocked on deploy + prod smoke tests only.**
 
 ## Blocked on
 
-**Production is launch-blocked by 4 P0 defects** (found in UX audit, `docs/ux_audit_260703.md`):
+1. **Deploy stack** — push backend + frontend, `terraform apply` (CloudFront `/api*` behavior), invalidate CDN
+2. **Verify P0-1–4 on prod** — registration, query answers, Mapbox autocomplete, `/projects` hard refresh, API errors return JSON not HTML
 
-1. **Registration broken** — `register()` in `frontend/src/context/AuthContext.jsx` passes email as Cognito Username; pool uses email alias → every email+password signup fails with "Username cannot be of email format". Fix: generate non-email username, keep email attribute.
-2. **Queries never answer on prod** — prod RDS corpus is EMPTY (`GET /documents` → `[]`). API 4xx from `/query/answer` gets rewritten by CloudFront SPA custom-error mapping into `index.html` w/ status 200 → frontend crashes with raw "Cannot read properties of null (reading 'num_chunks')". Fix: ingest corpus to RDS (check embed budget first) + scope CloudFront error pages to frontend only + frontend response-shape guard.
-3. **Mapbox token missing from prod build** — address autocomplete dead; dev instruction text ("set VITE_MAPBOX_TOKEN in frontend/.env") shown to end users; municipality never captured on new projects. Fix: inject `VITE_MAPBOX_TOKEN` in `deploy.yml` like Cognito vars.
-4. **`/projects` route collision** — hard refresh/deep link on `/projects` hits API route through CloudFront → raw JSON `{"detail":"Authorization header missing."}`. Fix: namespace API under `/api/*` or fix CloudFront behaviors.
+## Next tasks (priority order)
 
-## Next tasks
+1. **Deploy stack**: `terraform apply` → `npm run deploy` (or backend + frontend separately) → CloudFront invalidation
+2. **Verify on prod**: email+password signup, query answer end-to-end, Mapbox on kickoff wizard, hard refresh `/projects` loads SPA (not JSON), `GET /api/documents` ≠ `[]`
+3. **P1 UX fixes**: wizard data on project card, collaborator dedupe, invite-by-email, jargon copy pass (see audit doc §P1)
+4. **Audit cleanup**: delete Cognito user `uxaudit_user1`; delete test project `22cd04d1-a1b8-4b8f-b44a-5287ed09c0bc`
+5. **Update Documents**: Add ability/routes to update existing documents
+6. **PostGIS**: Add remaining 8 DFW city boundary layers (see `docs/backlog.md`)
+7. **Permit determination upgrade**: Swap rule-based `projectPermitRules.js` → RAG query against corpus
 
-1. **Fix P0-1**: registration username generation in `AuthContext.jsx` `register()`
-2. **Fix P0-2**: ingest corpus into prod RDS (budget check in this file first) + CloudFront error-page scoping + frontend error guard
-3. **Fix P0-3**: bake `VITE_MAPBOX_TOKEN` into prod frontend build via `deploy.yml`
-4. **Fix P0-4**: resolve `/projects` SPA/API route collision
-5. **Apply migration 014**: `$env:ENVIRONMENT="production"; py scripts\run_migration.py db\migrations\014_project_fields.sql` (run locally first, then against RDS) — audit confirmed wizard fields don't display on project detail (P1-5)
-6. **P1 UX fixes**: wizard data on project card, collaborator dedupe, invite-by-email, jargon copy pass (see audit doc §P1)
-7. **Update Documents**: Add ability/routes to update existing documents
-8. **PostGIS**: Add remaining 8 DFW city boundary layers (see `docs/backlog.md`)
-9. **Permit determination upgrade**: Swap rule-based `projectPermitRules.js` → RAG query against corpus for smarter permit suggestions
+## P0 remediation status (2026-07-06)
+
+| P0 | Item | Code | Prod verified |
+|----|------|------|---------------|
+| P0-1 | Registration username generation | ✅ `authUsername.js`, `AuthContext.jsx`, tests | ⬜ |
+| P0-2 | Prod corpus ingest | ✅ `scripts/ingest_prod_corpus.py` | ✅ |
+| P0-2 | CloudFront API error scoping | ✅ SPA rewrite on S3 default only; `/api*` → ALB | ⬜ |
+| P0-2 | Frontend response-shape guard | ✅ `api.js` rejects HTML-as-JSON | ⬜ |
+| P0-3 | Mapbox token in prod build | ✅ `deploy.yml` → `secrets.VITE_MAPBOX_TOKEN` | ⬜ |
+| P0-3 | User-neutral fallback copy | ✅ `AddressAutocomplete.jsx` | ⬜ |
+| P0-4 | `/projects` route collision | ✅ API namespaced under `/api/*` | ⬜ |
 
 ## UX audit deliverables (2026-07-03) — DONE ✅
 
-- [x] Playwright walkthrough of all major paths on prod (auth, kickoff wizard, query, upload, profile, projects, collaborators, history, mobile)
-- [x] Report: `docs/ux_audit_260703.md` (P0/P1/P2 + fix order)
-- [x] Verification: each P0 confirmed via direct API probes (`/health`, `/documents`, `/query`, `/query/answer`, raw Cognito `SignUp`)
-- Audit artifacts: scripts + screenshots in `C:\Users\ssalh\permit_rag_ux_audit\` (outside repo)
-- Cleanup pending: Cognito test user `uxaudit_user1`; test project `22cd04d1-a1b8-4b8f-b44a-5287ed09c0bc` ("UX Audit Test Project")
+- [x] Playwright walkthrough of all major paths on prod
+- [x] Report: `docs/ux_audit_260703.md`
+- [x] Verification: each P0 confirmed via direct API probes
+- Audit artifacts: `C:\Users\ssalh\permit_rag_ux_audit\` (outside repo)
+- Cleanup pending: Cognito test user `uxaudit_user1`; test project `22cd04d1-a1b8-4b8f-b44a-5287ed09c0bc`
 
 ## Sprint 12 deliverables (in progress)
 
-- [x] `db/migrations/014_project_fields.sql` — adds `address TEXT`, `spaces JSONB`, `work_types JSONB`, `recommended_permits JSONB` to projects table
-- [x] `db/client.py` `create_project()` — accepts 4 new optional fields; JSON-serialises JSONB columns
-- [x] `api/schemas.py` — `CreateProjectRequest` + `ProjectResponse` extended with 4 new optional fields
-- [x] `api/routes/projects.py` — passes new fields through to `db.create_project()`
-- [x] `frontend/src/projectPermitRules.js` — rule-based `recommendPermits(workTypes)`, `isCosmeticOnly()`, `WORK_TYPE_OPTIONS`, `SPACE_OPTIONS`
-- [x] `frontend/src/ProjectKickoffPage.jsx` — 5-step guided wizard (address → name → spaces → work types → permit preview + confirm), basic form opt-out, existing project picker, skip option
-- [x] `frontend/src/AuthPage.jsx` — all sign-in paths redirect to `/kickoff` instead of `/` (fresh logins only; saved destination preserved)
-- [x] `frontend/src/AuthCallback.jsx` — Google SSO callback redirects to `/kickoff`
-- [x] `frontend/src/main.jsx` — `/kickoff` route added (ProtectedRoute)
-- [x] `frontend/src/styles.css` — kickoff wizard styles (mode cards, chat bubble, checkbox grid, permit tags, progress dots, step summary)
+- [x] `db/migrations/014_project_fields.sql` — adds `address`, `spaces`, `work_types`, `recommended_permits` to projects
+- [x] `db/client.py` `create_project()` — accepts 4 new optional fields
+- [x] `api/schemas.py` — `CreateProjectRequest` + `ProjectResponse` extended
+- [x] `api/routes/projects.py` — passes new fields through
+- [x] `frontend/src/projectPermitRules.js` — rule-based permit recommendations
+- [x] `frontend/src/ProjectKickoffPage.jsx` — 5-step kickoff wizard
+- [x] Auth redirects → `/kickoff` for fresh logins
+- [x] Kickoff wizard styles in `styles.css`
+- [x] Migration 014 applied (local + RDS)
+- [ ] Wizard fields visible on project detail (P1-5; UI only)
 
 ## Deployment checklist (Sprint 11) — CLOSED ✅
 
-- [x] Local smoke test: Google SSO end-to-end confirmed
-- [x] `Dockerfile` — baked in `COGNITO_USER_POOL_ID` + `COGNITO_REGION`
-- [x] `deploy.yml` — Cognito vars injected into frontend Vite build
-- [x] RDS migration 013 applied to production
-- [x] Production callback URL registered in Cognito + Google Cloud Console
+- [x] Local smoke test: Google SSO end-to-end
+- [x] Cognito vars in Dockerfile + `deploy.yml`
+- [x] RDS migration 013 applied
+- [x] Production callback URLs registered (Cognito + Google)
 - [x] Google SSO verified on `permits.scottsalhanick.com`
 
 ## Module status
@@ -63,115 +68,47 @@ ingestion ✅ db ✅ rag ✅ api ✅ eval ✅ frontend ✅ graph ✅
 
 | Module | Current state |
 |--------|---------------|
-| db | pgvector + PostGIS live; `corpus_writer`/`app_reader` roles; migrations 001–010 applied; `db/graph_client.py` singleton Bolt driver |
-| rag | Hybrid retrieval; provenance reranker; multi-permit classifier; jurisdiction resolver; conflict detector (lightweight + graph-backed) |
-| api | `/query`, `/query/answer`, `/health` (+ `graph_health`), `/documents/*`, `/admin/*`, `/upload`, `/auth/me`; LangSmith tracing; BackgroundTask graph citation signals; Cognito RS256 JWT verification |
-| graph | Neo4j CE in docker-compose; constraints + indexes applied; Postgres→Graph sync via `scripts/sync_graph.py`; cross-authority Cypher traversal; citation signal enrichment (`record_cited_chunks`) |
-| eval | RAGAs eval + guard live; baseline `ragas_20260531_122639.json`; faithfulness gate `>= 0.85` |
-| frontend | Vite+React; chat/citation viewer; document browser; upload UX; address autocomplete; conflict warnings panel; Cognito auth (email+password, Google SSO, TOTP 2FA) |
+| db | pgvector + PostGIS live; migrations 001–014 applied (local + RDS) |
+| rag | Hybrid retrieval (default off); faithfulness gate 0.85 PASS |
+| api | All routes under `/api/*`; root `/health` kept for ALB probes |
+| graph | Neo4j sync; citation signals via BackgroundTask |
+| eval | avg faithfulness **0.910** ✅ |
+| frontend | `/api` prefix in `api.js`; Vite proxy `/api` → backend |
 
 ## Current operational snapshot
 
-- Vector DB: Postgres + pgvector (`chunks.embedding vector(768)`) + PostGIS (durable Docker image)
-- DB roles: `corpus_writer` (ingestion), `app_reader` (API reads + query_log)
-- Neo4j: `bolt://localhost:7687`, 23 Document nodes, 17,242 Chunk nodes, 7 Municipality nodes, 3 AuthorityLevel nodes
-- Graph sync: `py -m scripts.sync_graph` (supports `--dry-run`, `--municipality`, `--doc-id`)
-- Docs corpus: 13 active · 0 superseded · 10 ingested · 7,170 chunks + embeddings
+- **Local corpus:** 13 active docs · 7,170 chunks + embeddings
+- **Prod corpus:** ingested (2026-07-06) — verify via `GET /api/documents` or `py -m evaluation.prod_preflight`
+- **Vector DB:** Postgres + pgvector on Docker (local) / RDS (prod)
+- **Neo4j:** 23 Document nodes, 17,242 Chunk nodes (local sync baseline)
+- **Auth:** Cognito RS256; Google SSO + TOTP MFA optional
+- **Site:** `https://permits.scottsalhanick.com`
 
 ## Quality gates
 
-- Latest eval: `evaluation/results/ragas_20260616_143411.json` _(Sprint 6/7 checkpoint)_
-  - avg faithfulness `0.910` ✅ (gate: `>= 0.85`)
-  - avg relevancy `0.689` ✅ | avg context precision `0.654`
-  - q1 faithfulness `0.875` (baseline `0.600`) ✅
+- Latest eval: `evaluation/results/ragas_20260616_143411.json`
+  - avg faithfulness **0.910** ✅ (gate: >= 0.85)
 - Eval guard: **PASS** — `py -m evaluation.eval_guard`
-- Cache policy: `RAGAS_ANSWER_CACHE_ENABLED=false` for all eval runs
-
-## Sprint 11 deliverables (closed)
-
-- [x] DB migration `013_cognito_auth.sql` — TRUNCATE users, drop `password_hash`/`refresh_token_hash`/`token_family`, add `cognito_sub TEXT UNIQUE NOT NULL`
-- [x] `api/auth.py` — full rewrite: `verify_cognito_token()` with cached JWKS, `get_current_user` lazy-provisions RDS row via `get_or_create_cognito_user()`
-- [x] `api/routes/auth.py` — stripped to `GET /auth/me` only
-- [x] `db/client.py` — replaced 5 password-based helpers with `get_or_create_cognito_user()` (email fallback for account linking)
-- [x] `pyproject.toml` — swapped `argon2-cffi` + `PyJWT` + `phonenumbers` → `python-jose[cryptography]`
-- [x] `frontend/src/context/AuthContext.jsx` — Cognito SDK: email+password, Google SSO redirect, TOTP MFA challenge + enrollment, auto-refresh via `getSession()`
-- [x] `frontend/src/AuthPage.jsx` — 5-screen state machine: login, register, email confirm, MFA challenge, MFA setup QR
-- [x] `frontend/src/AuthCallback.jsx` — new file: handles `/auth/callback` OAuth2 code exchange
-- [x] `frontend/src/main.jsx` — added `/auth/callback` route
-- [x] `frontend/src/api.js` — `registerTokenRefresher` callback, removed custom `/auth/refresh` logic
-- [x] `scripts/run_migration.py` — utility for applying SQL migration files
-- [x] `tests/test_sprint9.py` — replaced Argon2id/JWT unit tests with `TestCognitoVerification`; updated `auth_headers` fixture
-
-## Active decisions
-
-- **Governance**: documents never deleted — `active/superseded/repealed/needs_ocr/draft` lifecycle only.
-- **Retrieval**: hybrid dense+BM25 enabled by default; env toggle for rollback.
-- **Auth**: Cognito RS256 JWKS verification (`python-jose`). JWKS cached 1 hour, re-fetched on unknown `kid`. `get_current_user` lazy-provisions RDS row on first login. Google SSO via Authorization code grant + Cognito hosted UI. TOTP MFA optional (user self-enrolls).
-- **Security**: admin routes require token + role allowlist (`API_ADMIN_AUTH_REQUIRED=true`). Rotate `API_ADMIN_TOKEN` every 30 days.
-- **Purge tiers**: `source_tier=3` purge = normal admin; lower tiers need `API_PURGE_ANY_TIER_ROLES`.
-- **CORS**: env-driven allowlist (`API_CORS_ALLOW_ORIGINS`); wildcard only via `API_CORS_ALLOW_ALL=true`.
-- **DB roles**: rotate passwords before any shared deployment; prod → Supabase service_role/anon RLS.
-- **Graph health**: `graph_health` in `/health` is additive — Neo4j down does not flip `status` to `unhealthy`.
-- **Graph citation signals**: `record_cited_chunks()` fires as `BackgroundTask` after `/query/answer` — zero latency impact; non-raising.
-- **Hybrid retrieval**: `RETRIEVAL_HYBRID_ENABLED=false` default retained — BM25 A/B eval showed hybrid faithfulness `0.810` < gate `0.850` (dense-only `0.910`). Relevancy improved +0.127 but faithfulness gap is disqualifying. Future path: tune `RETRIEVAL_RRF_BM25_WEIGHT < 1.0`.
-- **Eval baseline**: do not change baseline file without a deliberate sprint gate review.
-
-## Sprint 8 deliverables (closed)
-
-- [x] Task 16F: `record_cited_chunks()` in `db/graph_client.py` — `(:Query)-[:CITED]->(:Chunk)` edges; stamps `last_cited_at`, `last_cited_query`, `citation_count` on cited Chunk nodes
-- [x] Task 16F: wired via `BackgroundTasks` in `api/routes/query.py` — fires after HTTP response, zero latency impact
-- [x] `tests/test_sprint8.py` — 12 tests → **72 total** ✅
-- [x] Live validation: `GET /health` → `graph_health=True` ✅ | eval guard PASS ✅
-- [x] BM25 A/B eval: hybrid faithfulness `0.810` < gate `0.850` — dense-only `RETRIEVAL_HYBRID_ENABLED=false` retained
-## Sprint 10 deliverables (closed)
-
-- [x] Responsive layout styling for mobile, tablet, and desktop viewports using industry-standard rem breakpoints.
-- [x] Collapsible responsive navigation bar (`Nav.jsx` with burger toggle state and header wrapper).
-- [x] Table horizontal scroll wrapper (`doc-table-wrap`) applied across all data tables (Document Browser and Projects panels).
-- [x] Touch target size optimizations to meet WCAG AAA accessibility conformance (minimum 44px height for all buttons, inputs, links, list elements, and autocomplete options).
-- [x] Mapbox Search Box API integration: implemented required session_token UUID generation and rotation logic to support address geocoding suggestions and retrievals.
-
-## Sprint 9 deliverables (closed)
-
-- [x] JWT Auth & Verification primitives (`api/auth.py`) — Argon2id password hashing, E.164 phone formatting, strict visual-safety username validation rules.
-- [x] Session & JWT Tokens — access and refresh tokens, refresh token hashing in DB, token family rotation (reuse prevention), logout-all-sessions.
-- [x] Project CRUD & Lifecycle — Projects table, project members table with roles (owner, editor, viewer), ownership transfer, cascading deletion.
-- [x] Document Sharing & Binding — Project documents join table, RBAC checks on sharing, binding on upload (via optional project_id form field).
-- [x] Query History & Deletion — Private, user-scoped query history logging and single-query deletion controls.
-- [x] React Frontend Integration — Wired JWT login/register, token auto-refresh interceptor, project workspace manager, collaborator role controls, query histories, and document management.
-- [x] `tests/test_sprint9.py` — 21 tests → **93 total** ✅
-
-## Sprint 7 deliverables (closed)
-
-- [x] Task 16D: `graph_health: bool` in `GET /health` — non-blocking `ping()`, additive only
-- [x] Task 16E: `find_cross_authority_conflicts()` Cypher traversal in `db/graph_client.py`
-- [x] Task 16E: `detect_conflicts_with_graph()` in `rag/conflict_detector.py` — graph Tier B path with lightweight fallback
-- [x] `tests/test_sprint7.py` — 20 tests → **60 total** ✅
-
-_For full per-task history see journals/session_260616a.md (Sprint 6), journals/session_260616b.md (Sprint 7), journals/session_260616c.md (Sprint 8 Task 16F)._
+- Hybrid retrieval: **OFF** (`RETRIEVAL_HYBRID_ENABLED=false`) — faithfulness 0.810 when on
 
 ## Canonical validation commands
 
 ```powershell
-# 1. Full test suite
-py -m pytest tests/test_sprint5.py tests/test_sprint6.py tests/test_sprint7.py tests/test_sprint8.py tests/test_sprint9.py -v
+# Activate venv first
+.\.venv\Scripts\Activate.ps1
 
-# 2. Health check (API must be running)
+# 1. Full test suite
+py -m pytest tests/test_sprint5.py tests/test_sprint6.py tests/test_sprint7.py tests/test_sprint8.py tests/test_sprint9.py tests/test_api_main.py tests/test_documents_routes.py tests/test_query_answer_route.py tests/test_purge_project_uploads_script.py -v
+
+# 2. Frontend unit tests
+cd frontend; npm run test
+
+# 3. Prod corpus preflight
+$env:ENVIRONMENT="production"; py -m evaluation.prod_preflight
+
+# 4. Health check (ALB probe path — unchanged)
 Invoke-RestMethod -Uri "http://localhost:8000/health" -Method Get
 
-# 3. Eval guard (no regression)
+# 5. Eval guard
 py -m evaluation.eval_guard
-
-# 4. Full RAGAs eval export
-$env:RAGAS_ANSWER_CACHE_ENABLED="false"; py -m evaluation.ragas_eval --export
-
-# 5. Graph sync dry-run
-py -m scripts.sync_graph --dry-run
-
-# 6. BM25 A/B eval (Sprint 8)
-$env:RETRIEVAL_HYBRID_ENABLED="true"; $env:RAGAS_ANSWER_CACHE_ENABLED="false"; py -m evaluation.ragas_eval --export
-
-# 7. Frontend tests
-cd frontend; npm run test
 ```
-

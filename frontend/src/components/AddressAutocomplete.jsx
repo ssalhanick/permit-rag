@@ -174,7 +174,7 @@ export default function AddressAutocomplete({
           aria-label="Project address"
         />
         <small className="text-slate-400 mt-1 block">
-          Address autocomplete: set VITE_MAPBOX_TOKEN in frontend/.env to enable.
+          Enter the full street address including city and state.
         </small>
       </div>
     );

@@ -93,7 +93,7 @@ def main() -> None:
 
     log.info("[4/4] Verifying RDS counts...")
     _verify_counts()
-    log.info("Done. Smoke test: GET https://permits.scottsalhanick.com/documents (should not be []).")
+    log.info("Done. Smoke test: GET https://permits.scottsalhanick.com/api/documents (should not be []).")
 
 
 if __name__ == "__main__":

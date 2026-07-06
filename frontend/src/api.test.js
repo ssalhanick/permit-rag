@@ -21,7 +21,7 @@ test("fetchDocuments sends query filters", async () => {
     doc_type: "zoning_ordinance",
   });
 
-  assert.ok(calledUrl.includes("/documents?"));
+  assert.ok(calledUrl.includes("/api/documents?"));
   assert.ok(calledUrl.includes("municipality=dallas"));
   assert.ok(calledUrl.includes("status=active"));
   assert.ok(calledUrl.includes("authority=municipal"));
@@ -40,7 +40,7 @@ test("fetchDocumentStatus calls status endpoint", async () => {
   };
 
   await fetchDocumentStatus({ municipality: "plano" });
-  assert.ok(calledUrl.includes("/documents/status?municipality=plano"));
+  assert.ok(calledUrl.includes("/api/documents/status?municipality=plano"));
 });
 
 test("requestJson rejects HTML body masquerading as success", async () => {

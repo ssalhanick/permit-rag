@@ -52,7 +52,7 @@ def build_purge_request(
     admin_user: str,
 ) -> Request:
     """Build HTTP request object for purge endpoint."""
-    endpoint = f"{api_base_url.rstrip('/')}/admin/documents/{doc_id}/purge-project-upload"
+    endpoint = f"{api_base_url.rstrip('/')}/api/admin/documents/{doc_id}/purge-project-upload"
     return Request(
         endpoint,
         method="POST",

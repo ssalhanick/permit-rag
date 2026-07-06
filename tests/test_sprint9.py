@@ -139,13 +139,27 @@ class TestProjectsAPI:
         """POST /projects establishes owner and returns project representation."""
         uid = auth_headers["_uid"]
 
-        def _fake_create(*, name, owner_user_id, description=None, municipality=None):
+        def _fake_create(
+            *,
+            name,
+            owner_user_id,
+            description=None,
+            municipality=None,
+            address=None,
+            spaces=None,
+            work_types=None,
+            recommended_permits=None,
+        ):
             return {
                 "id": uuid4(),
                 "name": name,
                 "owner_user_id": owner_user_id,
                 "description": description,
                 "municipality": municipality,
+                "address": address,
+                "spaces": spaces,
+                "work_types": work_types,
+                "recommended_permits": recommended_permits,
                 "is_active": True,
                 "created_at": datetime.now(timezone.utc),
                 "updated_at": datetime.now(timezone.utc),
@@ -155,7 +169,7 @@ class TestProjectsAPI:
 
         client = TestClient(app)
         resp = client.post(
-            "/projects/",
+            "/api/projects/",
             headers={"Authorization": auth_headers["Authorization"]},
             json={"name": "Pool Project", "municipality": "dallas"},
         )
@@ -186,7 +200,7 @@ class TestProjectsAPI:
 
         client = TestClient(app)
         resp = client.post(
-            f"/projects/{pid}/transfer",
+            f"/api/projects/{pid}/transfer",
             headers={"Authorization": auth_headers["Authorization"]},
             json={"new_owner_id": str(new_owner_uid)},
         )
@@ -202,7 +216,7 @@ class TestProjectsAPI:
 
         client = TestClient(app)
         resp = client.delete(
-            f"/projects/{pid}",
+            f"/api/projects/{pid}",
             headers={"Authorization": auth_headers["Authorization"]},
         )
         assert resp.status_code == 403
@@ -228,7 +242,7 @@ class TestProjectsAPI:
 
         client = TestClient(app)
         resp = client.post(
-            f"/projects/{pid}/documents",
+            f"/api/projects/{pid}/documents",
             headers={"Authorization": auth_headers["Authorization"]},
             json={"document_id": str(did)},
         )
@@ -262,7 +276,7 @@ class TestQueryHistoryAPI:
 
         client = TestClient(app)
         resp = client.get(
-            "/query/history",
+            "/api/query/history",
             headers={"Authorization": auth_headers["Authorization"]},
         )
         assert resp.status_code == 200
@@ -281,7 +295,7 @@ class TestQueryHistoryAPI:
 
         client = TestClient(app)
         resp = client.delete(
-            f"/query/history/{qid}",
+            f"/api/query/history/{qid}",
             headers={"Authorization": auth_headers["Authorization"]},
         )
         assert resp.status_code == 200
@@ -293,7 +307,7 @@ class TestQueryHistoryAPI:
 
         client = TestClient(app)
         resp = client.delete(
-            f"/query/history/{qid}",
+            f"/api/query/history/{qid}",
             headers={"Authorization": auth_headers["Authorization"]},
         )
         assert resp.status_code == 404

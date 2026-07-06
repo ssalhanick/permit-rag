@@ -16,6 +16,8 @@ export function registerTokenRefresher(fn) {
 }
 
 const DEFAULT_BASE_URL = "http://localhost:8000";
+/** All backend routes live under /api so SPA paths (/projects, /documents, /auth) never collide at CloudFront. */
+export const API_PREFIX = "/api";
 // When VITE_API_BASE_URL is explicitly set (even to ""), use it. Blank string
 // means "same origin" so the Vite dev-server proxy handles routing to the backend.
 const API_BASE_URL =
@@ -26,6 +28,13 @@ const API_BASE_URL =
           window.location.hostname === "127.0.0.1")
       ? DEFAULT_BASE_URL
       : "";
+
+function resolveApiPath(path) {
+  if (path.startsWith("/api")) {
+    return path;
+  }
+  return `${API_PREFIX}${path}`;
+}
 
 function safeJsonParse(text) {
   if (!text) {
@@ -51,7 +60,7 @@ export async function requestJson(path, options = {}) {
     headers["Authorization"] = `Bearer ${token}`;
   }
 
-  let response = await fetch(`${API_BASE_URL}${path}`, {
+  let response = await fetch(`${API_BASE_URL}${resolveApiPath(path)}`, {
     method: options.method || "GET",
     headers,
     body: options.body ? JSON.stringify(options.body) : undefined,
@@ -63,7 +72,7 @@ export async function requestJson(path, options = {}) {
       const newToken = await _tokenRefresher();
       if (newToken) {
         headers["Authorization"] = `Bearer ${newToken}`;
-        response = await fetch(`${API_BASE_URL}${path}`, {
+        response = await fetch(`${API_BASE_URL}${resolveApiPath(path)}`, {
           method: options.method || "GET",
           headers,
           body: options.body ? JSON.stringify(options.body) : undefined,
@@ -116,7 +125,7 @@ export async function requestJson(path, options = {}) {
 }
 
 export async function fetchHealth(headers = {}) {
-  const result = await requestJson("/health", { headers });
+  const result = await requestJson("/api/health", { headers });
   return result;
 }
 

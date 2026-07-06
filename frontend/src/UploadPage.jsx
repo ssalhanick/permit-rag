@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
-import { API_BASE_URL, fetchProjects } from "./api.js";
+import { API_BASE_URL, API_PREFIX, fetchProjects } from "./api.js";
 import { useAuth } from "./context/AuthContext.jsx";
 import { formatUploadError, getUploadBlockers, suggestDocIdFromFilename } from "./uploadUtils.js";
 import { getStoredAdminToken, setStoredAdminToken } from "./documentAdminUtils.js";
@@ -111,7 +111,7 @@ export default function UploadPage() {
     }
 
     try {
-      const res = await fetch(`${API_BASE_URL}/admin/documents/upload`, {
+      const res = await fetch(`${API_BASE_URL}${API_PREFIX}/admin/documents/upload`, {
         method: "POST",
         headers: { "X-Admin-Token": adminToken.trim() },
         body,
@@ -172,7 +172,7 @@ export default function UploadPage() {
                 Chunking and embedding are running in the background.
                 Poll{" "}
                 <a
-                  href={`${API_BASE_URL}/documents/${result.doc_id}`}
+                  href={`${API_BASE_URL}${API_PREFIX}/documents/${result.doc_id}`}
                   target="_blank"
                   rel="noopener noreferrer"
                 >

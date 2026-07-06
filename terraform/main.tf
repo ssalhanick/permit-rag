@@ -595,10 +595,10 @@ resource "aws_cloudfront_distribution" "cdn" {
     }
   }
 
-  # Order Cache Behaviors: Route all backend paths directly to the ALB (bypass caching)
-  # Dynamic behaviors to forward API routes to ECS backend
-  
-  # 1. /health Endpoint
+  # Order Cache Behaviors: Route API paths to ALB; SPA paths (/projects, /documents, /auth) stay on S3.
+  # All FastAPI routes are namespaced under /api (P0-4 fix).
+
+  # 1. /health — ALB health probes and boot scripts (root path kept for ECS target group)
   ordered_cache_behavior {
     path_pattern     = "/health"
     allowed_methods  = ["GET", "HEAD", "OPTIONS", "PUT", "POST", "PATCH", "DELETE"]
@@ -619,93 +619,9 @@ resource "aws_cloudfront_distribution" "cdn" {
     max_ttl                = 0
   }
 
-  # 2. /query* Endpoints
+  # 2. /api* — all backend routes (query, documents, projects, auth/me, admin, upload)
   ordered_cache_behavior {
-    path_pattern     = "/query*"
-    allowed_methods  = ["GET", "HEAD", "OPTIONS", "PUT", "POST", "PATCH", "DELETE"]
-    cached_methods   = ["GET", "HEAD"]
-    target_origin_id = "ALB-Backend"
-
-    forwarded_values {
-      query_string = true
-      headers      = ["*"]
-      cookies {
-        forward = "all"
-      }
-    }
-
-    viewer_protocol_policy = "redirect-to-https"
-    min_ttl                = 0
-    default_ttl            = 0
-    max_ttl                = 0
-  }
-
-  # 3. /documents* Endpoints
-  ordered_cache_behavior {
-    path_pattern     = "/documents*"
-    allowed_methods  = ["GET", "HEAD", "OPTIONS", "PUT", "POST", "PATCH", "DELETE"]
-    cached_methods   = ["GET", "HEAD"]
-    target_origin_id = "ALB-Backend"
-
-    forwarded_values {
-      query_string = true
-      headers      = ["*"]
-      cookies {
-        forward = "all"
-      }
-    }
-
-    viewer_protocol_policy = "redirect-to-https"
-    min_ttl                = 0
-    default_ttl            = 0
-    max_ttl                = 0
-  }
-
-  # 4. /auth* Endpoints
-  ordered_cache_behavior {
-    path_pattern     = "/auth*"
-    allowed_methods  = ["GET", "HEAD", "OPTIONS", "PUT", "POST", "PATCH", "DELETE"]
-    cached_methods   = ["GET", "HEAD"]
-    target_origin_id = "ALB-Backend"
-
-    forwarded_values {
-      query_string = true
-      headers      = ["*"]
-      cookies {
-        forward = "all"
-      }
-    }
-
-    viewer_protocol_policy = "redirect-to-https"
-    min_ttl                = 0
-    default_ttl            = 0
-    max_ttl                = 0
-  }
-
-  # 5. /projects* Endpoints
-  ordered_cache_behavior {
-    path_pattern     = "/projects*"
-    allowed_methods  = ["GET", "HEAD", "OPTIONS", "PUT", "POST", "PATCH", "DELETE"]
-    cached_methods   = ["GET", "HEAD"]
-    target_origin_id = "ALB-Backend"
-
-    forwarded_values {
-      query_string = true
-      headers      = ["*"]
-      cookies {
-        forward = "all"
-      }
-    }
-
-    viewer_protocol_policy = "redirect-to-https"
-    min_ttl                = 0
-    default_ttl            = 0
-    max_ttl                = 0
-  }
-
-  # 6. /admin* Endpoints
-  ordered_cache_behavior {
-    path_pattern     = "/admin*"
+    path_pattern     = "/api*"
     allowed_methods  = ["GET", "HEAD", "OPTIONS", "PUT", "POST", "PATCH", "DELETE"]
     cached_methods   = ["GET", "HEAD"]
     target_origin_id = "ALB-Backend"

@@ -122,7 +122,7 @@ def test_query_answer_returns_multi_permit_types_and_citations(monkeypatch) -> N
     try:
         client = TestClient(app)
         response = client.post(
-            "/query/answer",
+            "/api/query/answer",
             json={"query": "garage addition with panel and bathroom", "top_k": 5, "municipality": "dallas"},
         )
 
@@ -162,7 +162,7 @@ def test_query_answer_classifier_failure_falls_back_to_empty_list(monkeypatch) -
     try:
         client = TestClient(app)
         response = client.post(
-            "/query/answer",
+            "/api/query/answer",
             json={"query": "garage addition with panel and bathroom", "top_k": 5, "municipality": "dallas"},
         )
 
@@ -200,7 +200,7 @@ def test_query_answer_empty_corpus_returns_422(monkeypatch) -> None:
     try:
         client = TestClient(app)
         response = client.post(
-            "/query/answer",
+            "/api/query/answer",
             json={"query": "fence permit in Dallas", "top_k": 5},
         )
         assert response.status_code == 422

@@ -10,14 +10,8 @@ export default defineConfig({
   server: {
     port: 5173,
     proxy: {
-      // Proxy only specific backend API routes — NOT /auth/callback (React Router owns that)
-      "/auth/me": "http://localhost:8000",
-      "/query": "http://localhost:8000",
-      "/documents": "http://localhost:8000",
-      "/projects": "http://localhost:8000",
-      "/health": "http://localhost:8000",
-      "/upload": "http://localhost:8000",
-      "/admin": "http://localhost:8000",
+      // All backend routes under /api — SPA owns /auth/callback, /projects, /documents, etc.
+      "/api": "http://localhost:8000",
     },
   },
   define: {

@@ -13,12 +13,15 @@ from scripts.purge_project_uploads import (
 )
 
 
-def test_load_doc_ids_merges_file_and_args(tmp_path: Path) -> None:
+def test_load_doc_ids_merges_file_and_args() -> None:
     """load_doc_ids should merge, trim, and dedupe values."""
-    path = tmp_path / "ids.txt"
-    path.write_text("doc-a\n#comment\ndoc-b\ndoc-a\n", encoding="utf-8")
-    result = load_doc_ids([" doc-c ", "doc-b"], str(path))
-    assert result == ["doc-c", "doc-b", "doc-a"]
+    path = Path(__file__).resolve().parent / "_purge_ids_test.txt"
+    try:
+        path.write_text("doc-a\n#comment\ndoc-b\ndoc-a\n", encoding="utf-8")
+        result = load_doc_ids([" doc-c ", "doc-b"], str(path))
+        assert result == ["doc-c", "doc-b", "doc-a"]
+    finally:
+        path.unlink(missing_ok=True)
 
 
 def test_resolve_admin_token_prefers_cli(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -38,7 +41,7 @@ def test_build_purge_request_contains_headers() -> None:
     """Request should target purge endpoint with auth headers."""
     request = build_purge_request("http://localhost:8000/", "doc-1", "tkn", "admin", "alice")
     assert request.get_method() == "POST"
-    assert request.full_url.endswith("/admin/documents/doc-1/purge-project-upload")
+    assert request.full_url.endswith("/api/admin/documents/doc-1/purge-project-upload")
     assert request.headers["X-admin-token"] == "tkn"
     assert request.headers["X-admin-role"] == "admin"
     assert request.headers["X-admin-user"] == "alice"
