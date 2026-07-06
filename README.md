@@ -590,7 +590,13 @@ py -m rag.pipeline --top-k 10 "What are the ADA accessibility requirements for c
 py -m rag.pipeline --municipality plano --top-k 10 "What are the building permit requirements in Plano?"
 py -m rag.pipeline --municipality dallas --top-k 10 "What are the fire sprinkler requirements for new construction in Dallas?"
 
-# Focused RAGAs pass then full suite
+# Production RDS preflight (run before RAGAs against prod corpus from laptop)
+$env:ENVIRONMENT="production"; py -m evaluation.prod_preflight
+
+# Production RAGAs faithfulness eval (uses DATABASE_URL from .env.production + secrets from .env)
+$env:ENVIRONMENT="production"; $env:LLM_PROVIDER="anthropic"; $env:LLM_MODEL="claude-haiku-4-5-20251001"; $env:RETRIEVAL_HYBRID_ENABLED="false"; $env:RAGAS_ANSWER_CACHE_ENABLED="false"; py -m evaluation.ragas_eval --export
+
+# Focused RAGAs pass then full suite (local Docker Postgres)
 $env:RAGAS_ANSWER_CACHE_ENABLED="false"; py -m evaluation.ragas_eval --query 0 1 2 3 5 --export
 $env:RAGAS_ANSWER_CACHE_ENABLED="false"; py -m evaluation.ragas_eval --export
 
@@ -610,6 +616,7 @@ Notes:
 - Hybrid mode is rollback-safe: set `RETRIEVAL_HYBRID_ENABLED=false` to return to dense-only retrieval immediately.
 - As of 2026-05-31 latest full run (`ragas_20260531_102544.json`), hybrid faithfulness is `0.852` (gate pass), but q1 remains unstable; keep `RETRIEVAL_HYBRID_ENABLED=false` by default until one more confirmatory full run.
 - `evaluation.eval_guard` defaults to baseline `evaluation/results/ragas_20260531_122639.json` and fails if avg faithfulness drops below `0.85` or q1 faithfulness drops by more than `0.10`.
+- `evaluation.prod_preflight` loads `.env.production` when `ENVIRONMENT=production`, verifies the URL is prod RDS (not localhost), prints document/chunk counts, exits `1` if the corpus is empty. Run it before prod RAGAs eval; it does not call the live HTTPS site — it reads the same RDS corpus the API uses.
 - Keep `STATE.md` as a compact current snapshot; store dated metric timelines and per-run deltas in `journals/` session logs.
 
 RAGAs metric definitions used in this repo:
