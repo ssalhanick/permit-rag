@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { useAuth } from "./context/AuthContext.jsx";
+import ProjectKickoffSummary from "./components/ProjectKickoffSummary.jsx";
 import {
   fetchProjects,
   createProject,
@@ -289,7 +290,10 @@ export default function ProjectsPage() {
                     className={`project-list-item-btn ${active ? "active" : ""}`}
                     onClick={() => selectProject(p)}
                   >
-                    <strong>{p.name}</strong>
+                    <span className="project-list-item-text">
+                      <strong>{p.name}</strong>
+                      {p.address && <span className="kickoff-project-address">{p.address}</span>}
+                    </span>
                     {p.municipality && <span className="muni-badge">{p.municipality}</span>}
                   </button>
                 </li>
@@ -359,6 +363,8 @@ export default function ProjectsPage() {
                   </code>
                 </div>
               </div>
+
+              <ProjectKickoffSummary project={selectedProj} />
 
               {error && <div className="error-box" style={{ marginTop: "14px" }}>{error}</div>}
               {success && <div className="success-box" style={{ marginTop: "14px" }}>{success}</div>}

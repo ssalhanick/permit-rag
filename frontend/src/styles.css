@@ -849,6 +849,23 @@ button:disabled {
   font-size: 0.9rem;
 }
 
+.project-list-item-text {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+  min-width: 0;
+}
+
+.project-kickoff-summary {
+  margin: -8px 0 24px;
+}
+
+.project-kickoff-empty {
+  margin: -8px 0 24px;
+  font-size: 0.9rem;
+}
+
 .project-section {
   border-top: 1px solid #f1f5f9;
   padding-top: 20px;
