@@ -1,0 +1,12 @@
+{
+  "name": "room-capture",
+  "version": "0.1.0",
+  "description": "Capacitor plugin — RoomPlan / ARCore room capture to JSON schema v1.0",
+  "main": "dist/plugin.cjs.js",
+  "module": "dist/esm/index.js",
+  "types": "dist/esm/index.d.ts",
+  "capacitor": {
+    "ios": { "src": "ios" },
+    "android": { "src": "android" }
+  }
+}

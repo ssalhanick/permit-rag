@@ -7,6 +7,14 @@ import {
 } from "amazon-cognito-identity-js";
 import { registerTokenRefresher, requestJson } from "../api.js";
 import { usernameFromEmail } from "../authUsername.js";
+import {
+  closeOAuthBrowser,
+  exchangeOAuthCode,
+  parseOAuthCallbackUrl,
+  registerOAuthDeepLink,
+  startOAuthLogin,
+} from "../mobileAuth.js";
+import { isNativePlatform } from "../platform.js";
 
 // ── Cognito User Pool singleton ───────────────────────────────
 
@@ -353,21 +361,18 @@ export function AuthProvider({ children }) {
   // ── Google SSO ────────────────────────────────────────────────
 
   /**
-   * Redirect the browser to Cognito's hosted UI for Google sign-in.
-   * After Google auth, Cognito redirects to /auth/callback with ?code=.
+   * Redirect to Cognito hosted UI for Google sign-in.
+   * Uses system browser on native (Capacitor).
    */
-  const loginWithGoogle = useCallback(() => {
-    const domain = import.meta.env.VITE_COGNITO_DOMAIN;
-    const clientId = import.meta.env.VITE_COGNITO_APP_CLIENT_ID;
-    const redirectUri = encodeURIComponent(`${window.location.origin}/auth/callback`);
-    const url =
-      `https://${domain}/oauth2/authorize` +
-      `?response_type=code` +
-      `&client_id=${clientId}` +
-      `&redirect_uri=${redirectUri}` +
-      `&identity_provider=Google` +
-      `&scope=email+openid+profile`;
-    window.location.href = url;
+  const loginWithGoogle = useCallback(async () => {
+    await startOAuthLogin({ identityProvider: "Google" });
+  }, []);
+
+  /**
+   * Sign in with Apple via Cognito identity provider (required on iOS when Google exists).
+   */
+  const loginWithApple = useCallback(async () => {
+    await startOAuthLogin({ identityProvider: "SignInWithApple" });
   }, []);
 
   /**
@@ -381,6 +386,37 @@ export function AuthProvider({ children }) {
     setUser(profile);
     return profile;
   }, []);
+
+  // ── Native OAuth deep-link handler (Google / Apple) ───────────
+
+  useEffect(() => {
+    if (!isNativePlatform()) {
+      return undefined;
+    }
+    let cleanup = () => {};
+    registerOAuthDeepLink(async (url) => {
+      const { code, error } = parseOAuthCallbackUrl(url);
+      if (error) {
+        console.error("[AuthContext] OAuth deep link error:", error);
+        return;
+      }
+      if (!code) {
+        return;
+      }
+      try {
+        const tokens = await exchangeOAuthCode(code);
+        await handleOAuthCallback(tokens.id_token, tokens.access_token, tokens.refresh_token);
+        await closeOAuthBrowser();
+        window.location.hash = "#/kickoff";
+        window.dispatchEvent(new HashChangeEvent("hashchange"));
+      } catch (err) {
+        console.error("[AuthContext] OAuth token exchange failed:", err);
+      }
+    }).then((fn) => {
+      cleanup = fn;
+    });
+    return () => cleanup();
+  }, [handleOAuthCallback]);
 
   // ── Logout ────────────────────────────────────────────────────
 
@@ -407,6 +443,7 @@ export function AuthProvider({ children }) {
         forgotPassword,
         confirmForgotPassword,
         loginWithGoogle,
+        loginWithApple,
         handleOAuthCallback,
         logout,
       }}

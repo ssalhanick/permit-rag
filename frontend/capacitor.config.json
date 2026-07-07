@@ -1,0 +1,13 @@
+{
+  "appId": "com.scottsalhanick.permitrag",
+  "appName": "Permit RAG",
+  "webDir": "dist",
+  "server": {
+    "androidScheme": "https"
+  },
+  "plugins": {
+    "PushNotifications": {
+      "presentationOptions": ["badge", "sound", "alert"]
+    }
+  }
+}

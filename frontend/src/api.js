@@ -1,4 +1,5 @@
 import { buildAdminHeaders } from "./documentAdminUtils.js";
+import { getPlatformName, isNativePlatform } from "./platform.js";
 
 // Mock localStorage for non-browser testing environments (e.g. Node runner)
 if (typeof localStorage === "undefined") {
@@ -47,14 +48,23 @@ function safeJsonParse(text) {
   }
 }
 
+function buildDefaultHeaders(extra = {}) {
+  const headers = {
+    "Content-Type": "application/json",
+    ...extra,
+  };
+  if (isNativePlatform()) {
+    headers["X-Client-Tier"] = "mobile";
+    headers["X-Client-Platform"] = getPlatformName();
+  }
+  return headers;
+}
+
 export async function requestJson(path, options = {}) {
   const startedAt = Date.now();
   const requestId = options.requestId || `req-${startedAt}`;
   
-  let headers = {
-    "Content-Type": "application/json",
-    ...(options.headers || {}),
-  };
+  let headers = buildDefaultHeaders(options.headers || {});
   const token = localStorage.getItem("access_token");
   if (token && !headers["Authorization"]) {
     headers["Authorization"] = `Bearer ${token}`;
@@ -136,6 +146,25 @@ export async function fetchAnswer(payload, headers = {}) {
     headers,
   });
   return result;
+}
+
+export async function fetchCorpusSync(municipality) {
+  const query = municipality ? `?municipality=${encodeURIComponent(municipality)}` : "";
+  return await requestJson(`/corpus/sync${query}`);
+}
+
+export async function postAssetSyncAck(projectId, payload) {
+  return await requestJson(`/projects/${projectId}/assets/sync-ack`, {
+    method: "POST",
+    body: payload,
+  });
+}
+
+export async function patchProjectRoomSummary(projectId, roomSummary) {
+  return await requestJson(`/projects/${projectId}/room-summary`, {
+    method: "PATCH",
+    body: { room_summary: roomSummary },
+  });
 }
 
 function buildDocumentQuery(filters = {}) {

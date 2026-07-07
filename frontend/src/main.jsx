@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useEffect } from "react";
 import ReactDOM from "react-dom/client";
 import { BrowserRouter, Navigate, Route, Routes } from "react-router-dom";
 import App from "./App.jsx";
@@ -15,16 +15,32 @@ import ProfileDocumentsPage from "./profile/pages/ProfileDocumentsPage.jsx";
 import ProfileAccountPage from "./profile/pages/ProfileAccountPage.jsx";
 import ProtectedRoute from "./components/ProtectedRoute.jsx";
 import NotFoundPage from "./components/NotFoundPage.jsx";
+import OfflineBanner from "./components/OfflineBanner.jsx";
+import BiometricGate from "./components/BiometricGate.jsx";
 import Nav from "./Nav.jsx";
 import { AuthProvider } from "./context/AuthContext.jsx";
+import { initPushNotifications } from "./services/pushNotifications.js";
+import { isNativePlatform } from "./platform.js";
 import "./styles.css";
+
+function MobileBootstrap() {
+  useEffect(() => {
+    if (isNativePlatform()) {
+      initPushNotifications();
+    }
+  }, []);
+  return null;
+}
 
 ReactDOM.createRoot(document.getElementById("root")).render(
   <React.StrictMode>
     <BrowserRouter>
       <AuthProvider>
-        <Nav />
-        <Routes>
+        <MobileBootstrap />
+        <OfflineBanner />
+        <BiometricGate>
+          <Nav />
+          <Routes>
           <Route path="/" element={<App />} />
           <Route
             path="/documents"
@@ -75,7 +91,8 @@ ReactDOM.createRoot(document.getElementById("root")).render(
           <Route path="/auth" element={<AuthPage />} />
           <Route path="/auth/callback" element={<AuthCallback />} />
           <Route path="*" element={<NotFoundPage />} />
-        </Routes>
+          </Routes>
+        </BiometricGate>
       </AuthProvider>
     </BrowserRouter>
   </React.StrictMode>,

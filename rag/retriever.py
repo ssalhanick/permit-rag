@@ -340,3 +340,101 @@ def retrieve(
     )
 
     return result
+
+
+def retrieve_with_project(
+    query: str,
+    *,
+    project_id: str | None = None,
+    top_k: int = 5,
+    municipality: str | None = None,
+    min_similarity: float = 0.0,
+) -> RetrievalResult:
+    """
+    Retrieve corpus chunks and merge project mini-RAG when project_id is set.
+
+    Args:
+        query: User question.
+        project_id: Optional project UUID string for tier 2/3 scope.
+        top_k: Max merged chunks.
+        municipality: Optional municipality filter for corpus tier.
+        min_similarity: Similarity floor.
+
+    Returns:
+        RetrievalResult with merged chunks.
+    """
+    from uuid import UUID
+
+    from rag.mini_rag import merge_corpus_and_project, retrieve_project_chunks
+
+    result = retrieve(
+        query,
+        top_k=top_k,
+        municipality=municipality,
+        min_similarity=min_similarity,
+    )
+    if not project_id:
+        return result
+    try:
+        pid = UUID(project_id)
+    except ValueError:
+        log.warning("Invalid project_id for mini-RAG: %s", project_id)
+        return result
+    project_chunks = retrieve_project_chunks(
+        query,
+        pid,
+        top_k=max(3, top_k // 2),
+        min_similarity=min_similarity,
+    )
+    merged = merge_corpus_and_project(result.chunks, project_chunks, top_k=top_k)
+    result.chunks = merged
+    return result
+
+
+def retrieve_with_project(
+    query: str,
+    *,
+    project_id: str | None = None,
+    top_k: int = 5,
+    municipality: str | None = None,
+    min_similarity: float = 0.0,
+) -> RetrievalResult:
+    """
+    Retrieve corpus chunks and merge project mini-RAG when project_id is set.
+
+    Args:
+        query: User question.
+        project_id: Optional project UUID string for tier 2/3 scope.
+        top_k: Max merged chunks.
+        municipality: Optional municipality filter for corpus tier.
+        min_similarity: Similarity floor.
+
+    Returns:
+        RetrievalResult with merged chunks.
+    """
+    from uuid import UUID
+
+    from rag.mini_rag import merge_corpus_and_project, retrieve_project_chunks
+
+    result = retrieve(
+        query,
+        top_k=top_k,
+        municipality=municipality,
+        min_similarity=min_similarity,
+    )
+    if not project_id:
+        return result
+    try:
+        pid = UUID(project_id)
+    except ValueError:
+        log.warning("Invalid project_id for mini-RAG: %s", project_id)
+        return result
+    project_chunks = retrieve_project_chunks(
+        query,
+        pid,
+        top_k=max(3, top_k // 2),
+        min_similarity=min_similarity,
+    )
+    merged = merge_corpus_and_project(result.chunks, project_chunks, top_k=top_k)
+    result.chunks = merged
+    return result

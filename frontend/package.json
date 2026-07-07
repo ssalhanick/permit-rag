@@ -6,10 +6,24 @@
   "scripts": {
     "dev": "vite",
     "build": "vite build",
+    "build:mobile": "vite build --mode mobile",
     "preview": "vite preview",
-    "test": "node --test"
+    "test": "node --test",
+    "cap:sync": "npm run build:mobile && npx cap sync",
+    "cap:ios": "npx cap open ios",
+    "cap:android": "npx cap open android"
   },
   "dependencies": {
+    "@capacitor/app": "^7.0.1",
+    "@capacitor/browser": "^7.0.1",
+    "@capacitor/camera": "^7.0.1",
+    "@capacitor/core": "^7.0.1",
+    "@capacitor/filesystem": "^7.0.1",
+    "@capacitor/geolocation": "^7.0.1",
+    "@capacitor/network": "^7.0.1",
+    "@capacitor/preferences": "^7.0.1",
+    "@capacitor/push-notifications": "^7.0.1",
+    "@aparajita/capacitor-biometric-auth": "^7.2.0",
     "@fontsource-variable/figtree": "^5.2.10",
     "@hugeicons/core-free-icons": "^4.2.1",
     "@hugeicons/react": "^1.1.7",
@@ -27,6 +41,9 @@
     "amazon-cognito-identity-js": "^6.3.12"
   },
   "devDependencies": {
+    "@capacitor/android": "^7.0.1",
+    "@capacitor/cli": "^7.0.1",
+    "@capacitor/ios": "^7.0.1",
     "autoprefixer": "^10.5.0",
     "postcss": "^8.5.15",
     "tailwindcss": "^3.4.19",

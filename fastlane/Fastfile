@@ -1,0 +1,26 @@
+default_platform(:ios)
+
+platform :ios do
+  desc "Upload to TestFlight (internal beta)"
+  lane :beta do
+    build_app(
+      workspace: "../frontend/ios/App/App.xcworkspace",
+      scheme: "App",
+      export_method: "app-store"
+    )
+    upload_to_testflight(skip_waiting_for_build_processing: true)
+  end
+end
+
+platform :android do
+  desc "Upload to Play Internal testing"
+  lane :internal do
+    upload_to_play_store(
+      track: "internal",
+      aab: "../frontend/android/app/build/outputs/bundle/release/app-release.aab",
+      skip_upload_metadata: true,
+      skip_upload_images: true,
+      skip_upload_screenshots: true
+    )
+  end
+end

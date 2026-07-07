@@ -4,6 +4,7 @@
 .env.production
 frontend/.env.local
 frontend/.env.production
+frontend/.env.mobile
 
 # ── Python ────────────────────────────────────────────────
 __pycache__/

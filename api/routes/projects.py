@@ -13,10 +13,13 @@ from fastapi import APIRouter, Depends, HTTPException
 from api.auth import get_current_user
 from api.schemas import (
     AddMemberRequest,
+    AssetSyncAckRequest,
+    AssetSyncAckResponse,
     CreateProjectRequest,
     DocumentSummaryResponse,
     ProjectMemberResponse,
     ProjectResponse,
+    RoomSummaryRequest,
     ShareDocumentRequest,
     TransferOwnershipRequest,
 )
@@ -197,3 +200,37 @@ def unshare_document(
     if not db_client.unshare_document_from_project(project_id, document_id):
         raise HTTPException(status_code=404, detail="Document was not shared to this project.")
     return {"detail": "Document unshared."}
+
+
+@router.post("/{project_id}/assets/sync-ack", response_model=AssetSyncAckResponse)
+def asset_sync_ack(
+    project_id: UUID,
+    body: AssetSyncAckRequest,
+    current_user: CurrentUser,
+) -> dict:
+    """Acknowledge mobile asset upload for lifecycle eviction gate."""
+    _require_role(project_id, current_user["user_id"], {"owner", "editor", "viewer"})
+    if body.doc_id and not db_client.get_document_by_doc_id(body.doc_id):
+        raise HTTPException(status_code=404, detail="Document not found for sync ack.")
+    return {
+        "asset_id": body.asset_id,
+        "checksum_sha256": body.checksum_sha256,
+        "sync_state": "cloud_primary",
+    }
+
+
+@router.patch("/{project_id}/room-summary", response_model=ProjectResponse)
+def update_room_summary(
+    project_id: UUID,
+    body: RoomSummaryRequest,
+    current_user: CurrentUser,
+) -> dict:
+    """Persist derived room capture summary (no raw mesh)."""
+    _require_role(project_id, current_user["user_id"], {"owner", "editor"})
+    updated = db_client.update_project(
+        project_id,
+        room_summary=body.room_summary,
+    )
+    if not updated:
+        raise HTTPException(status_code=404, detail="Project not found.")
+    return dict(updated)

@@ -100,7 +100,7 @@ def test_query_answer_returns_multi_permit_types_and_citations(monkeypatch) -> N
     from db import client as db_client
 
     monkeypatch.setattr(db_client, "insert_query_log", lambda **kwargs: {})
-    monkeypatch.setattr(query_route, "retrieve", lambda *_a, **_k: _retrieval_result())
+    monkeypatch.setattr(query_route, "retrieve_with_project", lambda *_a, **_k: _retrieval_result())
     monkeypatch.setattr(generator_module, "generate_answer", lambda *_a, **_k: _generation_result())
     monkeypatch.setattr(
         classifier_module,
@@ -144,7 +144,7 @@ def test_query_answer_classifier_failure_falls_back_to_empty_list(monkeypatch) -
     from db import client as db_client
 
     monkeypatch.setattr(db_client, "insert_query_log", lambda **kwargs: {})
-    monkeypatch.setattr(query_route, "retrieve", lambda *_a, **_k: _retrieval_result())
+    monkeypatch.setattr(query_route, "retrieve_with_project", lambda *_a, **_k: _retrieval_result())
     monkeypatch.setattr(generator_module, "generate_answer", lambda *_a, **_k: _generation_result())
 
     def _raise_classifier(*_args, **_kwargs):
@@ -189,7 +189,7 @@ def test_query_answer_empty_corpus_returns_422(monkeypatch) -> None:
         unique_documents=[],
         latency_ms=10,
     )
-    monkeypatch.setattr(query_route, "retrieve", lambda *_a, **_k: empty_result)
+    monkeypatch.setattr(query_route, "retrieve_with_project", lambda *_a, **_k: empty_result)
 
     app.dependency_overrides[query_route.get_current_user] = lambda: {
         "user_id": uuid4(),

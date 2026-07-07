@@ -1,6 +1,8 @@
 import React, { useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "./context/AuthContext.jsx";
+import { closeOAuthBrowser, exchangeOAuthCode } from "./mobileAuth.js";
+import { getOAuthRedirectUri, isNativePlatform } from "./platform.js";
 
 /**
  * AuthCallback — exchanges the Cognito authorization code for tokens.
@@ -33,37 +35,20 @@ export default function AuthCallback() {
     }
 
     const domain = import.meta.env.VITE_COGNITO_DOMAIN;
-    const clientId = import.meta.env.VITE_COGNITO_APP_CLIENT_ID;
-    const redirectUri = `${window.location.origin}/auth/callback`;
     const tokenUrl = `https://${domain}/oauth2/token`;
 
     setStatus(`Exchanging code with ${tokenUrl}…`);
 
-    const body = new URLSearchParams({
-      grant_type: "authorization_code",
-      client_id: clientId,
-      code,
-      redirect_uri: redirectUri,
-    });
-
-    fetch(tokenUrl, {
-      method: "POST",
-      headers: { "Content-Type": "application/x-www-form-urlencoded" },
-      body: body.toString(),
-    })
-      .then(async (res) => {
-        const text = await res.text();
-        if (!res.ok) {
-          throw new Error(`HTTP ${res.status}: ${text}`);
-        }
-        return JSON.parse(text);
-      })
+    exchangeOAuthCode(code)
       .then(async (tokens) => {
         if (tokens.error) {
           throw new Error(`${tokens.error}: ${tokens.error_description || ""}`);
         }
         setStatus("Loading profile…");
         await handleOAuthCallback(tokens.id_token, tokens.access_token, tokens.refresh_token);
+        if (isNativePlatform()) {
+          await closeOAuthBrowser();
+        }
         navigate("/kickoff", { replace: true });
       })
       .catch((err) => {

@@ -31,7 +31,7 @@ from api.schemas import (
     QueryResponse,
 )
 from db.client import get_jurisdiction
-from rag.retriever import retrieve
+from rag.retriever import RetrievalResult, retrieve, retrieve_with_project
 
 log = logging.getLogger(__name__)
 
@@ -281,12 +281,28 @@ def query_answer(
         parent=root_trace,
     ) if tracing_on else None
     try:
-        result = retrieve(
-            body.query,
-            top_k=body.top_k,
-            municipality=effective_municipality,
-            min_similarity=body.min_similarity,
-        )
+        if body.chunk_ids:
+            from uuid import UUID
+
+            from db.client import get_chunks_by_ids
+
+            ids = [UUID(cid) for cid in body.chunk_ids]
+            chunk_rows = get_chunks_by_ids(ids)
+            result = RetrievalResult(
+                query=body.query,
+                chunks=chunk_rows,
+                top_k=body.top_k,
+                municipality=effective_municipality,
+                latency_ms=0,
+            )
+        else:
+            result = retrieve_with_project(
+                body.query,
+                project_id=body.project_id,
+                top_k=body.top_k,
+                municipality=effective_municipality,
+                min_similarity=body.min_similarity,
+            )
         _end_trace(
             retrieval_trace,
             outputs={
@@ -350,6 +366,28 @@ def query_answer(
             log.info("conflict_warnings: %d conflict(s) detected", len(conflict_warnings))
     except Exception as exc:
         log.warning("conflict_detector failed (%s) — skipping", exc)
+
+    if body.project_id:
+        try:
+            from rag.mini_rag import detect_corpus_upload_conflicts
+
+            corpus_only = [c for c in result.chunks if int(c.get("source_tier", 1)) == 1]
+            project_only = [c for c in result.chunks if int(c.get("source_tier", 1)) >= 2]
+            for warn in detect_corpus_upload_conflicts(corpus_only, project_only):
+                conflict_warnings.append(
+                    ConflictWarning(
+                        subject=warn["subject"],
+                        chunk_a_doc_id=corpus_only[0].get("doc_id", "") if corpus_only else "",
+                        chunk_a_index=int(corpus_only[0].get("chunk_index", 0)) if corpus_only else 0,
+                        chunk_a_authority=str(corpus_only[0].get("authority_level", "")) if corpus_only else "",
+                        chunk_b_doc_id=project_only[0].get("doc_id", "") if project_only else "",
+                        chunk_b_index=int(project_only[0].get("chunk_index", 0)) if project_only else 0,
+                        chunk_b_authority=str(project_only[0].get("authority_level", "")) if project_only else "",
+                        detail=warn["detail"],
+                    )
+                )
+        except Exception as exc:
+            log.warning("mini_rag conflict check failed (%s)", exc)
 
     # 2. Generate answer
     generation_trace = _start_trace(

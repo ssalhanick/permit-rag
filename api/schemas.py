@@ -80,6 +80,10 @@ class QueryRequest(BaseModel):
         default=None,
         description="Optional project identifier to bind this query context to in logs and LangSmith.",
     )
+    chunk_ids: list[str] | None = Field(
+        default=None,
+        description="Optional pre-retrieved chunk UUIDs from on-device search (mobile tier).",
+    )
 
 
 # ── Response models ──────────────────────────────────────────
@@ -416,6 +420,27 @@ class ProjectResponse(BaseModel):
     spaces: list[str] | None = None
     work_types: list[str] | None = None
     recommended_permits: list[str] | None = None
+    room_summary: dict | None = None
+
+
+class AssetSyncAckRequest(BaseModel):
+    """Mobile asset lifecycle sync acknowledgement."""
+    asset_id: str = Field(..., min_length=1, max_length=120)
+    checksum_sha256: str = Field(..., min_length=64, max_length=64)
+    doc_id: str | None = Field(default=None, max_length=200)
+    size_class: str | None = Field(default=None, max_length=32)
+
+
+class AssetSyncAckResponse(BaseModel):
+    """Response confirming cloud storage of mobile-uploaded asset."""
+    asset_id: str
+    checksum_sha256: str
+    sync_state: str = "cloud_primary"
+
+
+class RoomSummaryRequest(BaseModel):
+    """Derived room capture summary (no raw mesh)."""
+    room_summary: dict
 
 
 class ProjectMemberResponse(BaseModel):

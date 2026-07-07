@@ -21,6 +21,7 @@
 
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import { Input } from "@/components/ui/input";
+import { isMapboxEnabled } from "../platform.js";
 
 const MAPBOX_TOKEN = import.meta.env?.VITE_MAPBOX_TOKEN || "";
 
@@ -160,8 +161,8 @@ export default function AddressAutocomplete({
     return () => document.removeEventListener("mousedown", handler);
   }, []);
 
-  // If no token, render a plain input with a note
-  if (!MAPBOX_TOKEN) {
+  // Mobile: Mapbox deferred — plain address input on native
+  if (!MAPBOX_TOKEN || !isMapboxEnabled()) {
     return (
       <div>
         <Input

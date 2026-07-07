@@ -501,6 +501,149 @@ def match_chunks(
     return rows
 
 
+def match_project_chunks(
+    query_embedding: list[float],
+    *,
+    project_id: UUID,
+    top_k: int = 5,
+    min_similarity: float = 0.0,
+) -> list[dict[str, Any]]:
+    """
+    Vector search limited to tier 2/3 documents for a project.
+
+    Includes docs with documents.project_id or linked via project_documents.
+
+    Args:
+        query_embedding: 768-dim query vector.
+        project_id: Project scope UUID.
+        top_k: Max results.
+        min_similarity: Cosine similarity floor.
+
+    Returns:
+        Chunk dicts ordered by source_tier ASC, similarity DESC.
+    """
+    sql = """
+        SELECT
+            c.id,
+            c.document_id,
+            d.doc_id,
+            c.content,
+            c.chunk_index,
+            d.municipality,
+            d.authority_level,
+            d.doc_type,
+            d.document_status,
+            c.chunk_status,
+            d.source_tier,
+            d.ingested_at,
+            d.retrieval_weight,
+            1 - (c.embedding <=> %(query_embedding)s::vector) AS similarity
+        FROM chunks c
+        JOIN documents d ON d.id = c.document_id
+        LEFT JOIN project_documents pd ON pd.document_id = d.id
+        WHERE d.source_tier IN (2, 3)
+          AND d.document_status = 'active'
+          AND c.chunk_status = 'active'
+          AND c.embedding IS NOT NULL
+          AND (d.project_id = %(project_id)s OR pd.project_id = %(project_id)s)
+        ORDER BY d.source_tier ASC, similarity DESC
+        LIMIT %(match_count)s;
+    """
+    params = {
+        "query_embedding": str(query_embedding),
+        "project_id": project_id,
+        "match_count": top_k,
+    }
+    with get_conn() as conn:
+        rows = conn.execute(sql, params).fetchall()
+    if min_similarity > 0.0:
+        rows = [r for r in rows if r["similarity"] >= min_similarity]
+    log.info("match_project_chunks: %d results (project_id=%s)", len(rows), project_id)
+    return rows
+
+
+def get_chunks_by_ids(chunk_ids: list[UUID]) -> list[dict[str, Any]]:
+    """
+    Load chunk rows by primary key for mobile chunk-ID generation path.
+
+    Args:
+        chunk_ids: Chunk UUIDs from on-device retrieval.
+
+    Returns:
+        Chunk dicts with document metadata.
+    """
+    if not chunk_ids:
+        return []
+    sql = """
+        SELECT
+            c.id,
+            c.document_id,
+            d.doc_id,
+            c.content,
+            c.chunk_index,
+            d.municipality,
+            d.authority_level,
+            d.doc_type,
+            d.document_status,
+            c.chunk_status,
+            d.source_tier,
+            d.ingested_at,
+            d.retrieval_weight,
+            1.0 AS similarity
+        FROM chunks c
+        JOIN documents d ON d.id = c.document_id
+        WHERE c.id = ANY(%(chunk_ids)s)
+          AND d.document_status = 'active'
+          AND c.chunk_status = 'active';
+    """
+    with get_conn() as conn:
+        return conn.execute(sql, {"chunk_ids": chunk_ids}).fetchall()
+
+
+def list_corpus_sync_chunks(
+    *,
+    municipality: str | None = None,
+    limit: int = 500,
+    include_embeddings: bool = False,
+) -> list[dict[str, Any]]:
+    """
+    Export tier-1 corpus chunks for on-device cache sync.
+
+    Args:
+        municipality: Optional municipality filter.
+        limit: Max rows (mobile bundle budget).
+        include_embeddings: Include 768-dim vectors when True.
+
+    Returns:
+        Lightweight chunk dicts for mobile SQLite cache.
+    """
+    embed_col = "c.embedding::text AS embedding_text" if include_embeddings else "NULL AS embedding_text"
+    sql = f"""
+        SELECT
+            c.id,
+            d.doc_id,
+            c.chunk_index,
+            LEFT(c.content, 800) AS content,
+            d.municipality,
+            d.source_tier,
+            {embed_col}
+        FROM chunks c
+        JOIN documents d ON d.id = c.document_id
+        WHERE d.source_tier = 1
+          AND d.document_status = 'active'
+          AND c.chunk_status = 'active'
+          AND c.embedding IS NOT NULL
+          AND (%(municipality)s IS NULL OR d.municipality = %(municipality)s)
+        ORDER BY d.doc_id, c.chunk_index
+        LIMIT %(limit)s;
+    """
+    with get_conn() as conn:
+        return conn.execute(sql, {
+            "municipality": municipality,
+            "limit": limit,
+        }).fetchall()
+
+
 def _search_chunks_with_tsquery(
     query_text: str,
     *,
@@ -916,8 +1059,11 @@ def update_project(
     name: str | None = None,
     description: str | None = None,
     municipality: str | None = None,
+    room_summary: dict[str, Any] | None = None,
 ) -> dict[str, Any] | None:
     """Update mutable project fields."""
+    import json as _json
+
     assignments: list[str] = []
     params: dict[str, Any] = {"id": project_id}
     if name is not None:
@@ -929,6 +1075,9 @@ def update_project(
     if municipality is not None:
         assignments.append("municipality = %(municipality)s")
         params["municipality"] = municipality
+    if room_summary is not None:
+        assignments.append("room_summary = %(room_summary)s::jsonb")
+        params["room_summary"] = _json.dumps(room_summary)
     if not assignments:
         return get_project(project_id)
     sql = f"UPDATE projects SET {', '.join(assignments)} WHERE id = %(id)s RETURNING *;"

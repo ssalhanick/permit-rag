@@ -4,6 +4,8 @@ import { API_BASE_URL, API_PREFIX, fetchProjects } from "./api.js";
 import { useAuth } from "./context/AuthContext.jsx";
 import { formatUploadError, getUploadBlockers, suggestDocIdFromFilename } from "./uploadUtils.js";
 import { getStoredAdminToken, setStoredAdminToken } from "./documentAdminUtils.js";
+import { isNativePlatform } from "./platform.js";
+import { capturePhotoForUpload, pickImageForUpload } from "./services/mobileUpload.js";
 
 const AUTHORITY_LEVELS = ["municipal", "state", "federal", "regional"];
 const DOC_TYPES = [
@@ -71,6 +73,30 @@ export default function UploadPage() {
     if (f && !form.doc_id) {
       const suggested = suggestDocIdFromFilename(f.name);
       setForm((prev) => ({ ...prev, doc_id: suggested }));
+    }
+  };
+
+  const handleMobileCapture = async () => {
+    const picked = await capturePhotoForUpload();
+    if (!picked) {
+      return;
+    }
+    const f = new File([picked.blob], picked.name, { type: picked.blob.type || "image/jpeg" });
+    setFile(f);
+    if (!form.doc_id) {
+      setForm((prev) => ({ ...prev, doc_id: suggestDocIdFromFilename(f.name) }));
+    }
+  };
+
+  const handleMobilePick = async () => {
+    const picked = await pickImageForUpload();
+    if (!picked) {
+      return;
+    }
+    const f = new File([picked.blob], picked.name, { type: picked.blob.type || "image/jpeg" });
+    setFile(f);
+    if (!form.doc_id) {
+      setForm((prev) => ({ ...prev, doc_id: suggestDocIdFromFilename(f.name) }));
     }
   };
 
@@ -203,6 +229,16 @@ export default function UploadPage() {
                 </p>
               )}
               {!file ? <p className="field-hint">Accepted: .pdf, .html, .htm</p> : null}
+              {isNativePlatform() ? (
+                <div className="mobile-upload-actions">
+                  <button type="button" className="secondary-button" onClick={handleMobileCapture}>
+                    Take photo
+                  </button>
+                  <button type="button" className="secondary-button" onClick={handleMobilePick}>
+                    Pick from gallery
+                  </button>
+                </div>
+              ) : null}
             </fieldset>
 
             {/* ── Identity ── */}
