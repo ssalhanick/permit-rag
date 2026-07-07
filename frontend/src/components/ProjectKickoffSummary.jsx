@@ -2,6 +2,7 @@
  * ProjectKickoffSummary — renders persisted kickoff wizard fields on project detail.
  */
 
+import React from "react";
 import PermitTags from "./PermitTags.jsx";
 import { formatKickoffSummary } from "../projectKickoffSummary.js";
 
