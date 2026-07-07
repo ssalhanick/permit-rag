@@ -7,9 +7,10 @@ plus Texas state and federal regulations.
 
 ---
 
-## Current Status (2026-07-03)
+## Current Status (2026-07-06)
 
-- **Production UX audit completed** — full Playwright walkthrough of every user path on `permits.scottsalhanick.com`. Four P0 launch blockers found (registration broken, empty prod corpus + CloudFront error rewriting, Mapbox token missing from prod build, `/projects` route collision). See [docs/ux_audit_260703.md](docs/ux_audit_260703.md).
+- **Sprint 12 closed** — project kickoff wizard (5-step conversational setup, permit rules, migration 014 fields) + kickoff data visible on `/projects` detail panel.
+- **Production UX audit completed** — full Playwright walkthrough of every user path on `permits.scottsalhanick.com`. Four P0 launch blockers found (registration broken, empty prod corpus + CloudFront error rewriting, Mapbox token missing from prod build, `/projects` route collision). P0 fixes coded; deploy + prod verify pending. See [docs/ux_audit_260703.md](docs/ux_audit_260703.md).
 - **Sprint 11 deployed** — Cognito auth live in production. Google SSO + optional TOTP 2FA.
 - Custom JWT/Argon2id replaced with Cognito RS256 JWKS verification. 93 tests passing.
 - `cognito_sub` column added to users table (migration 013). Vite proxy for local dev.
@@ -42,7 +43,6 @@ py -m evaluation.eval_guard
 *None*
 
 ### Planned
-- [ ] [Sprint 12: User Profile Dashboard](docs/sprint12_user_profile_dashboard.md) — WordPress-style sidebar + subpages for base users (`feat/sprint-12-user-profile-dashboard`)
 - [ ] [Sprint 11: Document Governance UI](docs/sprint11_document_updates.md) — metadata edit + supersede on `/documents`
 - [ ] [Agent Implementation Plan](../..\.gemini\antigravity\brain\acda4bb1-53b2-4cf2-b710-5e93089c1fab/agent_implementation_plan.md) — Implement single-responsibility agents (Query Deconstructor, Semantic Conflict Analyzer, Citation Verification) with the `instructor` library and dynamic token truncation.
 - [ ] [Token Optimization & Cost-Effectiveness Plan](../..\.gemini\antigravity\brain\acda4bb1-53b2-4cf2-b710-5e93089c1fab\token_optimization_plan.md) - Analyze prompt caching, chunking strategies, and embedding model trade-offs to minimize Claude token usage.
@@ -55,6 +55,7 @@ py -m evaluation.eval_guard
 - [ ] 
 
 ### Completed
+- [x] Sprint 12: Project Kickoff Wizard — 5-step post-login wizard (`/kickoff`), migration 014 fields (address, spaces, work types, recommended permits), rule-based permit recommendations, kickoff summary on `/projects` detail
 - [x] Cognito Auth Migration (Sprint 11) — Replaced custom JWT/Argon2id with Amazon Cognito RS256 JWKS verification, Google SSO, optional TOTP 2FA, lazy RDS user provisioning via `GET /auth/me`
 - [x] Get GIS auto-address bar working (Implemented Mapbox Search Box session_token management for address autocomplete suggestions and geocoding retrievals)
 - [x] Add mobile styles (SGP10: Responsive styling for mobile, tablet, and desktop viewports, scrollable data tables, and WCAG AAA touch target size conformance)

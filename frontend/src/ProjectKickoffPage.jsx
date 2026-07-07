@@ -10,6 +10,7 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import AddressAutocomplete from "./components/AddressAutocomplete.jsx";
+import PermitTags from "./components/PermitTags.jsx";
 import { createProject, fetchProjects } from "./api.js";
 import {
   SPACE_OPTIONS,
@@ -110,22 +111,6 @@ function CheckboxGrid({ options, selected, onChange, otherValue, onOtherChange, 
           />
         </div>
       )}
-    </div>
-  );
-}
-
-/**
- * Permit recommendation tags displayed in Step 5.
- */
-function PermitTags({ permits }) {
-  if (permits.length === 0) return null;
-  return (
-    <div className="kickoff-permit-tags" role="list" aria-label="Recommended permits">
-      {permits.map((p) => (
-        <span key={p} className="kickoff-permit-tag" role="listitem">
-          {p}
-        </span>
-      ))}
     </div>
   );
 }
