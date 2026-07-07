@@ -2,6 +2,8 @@
  * PermitTags — pill tags for recommended permit categories.
  */
 
+import React from "react";
+
 /**
  * @param {{ permits: string[] }} props
  */
