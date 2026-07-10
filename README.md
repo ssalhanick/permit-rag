@@ -7,32 +7,24 @@ plus Texas state and federal regulations.
 
 ---
 
-## Current Status (2026-07-06)
+## Current Status (2026-07-09)
 
-- **Sprint 12 closed** — project kickoff wizard (5-step conversational setup, permit rules, migration 014 fields) + kickoff data visible on `/projects` detail panel.
-- **Production UX audit completed** — full Playwright walkthrough of every user path on `permits.scottsalhanick.com`. Four P0 launch blockers found (registration broken, empty prod corpus + CloudFront error rewriting, Mapbox token missing from prod build, `/projects` route collision). P0 fixes coded; deploy + prod verify pending. See [docs/ux_audit_260703.md](docs/ux_audit_260703.md).
-- **Sprint 11 deployed** — Cognito auth live in production. Google SSO + optional TOTP 2FA.
-- Custom JWT/Argon2id replaced with Cognito RS256 JWKS verification. 93 tests passing.
-- `cognito_sub` column added to users table (migration 013). Vite proxy for local dev.
-- ECS: `COGNITO_USER_POOL_ID` + `COGNITO_REGION` baked into Docker image.
-- CI/CD: Cognito vars injected into frontend Vite build via `deploy.yml`.
-- Production Google SSO fully working on `permits.scottsalhanick.com`.
+- **Sprint 14 active** — 3D room capture per [docs/sprint_14_3d-room-capture-agnostic-guide.md](docs/sprint_14_3d-room-capture-agnostic-guide.md). Wire native plugin → interchange JSON v1.0 → `projects.room_summary`.
+- **Sprint 13 closed** — Capacitor 7 mobile shell, mini-RAG, corpus sync, prod on ECS `:11`. Android device: email login + RAG verified. See [docs/sprint_13capacitor-implementation-overview.md](docs/sprint_13capacitor-implementation-overview.md).
+- **Sprint 12 closed** — kickoff wizard + project detail summary on `/projects`.
+- **Production** — `https://permits.scottsalhanick.com`; Cognito auth; mobile CORS live.
 
 ```powershell
-# Full test suite
-py -m pytest tests/test_sprint5.py tests/test_sprint6.py tests/test_sprint7.py tests/test_sprint8.py tests/test_sprint9.py -v
+# Mobile build + tests
+cd frontend
+npm run test
+npm run build:mobile
+npx cap sync android
 
-# Apply DB migration (local)
-py scripts\run_migration.py db\migrations\013_cognito_auth.sql
-
-# Apply DB migration (production RDS)
-$env:ENVIRONMENT = "production"; py scripts\run_migration.py db\migrations\013_cognito_auth.sql
-
-# Health check (API must be running)
-Invoke-RestMethod -Uri "http://localhost:8000/health" -Method Get
-
-# Eval guard (no regression)
-py -m evaluation.eval_guard
+# Backend smoke (Sprint 13 routes)
+.\.venv\Scripts\Activate.ps1
+py -m pytest tests/test_query_answer_route.py tests/test_mini_rag.py tests/test_api_main.py -v
+.\scripts\sprint12_p0_smoke.ps1
 ```
 
 ---
@@ -43,6 +35,7 @@ py -m evaluation.eval_guard
 *None*
 
 ### Planned
+- [ ] [Sprint 14: 3D Room Capture](docs/sprint_14_3d-room-capture-agnostic-guide.md) — Capacitor plugin, interchange JSON v1.0, on-device metrics → `room_summary` API
 - [ ] [Sprint 11: Document Governance UI](docs/sprint11_document_updates.md) — metadata edit + supersede on `/documents`
 - [ ] [Agent Implementation Plan](../..\.gemini\antigravity\brain\acda4bb1-53b2-4cf2-b710-5e93089c1fab/agent_implementation_plan.md) — Implement single-responsibility agents (Query Deconstructor, Semantic Conflict Analyzer, Citation Verification) with the `instructor` library and dynamic token truncation.
 - [ ] [Token Optimization & Cost-Effectiveness Plan](../..\.gemini\antigravity\brain\acda4bb1-53b2-4cf2-b710-5e93089c1fab\token_optimization_plan.md) - Analyze prompt caching, chunking strategies, and embedding model trade-offs to minimize Claude token usage.
@@ -50,11 +43,12 @@ py -m evaluation.eval_guard
 
 ### Upcoming
 - [ ] Add ability to update existing documents
-- [ ] Camera Phone (lidar Progressive Enhancement) - Use the device's camera to scan building facades and rooms to measure distances and accurately calculate square footage through the device's lidar data (or as much as doing a recording/set of pitcutres derived from the recording of the site/room)
-- [ ] 3D Map Integration - Integrate with an open-source 3D map library (e.g., CesiumJS) to display the city boundaries and proposed site
-- [ ] 
+- [ ] Mobile OAuth deep links (M0-6/M0-7) + Firebase push (`google-services.json`)
+- [ ] Terraform: fix RDS `DATABASE_URL` drift or move to SSM before next `terraform apply`
+- [ ] 3D Map Integration — CesiumJS city boundaries + site overlay
 
 ### Completed
+- [x] Sprint 13: Capacitor Mobile — Capacitor 7 shell, mobile auth, mini-RAG, corpus sync, asset lifecycle scaffolds, room capture plugin stubs, migration 015, mobile CI, prod deploy ECS `:11`, Android Phase 0 (email + RAG)
 - [x] Sprint 12: Project Kickoff Wizard — 5-step post-login wizard (`/kickoff`), migration 014 fields (address, spaces, work types, recommended permits), rule-based permit recommendations, kickoff summary on `/projects` detail
 - [x] Cognito Auth Migration (Sprint 11) — Replaced custom JWT/Argon2id with Amazon Cognito RS256 JWKS verification, Google SSO, optional TOTP 2FA, lazy RDS user provisioning via `GET /auth/me`
 - [x] Get GIS auto-address bar working (Implemented Mapbox Search Box session_token management for address autocomplete suggestions and geocoding retrievals)

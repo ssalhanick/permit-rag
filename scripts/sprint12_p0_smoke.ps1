@@ -9,13 +9,13 @@ function Assert-Ok($Name, $Cond) {
 
 try {
     $health = Invoke-RestMethod -Uri "$Base/health" -Method Get -TimeoutSec 30
-    Assert-Ok "GET /health" ($health.status -eq "ok" -or $health.ok -eq $true)
+    Assert-Ok "GET /health" ($health.status -in @("ok", "healthy") -or $health.ok -eq $true)
 } catch {
     Assert-Ok "GET /health" $false
 }
 
 try {
-    $docs = Invoke-WebRequest -Uri "$Base/api/documents" -Method Get -TimeoutSec 30
+    $docs = Invoke-WebRequest -Uri "$Base/api/documents" -Method Get -TimeoutSec 30 -UseBasicParsing
     $body = $docs.Content
     Assert-Ok "GET /api/documents not HTML" (-not ($body.Trim().StartsWith("<!")))
     Assert-Ok "GET /api/documents non-empty" ($body -ne "[]")
@@ -24,7 +24,7 @@ try {
 }
 
 try {
-    $spa = Invoke-WebRequest -Uri "$Base/projects" -Method Get -TimeoutSec 30
+    $spa = Invoke-WebRequest -Uri "$Base/projects" -Method Get -TimeoutSec 30 -UseBasicParsing
     Assert-Ok "GET /projects returns HTML SPA" ($spa.Content -match "<!DOCTYPE|<html")
 } catch {
     Assert-Ok "GET /projects SPA" $false
