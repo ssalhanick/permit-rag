@@ -25,9 +25,14 @@ import "./styles.css";
 
 function MobileBootstrap() {
   useEffect(() => {
-    if (isNativePlatform()) {
-      initPushNotifications();
+    if (!isNativePlatform()) {
+      return undefined;
     }
+    document.body.classList.add("native-app");
+    initPushNotifications();
+    return () => {
+      document.body.classList.remove("native-app");
+    };
   }, []);
   return null;
 }
