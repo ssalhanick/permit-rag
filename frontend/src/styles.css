@@ -866,6 +866,83 @@ button:disabled {
   font-size: 0.9rem;
 }
 
+.project-kickoff-entry {
+  margin-top: 8px;
+}
+
+.project-kickoff-entry h4 {
+  margin: 0 0 6px;
+}
+
+.project-kickoff-entry-copy {
+  margin: 0 0 12px;
+  font-size: 0.9rem;
+}
+
+.project-kickoff-entry-btn {
+  display: inline-block;
+  width: 100%;
+  text-align: center;
+  margin-bottom: 8px;
+}
+
+.project-kickoff-entry-link {
+  display: inline-block;
+  width: 100%;
+  text-align: center;
+}
+
+.project-kickoff-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin: 20px 0 8px;
+}
+
+.project-kickoff-header h3 {
+  margin: 0;
+  font-size: 1rem;
+}
+
+.project-kickoff-action-btn {
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+@media (max-width: 720px) {
+  .project-kickoff-header {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .project-kickoff-action-btn {
+    width: 100%;
+    text-align: center;
+  }
+}
+
+.room-scan-panel {
+  margin-top: 20px;
+  padding-top: 16px;
+  border-top: 1px solid #e2e8f0;
+}
+
+.room-scan-panel h3 {
+  margin: 0 0 8px;
+  font-size: 1rem;
+}
+
+.room-scan-button {
+  margin-bottom: 12px;
+  width: 100%;
+  max-width: 280px;
+}
+
+.room-scan-metrics {
+  margin-top: 12px;
+}
+
 .project-section {
   border-top: 1px solid #f1f5f9;
   padding-top: 20px;

@@ -1059,6 +1059,10 @@ def update_project(
     name: str | None = None,
     description: str | None = None,
     municipality: str | None = None,
+    address: str | None = None,
+    spaces: list[str] | None = None,
+    work_types: list[str] | None = None,
+    recommended_permits: list[str] | None = None,
     room_summary: dict[str, Any] | None = None,
 ) -> dict[str, Any] | None:
     """Update mutable project fields."""
@@ -1075,6 +1079,18 @@ def update_project(
     if municipality is not None:
         assignments.append("municipality = %(municipality)s")
         params["municipality"] = municipality
+    if address is not None:
+        assignments.append("address = %(address)s")
+        params["address"] = address
+    if spaces is not None:
+        assignments.append("spaces = %(spaces)s::jsonb")
+        params["spaces"] = _json.dumps(spaces)
+    if work_types is not None:
+        assignments.append("work_types = %(work_types)s::jsonb")
+        params["work_types"] = _json.dumps(work_types)
+    if recommended_permits is not None:
+        assignments.append("recommended_permits = %(recommended_permits)s::jsonb")
+        params["recommended_permits"] = _json.dumps(recommended_permits)
     if room_summary is not None:
         assignments.append("room_summary = %(room_summary)s::jsonb")
         params["room_summary"] = _json.dumps(room_summary)

@@ -8,10 +8,11 @@
  */
 
 import React, { useEffect, useMemo, useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import AddressAutocomplete from "./components/AddressAutocomplete.jsx";
 import PermitTags from "./components/PermitTags.jsx";
-import { createProject, fetchProjects } from "./api.js";
+import { createProject, fetchProjects, getProject, updateProject } from "./api.js";
+import { projectToWizardState } from "./projectKickoffRoutes.js";
 import {
   SPACE_OPTIONS,
   WORK_TYPE_OPTIONS,
@@ -119,11 +120,18 @@ function CheckboxGrid({ options, selected, onChange, otherValue, onOtherChange, 
 
 export default function ProjectKickoffPage() {
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+  const initialMode = searchParams.get("mode") || "landing";
+  const editProjectId = searchParams.get("projectId");
+  const returnTo = searchParams.get("returnTo") || "/";
 
   // "landing" | "wizard" | "basic" | "existing"
-  const [mode, setMode] = useState("landing");
+  const [mode, setMode] = useState(
+    ["wizard", "basic", "existing"].includes(initialMode) ? initialMode : "landing",
+  );
   const [wizardStep, setWizardStep] = useState(1);
   const [wizard, setWizard] = useState(BLANK_WIZARD);
+  const [editingProjectId, setEditingProjectId] = useState(editProjectId || null);
 
   // Basic form state
   const [basicName, setBasicName] = useState("");
@@ -137,6 +145,19 @@ export default function ProjectKickoffPage() {
   // Shared submit state
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState("");
+  const [prefillLoading, setPrefillLoading] = useState(Boolean(editProjectId));
+
+  const finishNavigation = (projectId) => {
+    if (returnTo === "/projects" && projectId) {
+      navigate(`/projects?projectId=${projectId}`, { replace: true });
+      return;
+    }
+    if (returnTo && returnTo !== "/") {
+      navigate(returnTo, { replace: true });
+      return;
+    }
+    navigate(projectId ? `/?p=${projectId}` : "/", { replace: true });
+  };
 
   // Load existing projects once on mount
   useEffect(() => {
@@ -146,6 +167,27 @@ export default function ProjectKickoffPage() {
       .catch(() => {})
       .finally(() => setProjectsLoading(false));
   }, []);
+
+  // Prefill wizard when editing an existing project from Projects page
+  useEffect(() => {
+    if (!editProjectId) {
+      setPrefillLoading(false);
+      return;
+    }
+    setPrefillLoading(true);
+    getProject(editProjectId)
+      .then((res) => {
+        setWizard(projectToWizardState(res.data));
+        setEditingProjectId(editProjectId);
+        setMode("wizard");
+        setWizardStep(1);
+      })
+      .catch((err) => {
+        setError(err?.message || "Failed to load project for kickoff setup.");
+        setMode("landing");
+      })
+      .finally(() => setPrefillLoading(false));
+  }, [editProjectId]);
 
   // Derived permit recommendations for wizard step 5
   const allWorkTypes = useMemo(() => {
@@ -198,20 +240,25 @@ export default function ProjectKickoffPage() {
     setSubmitting(true);
     const allSpaces = [...wizard.spaces];
     if (wizard.otherSpaces.trim()) allSpaces.push(wizard.otherSpaces.trim());
+    const payload = {
+      name: wizard.name.trim(),
+      address: wizard.address.trim(),
+      municipality: wizard.municipality || undefined,
+      spaces: allSpaces.length ? allSpaces : undefined,
+      work_types: allWorkTypes.length ? allWorkTypes : undefined,
+      recommended_permits: recommendedPermits.length ? recommendedPermits : undefined,
+    };
 
     try {
-      const res = await createProject({
-        name: wizard.name.trim(),
-        address: wizard.address.trim(),
-        municipality: wizard.municipality || undefined,
-        spaces: allSpaces.length ? allSpaces : undefined,
-        work_types: allWorkTypes.length ? allWorkTypes : undefined,
-        recommended_permits: recommendedPermits.length ? recommendedPermits : undefined,
-      });
-      const id = res.data?.id;
-      navigate(id ? `/?p=${id}` : "/", { replace: true });
+      if (editingProjectId) {
+        const res = await updateProject(editingProjectId, payload);
+        finishNavigation(res.data?.id || editingProjectId);
+        return;
+      }
+      const res = await createProject(payload);
+      finishNavigation(res.data?.id);
     } catch (err) {
-      setError(err?.message || "Failed to create project.");
+      setError(err?.message || (editingProjectId ? "Failed to update project." : "Failed to create project."));
       setSubmitting(false);
     }
   };
@@ -234,8 +281,7 @@ export default function ProjectKickoffPage() {
         address: basicAddress.trim(),
         municipality: basicMunicipality || undefined,
       });
-      const id = res.data?.id;
-      navigate(id ? `/?p=${id}` : "/", { replace: true });
+      finishNavigation(res.data?.id);
     } catch (err) {
       setError(err?.message || "Failed to create project.");
       setSubmitting(false);
@@ -244,7 +290,23 @@ export default function ProjectKickoffPage() {
 
   // ── Skip ──────────────────────────────────────────────────
 
-  const skip = () => navigate("/", { replace: true });
+  const skip = () => {
+    if (returnTo && returnTo !== "/") {
+      navigate(returnTo, { replace: true });
+      return;
+    }
+    navigate("/", { replace: true });
+  };
+
+  if (prefillLoading) {
+    return (
+      <main className="page kickoff-page">
+        <section className="panel kickoff-panel">
+          <p className="muted">Loading project setup…</p>
+        </section>
+      </main>
+    );
+  }
 
   // ── Renders ───────────────────────────────────────────────
 
@@ -252,9 +314,11 @@ export default function ProjectKickoffPage() {
     return (
       <main className="page kickoff-page">
         <section className="panel kickoff-panel">
-          <h1 className="kickoff-heading">Welcome back.</h1>
+          <h1 className="kickoff-heading">{returnTo === "/projects" ? "Project setup" : "Welcome back."}</h1>
           <p className="muted kickoff-subheading">
-            What would you like to work on today?
+            {returnTo === "/projects"
+              ? "Start a guided setup or pick up an existing project."
+              : "What would you like to work on today?"}
           </p>
 
           <div className="kickoff-mode-cards">
@@ -324,7 +388,10 @@ export default function ProjectKickoffPage() {
                   <button
                     type="button"
                     className="kickoff-project-item"
-                    onClick={() => navigate(`/?p=${p.id}`, { replace: true })}
+                    onClick={() => navigate(
+                      returnTo === "/projects" ? `/projects?projectId=${p.id}` : `/?p=${p.id}`,
+                      { replace: true },
+                    )}
                   >
                     <strong>{p.name}</strong>
                     {p.address && <span className="kickoff-project-address">{p.address}</span>}
@@ -564,7 +631,9 @@ export default function ProjectKickoffPage() {
               onClick={submitWizard}
               disabled={submitting}
             >
-              {submitting ? "Creating…" : "Create Project"}
+              {submitting
+                ? (editingProjectId ? "Saving…" : "Creating…")
+                : (editingProjectId ? "Save Setup" : "Create Project")}
             </button>
           ) : (
             <button

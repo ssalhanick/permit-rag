@@ -218,6 +218,13 @@ export async function createProject(payload) {
   });
 }
 
+export async function updateProject(projectId, payload) {
+  return await requestJson(`/projects/${projectId}`, {
+    method: "PATCH",
+    body: payload,
+  });
+}
+
 export async function getProject(projectId) {
   return await requestJson(`/projects/${projectId}`);
 }

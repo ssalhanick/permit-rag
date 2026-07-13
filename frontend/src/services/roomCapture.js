@@ -32,10 +32,34 @@ export async function startRoomCapture(opts = {}) {
  * @returns {Promise<boolean>}
  */
 export async function isRoomCaptureAvailable() {
+  const status = await getRoomCaptureStatus();
+  return status.available;
+}
+
+/**
+ * Probe native room capture plugin with timeout and reason text.
+ *
+ * @returns {Promise<{ pluginLoaded: boolean, available: boolean, reason: string | null }>}
+ */
+export async function getRoomCaptureStatus() {
+  const timeoutMs = 4000;
   try {
-    const { available } = await RoomCapture.isAvailable();
-    return Boolean(available);
-  } catch {
-    return false;
+    const result = await Promise.race([
+      RoomCapture.isAvailable(),
+      new Promise((_, reject) => {
+        setTimeout(() => reject(new Error("Room capture plugin timed out. Rebuild the iOS app.")), timeoutMs);
+      }),
+    ]);
+    return {
+      pluginLoaded: true,
+      available: Boolean(result?.available),
+      reason: result?.reason || null,
+    };
+  } catch (err) {
+    return {
+      pluginLoaded: false,
+      available: false,
+      reason: err?.message || "Room capture plugin unavailable.",
+    };
   }
 }

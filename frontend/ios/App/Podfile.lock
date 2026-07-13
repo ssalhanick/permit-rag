@@ -24,6 +24,8 @@ PODS:
     - Capacitor
   - IONFilesystemLib (1.1.2)
   - IONGeolocationLib (1.0.1)
+  - RoomCapture (0.1.0):
+    - Capacitor
 
 DEPENDENCIES:
   - "AparajitaCapacitorBiometricAuth (from `../../node_modules/@aparajita/capacitor-biometric-auth`)"
@@ -37,6 +39,7 @@ DEPENDENCIES:
   - "CapacitorNetwork (from `../../node_modules/@capacitor/network`)"
   - "CapacitorPreferences (from `../../node_modules/@capacitor/preferences`)"
   - "CapacitorPushNotifications (from `../../node_modules/@capacitor/push-notifications`)"
+  - RoomCapture (from `../../plugins/room-capture`)
 
 SPEC REPOS:
   trunk:
@@ -66,6 +69,8 @@ EXTERNAL SOURCES:
     :path: "../../node_modules/@capacitor/preferences"
   CapacitorPushNotifications:
     :path: "../../node_modules/@capacitor/push-notifications"
+  RoomCapture:
+    :path: "../../plugins/room-capture"
 
 SPEC CHECKSUMS:
   AparajitaCapacitorBiometricAuth: 8695431372a6ffa8cb5ba8166ec2bd4c1bddfde5
@@ -81,7 +86,8 @@ SPEC CHECKSUMS:
   CapacitorPushNotifications: 0527809a9619ed775439d5ab2c2d996122b48319
   IONFilesystemLib: 21a63377696b2d8fab5632ecfb7d2ac67bddb68a
   IONGeolocationLib: 20f9d0248a0b5264511fb57a37e25dd2badf797a
+  RoomCapture: d90a31ca43c735b681e51e20736cc0dfabcd9153
 
-PODFILE CHECKSUM: 4ab8a7985a8eae8842d778606595ecdf948a2928
+PODFILE CHECKSUM: a50a6caf734ffcd1793150734a9fe7d3d387b281
 
 COCOAPODS: 1.17.0

@@ -1,7 +1,10 @@
 import React, { useEffect, useState } from "react";
-import { Link, useNavigate } from "react-router-dom";
+import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { useAuth } from "./context/AuthContext.jsx";
 import ProjectKickoffSummary from "./components/ProjectKickoffSummary.jsx";
+import RoomScanPanel from "./components/RoomScanPanel.jsx";
+import { formatKickoffSummary } from "./projectKickoffSummary.js";
+import { buildKickoffPath } from "./projectKickoffRoutes.js";
 import {
   fetchProjects,
   createProject,
@@ -18,6 +21,8 @@ import {
 export default function ProjectsPage() {
   const { user } = useAuth();
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+  const requestedProjectId = searchParams.get("projectId");
   const [projects, setProjects] = useState([]);
   const [selectedProj, setSelectedProj] = useState(null);
   const [members, setMembers] = useState([]);
@@ -160,6 +165,16 @@ export default function ProjectsPage() {
     loadProjects();
   }, [user]);
 
+  useEffect(() => {
+    if (!requestedProjectId || projects.length === 0) {
+      return;
+    }
+    const match = projects.find((project) => project.id === requestedProjectId);
+    if (match && (!selectedProj || selectedProj.id !== match.id)) {
+      selectProject(match);
+    }
+  }, [requestedProjectId, projects]);
+
   // Find user's role in the active project
   const myMemberRecord = members.find(m => m.user_id === user.id);
   const myRole = selectedProj?.owner_user_id === user.id ? "owner" : (myMemberRecord?.role || "viewer");
@@ -301,6 +316,25 @@ export default function ProjectsPage() {
             })}
           </ul>
 
+          <section className="project-kickoff-entry" aria-label="Guided project setup">
+            <h4>Guided Setup</h4>
+            <p className="muted project-kickoff-entry-copy">
+              Walk through address, spaces, work types, and permit guidance.
+            </p>
+            <Link
+              to={buildKickoffPath({ mode: "wizard", returnTo: "/projects" })}
+              className="secondary-button project-kickoff-entry-btn"
+            >
+              Start guided setup
+            </Link>
+            <Link
+              to={buildKickoffPath({ returnTo: "/projects" })}
+              className="text-button project-kickoff-entry-link"
+            >
+              More setup options
+            </Link>
+          </section>
+
           <hr style={{ margin: "20px 0", borderColor: "#f1f5f9" }} />
 
           {/* Create Project Form */}
@@ -364,7 +398,34 @@ export default function ProjectsPage() {
                 </div>
               </div>
 
+              <div className="project-kickoff-header">
+                <h3>Project setup</h3>
+                {(myRole === "owner" || myRole === "editor") && (
+                  <Link
+                    to={buildKickoffPath({
+                      mode: "wizard",
+                      projectId: selectedProj.id,
+                      returnTo: "/projects",
+                    })}
+                    className="secondary-button project-kickoff-action-btn"
+                  >
+                    {formatKickoffSummary(selectedProj).hasKickoffData
+                      ? "Update guided setup"
+                      : "Complete guided setup"}
+                  </Link>
+                )}
+              </div>
+
               <ProjectKickoffSummary project={selectedProj} />
+
+              <RoomScanPanel
+                project={selectedProj}
+                canEdit={myRole === "owner" || myRole === "editor"}
+                onSynced={(summary) => {
+                  setSelectedProj((prev) => (prev ? { ...prev, room_summary: summary } : prev));
+                  setSuccess("Room scan synced to project.");
+                }}
+              />
 
               {error && <div className="error-box" style={{ marginTop: "14px" }}>{error}</div>}
               {success && <div className="success-box" style={{ marginTop: "14px" }}>{success}</div>}

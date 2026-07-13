@@ -406,6 +406,17 @@ class CreateProjectRequest(BaseModel):
     recommended_permits: list[str] | None = Field(default=None, description="Permit categories recommended at creation time")
 
 
+class UpdateProjectRequest(BaseModel):
+    """Partial project update payload."""
+    name: str | None = Field(default=None, min_length=1, max_length=120)
+    description: str | None = Field(default=None, max_length=500)
+    municipality: str | None = Field(default=None, description="Default city scope")
+    address: str | None = Field(default=None, max_length=500, description="Full civic address")
+    spaces: list[str] | None = Field(default=None, description="Selected space labels from kickoff wizard")
+    work_types: list[str] | None = Field(default=None, description="Selected work-type labels from kickoff wizard")
+    recommended_permits: list[str] | None = Field(default=None, description="Permit categories recommended at creation time")
+
+
 class ProjectResponse(BaseModel):
     """Project representation response."""
     id: UUID

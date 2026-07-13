@@ -22,6 +22,7 @@ from api.schemas import (
     RoomSummaryRequest,
     ShareDocumentRequest,
     TransferOwnershipRequest,
+    UpdateProjectRequest,
 )
 from db import client as db_client
 
@@ -72,16 +73,20 @@ def get_project(project_id: UUID, current_user: CurrentUser) -> dict:
 @router.patch("/{project_id}", response_model=ProjectResponse)
 def update_project(
     project_id: UUID,
-    body: CreateProjectRequest,
+    body: UpdateProjectRequest,
     current_user: CurrentUser,
 ) -> dict:
-    """Update mutable project settings (owner only)."""
-    _require_role(project_id, current_user["user_id"], {"owner"})
+    """Update mutable project settings and kickoff wizard fields."""
+    _require_role(project_id, current_user["user_id"], {"owner", "editor"})
     updated = db_client.update_project(
         project_id,
         name=body.name,
         description=body.description,
         municipality=body.municipality,
+        address=body.address,
+        spaces=body.spaces,
+        work_types=body.work_types,
+        recommended_permits=body.recommended_permits,
     )
     if not updated:
         raise HTTPException(status_code=404, detail="Project not found.")

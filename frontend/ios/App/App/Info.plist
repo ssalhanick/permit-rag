@@ -45,6 +45,10 @@
 	</array>
 	<key>UIViewControllerBasedStatusBarAppearance</key>
 	<true/>
+	<key>NSCameraUsageDescription</key>
+	<string>Camera access is required to scan room dimensions with LiDAR.</string>
+	<key>NSMotionUsageDescription</key>
+	<string>Motion sensors help align room scans for accurate measurements.</string>
 	<key>CFBundleURLTypes</key>
 	<array>
 		<dict>
