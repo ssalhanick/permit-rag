@@ -1000,6 +1000,17 @@ button:disabled {
   margin: 0.75rem 0;
 }
 
+.room-design-generated {
+  margin: 0.75rem 0 1rem;
+}
+
+.room-design-generated img {
+  display: block;
+  width: 100%;
+  max-width: 420px;
+  border: 1px solid rgba(0, 0, 0, 0.12);
+}
+
 .room-design-token-usage {
   font-size: 0.85rem;
 }

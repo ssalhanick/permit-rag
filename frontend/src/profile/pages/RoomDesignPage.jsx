@@ -16,13 +16,14 @@ import {
   previewDesignIntent,
   saveDesignPreview,
 } from "../../services/roomDesignIntent.js";
+import { generateAndAttachRoomPreview } from "../../services/roomPreviewImage.js";
 import { openRoomARForScan, startSpeechRecognition } from "../../services/roomCapture.js";
 import { findRoomFilesystemLocation } from "../../services/roomScanFilesystem.js";
 import { buildRoomDxf } from "../../services/roomCadExport.js";
 import { loadUserLibrary } from "../../services/roomScanStorage.js";
 
 /**
- * Room design — Preview (cloud LLM) → Save (device revision history).
+ * Room design — Preview (cloud LLM) → Generate image → Save (device revision history).
  *
  * Works for project-linked scans and personal library scans.
  */
@@ -34,6 +35,7 @@ export default function RoomDesignPage({ libraryMode = false }) {
   const [capture, setCapture] = useState(null);
   const [utterance, setUtterance] = useState("");
   const [preview, setPreview] = useState(null);
+  const [generatedPreviewSrc, setGeneratedPreviewSrc] = useState(null);
   const [branchParentId, setBranchParentId] = useState(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
@@ -167,6 +169,7 @@ export default function RoomDesignPage({ libraryMode = false }) {
         overlays: result.overlays,
         usage: result.usage,
       });
+      setGeneratedPreviewSrc(null);
       if (isNativePlatform()) {
         await applyOverlaysToAR({
           projectId: fsIds.scope,
@@ -177,6 +180,54 @@ export default function RoomDesignPage({ libraryMode = false }) {
       }
     } catch (err) {
       setError(err.message || "Preview failed.");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const handleGenerateImage = async () => {
+    if (!preview || !fsIds) {
+      return;
+    }
+    setBusy(true);
+    setError("");
+    setMessage("");
+    try {
+      let sourceImageB64 = null;
+      if (isNativePlatform()) {
+        try {
+          const { Camera, CameraResultType, CameraSource } = await import("@capacitor/camera");
+          const photo = await Camera.getPhoto({
+            quality: 70,
+            resultType: CameraResultType.Base64,
+            source: CameraSource.Prompt,
+            width: 1024,
+          });
+          sourceImageB64 = photo.base64String || null;
+        } catch {
+          // optional photo — continue text-only generation
+        }
+      }
+      const generated = await generateAndAttachRoomPreview({
+        utterance: preview.utterance,
+        roomLabel: scanRow?.room_label,
+        overlays: preview.overlays,
+        sourceImageB64,
+        scope: fsIds.scope,
+        structureId: fsIds.structureId,
+        roomId: fsIds.roomId,
+        projectId: fsIds.scope,
+        applyToAr: isNativePlatform(),
+      });
+      setPreview({
+        ...preview,
+        overlays: generated.overlays,
+      });
+      setGeneratedPreviewSrc(generated.previewSrc);
+      const provider = generated.meta?.mock ? "mock" : generated.meta?.provider;
+      setMessage(`Room image ready (${provider}). Save to keep on this revision.`);
+    } catch (err) {
+      setError(err.message || "Image generation failed.");
     } finally {
       setBusy(false);
     }
@@ -220,6 +271,7 @@ export default function RoomDesignPage({ libraryMode = false }) {
       });
       setHistory(next);
       setPreview(null);
+      setGeneratedPreviewSrc(null);
       setBranchParentId(null);
       setMessage("Saved.");
     } catch (err) {
@@ -364,6 +416,14 @@ export default function RoomDesignPage({ libraryMode = false }) {
           >
             Save
           </button>
+          <button
+            type="button"
+            className="secondary-button"
+            onClick={handleGenerateImage}
+            disabled={busy || !preview}
+          >
+            Generate image
+          </button>
           {isNativePlatform() && (
             <button type="button" className="secondary-button" onClick={handleMic} disabled={busy}>
               Mic
@@ -388,6 +448,14 @@ export default function RoomDesignPage({ libraryMode = false }) {
         {preview && (
           <>
             <p className="room-design-explanation">{preview.explanation}</p>
+            {generatedPreviewSrc && (
+              <figure className="room-design-generated">
+                <img src={generatedPreviewSrc} alt="Generated room redesign preview" />
+                <figcaption className="muted">
+                  Generative preview — also pushed to AR as asset texture when native.
+                </figcaption>
+              </figure>
+            )}
             <OverlayProductList overlays={preview.overlays} />
           </>
         )}

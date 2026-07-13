@@ -155,12 +155,13 @@ public class RoomCapturePlugin: CAPPlugin, CAPBridgedPlugin {
         }
 
         let productRef = call.getObject("productRef") as? [String: Any]
+        let assetUrl = call.getString("assetUrl")
         let overlay: [String: Any] = [
             "surface_id": call.getString("surfaceId") as Any,
             "type": call.getString("type") ?? "paint",
             "material_id": call.getString("materialId") ?? "generic_paint",
             "color_hex": call.getString("colorHex") as Any,
-            "asset_url": NSNull(),
+            "asset_url": assetUrl as Any,
             "image_url": call.getString("imageUrl") as Any,
             "product_ref": productRef as Any,
         ]
@@ -172,6 +173,7 @@ public class RoomCapturePlugin: CAPPlugin, CAPBridgedPlugin {
                 colorHex: call.getString("colorHex"),
                 type: call.getString("type") ?? "paint",
                 imageUrl: call.getString("imageUrl"),
+                assetUrl: assetUrl,
                 productRef: productRef
             )
             call.resolve(["applied": true, "overlay": applied, "persisted": true])

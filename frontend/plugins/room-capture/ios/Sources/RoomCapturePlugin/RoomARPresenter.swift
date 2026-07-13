@@ -183,6 +183,9 @@ final class RoomARPresenter: NSObject, UITableViewDelegate, UITableViewDataSourc
 
     private func imageUrlForOverlay(_ overlay: [String: Any]?) -> String? {
         guard let overlay else { return nil }
+        if let asset = overlay["asset_url"] as? String, !asset.isEmpty {
+            return resolveTexturePath(asset)
+        }
         if let product = overlay["product_ref"] as? [String: Any],
            let url = product["image_url"] as? String, !url.isEmpty {
             return url
@@ -191,6 +194,14 @@ final class RoomARPresenter: NSObject, UITableViewDelegate, UITableViewDataSourc
             return url
         }
         return nil
+    }
+
+    /// Prefer http(s) URLs; map relative room_scans paths to on-device files.
+    private func resolveTexturePath(_ path: String) -> String {
+        if path.hasPrefix("http://") || path.hasPrefix("https://") || path.hasPrefix("file://") {
+            return path
+        }
+        return RoomScanPaths.fileURL(relativePath: path).absoluteString
     }
 
     private func textureForOverlay(_ overlay: [String: Any]?) -> TextureResource? {
@@ -237,7 +248,7 @@ final class RoomARPresenter: NSObject, UITableViewDelegate, UITableViewDataSourc
             completion(nil)
             return
         }
-        URLSession.shared.dataTask(with: url) { [weak self] data, _, _ in
+        let finish: (Data?) -> Void = { [weak self] data in
             guard let self,
                   let data = data,
                   let image = UIImage(data: data),
@@ -254,6 +265,15 @@ final class RoomARPresenter: NSObject, UITableViewDelegate, UITableViewDataSourc
             } catch {
                 DispatchQueue.main.async { completion(nil) }
             }
+        }
+        if url.isFileURL {
+            DispatchQueue.global(qos: .userInitiated).async {
+                finish(try? Data(contentsOf: url))
+            }
+            return
+        }
+        URLSession.shared.dataTask(with: url) { data, _, _ in
+            finish(data)
         }.resume()
     }
 
@@ -293,6 +313,7 @@ final class RoomARPresenter: NSObject, UITableViewDelegate, UITableViewDataSourc
         colorHex: String?,
         type: String,
         imageUrl: String? = nil,
+        assetUrl: String? = nil,
         productRef: [String: Any]? = nil
     ) -> [String: Any] {
         var overlay: [String: Any] = [
@@ -300,7 +321,7 @@ final class RoomARPresenter: NSObject, UITableViewDelegate, UITableViewDataSourc
             "type": type,
             "material_id": materialId,
             "color_hex": colorHex as Any,
-            "asset_url": NSNull(),
+            "asset_url": assetUrl as Any,
         ]
         if let productRef {
             overlay["product_ref"] = productRef

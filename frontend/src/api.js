@@ -216,6 +216,13 @@ export async function fetchMaterialsEstimate(projectId) {
   return await requestJson(`/commerce/projects/${projectId}/materials-estimate`);
 }
 
+export async function postRoomPreviewImage(payload) {
+  return await requestJson("/commerce/room-preview-image", {
+    method: "POST",
+    body: payload,
+  });
+}
+
 export async function fetchUserRoomScans() {
   return await requestJson("/auth/me/room-scans");
 }

@@ -46,7 +46,9 @@
 	<key>UIViewControllerBasedStatusBarAppearance</key>
 	<true/>
 	<key>NSCameraUsageDescription</key>
-	<string>Camera access is required to scan room dimensions with LiDAR.</string>
+	<string>Camera access is required to scan rooms and optionally photograph a room for redesign image generation.</string>
+	<key>NSPhotoLibraryUsageDescription</key>
+	<string>Photo library access lets you pick a room photo as input for redesign image generation.</string>
 	<key>NSMotionUsageDescription</key>
 	<string>Motion sensors help align room scans for accurate measurements.</string>
 	<key>NSMicrophoneUsageDescription</key>

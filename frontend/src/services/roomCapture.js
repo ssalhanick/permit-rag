@@ -93,6 +93,7 @@ export async function applyMaterial(opts) {
     colorHex: opts.colorHex,
     type: opts.type,
     imageUrl: opts.imageUrl,
+    assetUrl: opts.assetUrl,
     productRef: opts.productRef,
   });
 }

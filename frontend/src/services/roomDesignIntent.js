@@ -89,7 +89,8 @@ export async function applyOverlaysToAR(opts) {
         materialId: overlay.material_id,
         colorHex: overlay.color_hex,
         type: overlay.type,
-        imageUrl: overlay.product_ref?.image_url,
+        imageUrl: overlay.product_ref?.image_url || overlay.image_url,
+        assetUrl: overlay.asset_url || null,
         productRef: overlay.product_ref,
       });
     } catch {

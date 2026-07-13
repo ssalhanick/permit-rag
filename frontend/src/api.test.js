@@ -100,3 +100,27 @@ test("postLibraryDesignIntent uses auth route", async () => {
   await postLibraryDesignIntent("scan-1", { utterance: "tile" });
   assert.ok(calledUrl.includes("/auth/me/room-scans/scan-1/design-intent"));
 });
+
+test("postRoomPreviewImage hits commerce route", async () => {
+  let calledUrl = "";
+  global.fetch = async (url) => {
+    calledUrl = String(url);
+    return {
+      ok: true,
+      status: 200,
+      text: async () =>
+        JSON.stringify({
+          image_base64: "aaa",
+          mime_type: "image/png",
+          provider: "mock",
+          model: "mock-solid-png",
+          prompt: "x",
+          mock: true,
+        }),
+    };
+  };
+
+  const { postRoomPreviewImage } = await import("./api.js");
+  await postRoomPreviewImage({ utterance: "tile", overlays: [] });
+  assert.ok(calledUrl.includes("/commerce/room-preview-image"));
+});

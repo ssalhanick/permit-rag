@@ -9,7 +9,7 @@ plus Texas state and federal regulations.
 
 ## Current Status (2026-07-13)
 
-- **Sprint 17 active** — Single-room Scan → Design → Preview → Save; device `redesign.json` v2 revision history; DXF export; design token accounting (migration 018). See [STATE.md](STATE.md).
+- **Sprint 17 active** — Scan → Design → Preview → **Generate image** → Save; AR textures prefer `asset_url` then product photos. See [STATE.md](STATE.md) and [docs/room_generative_preview.md](docs/room_generative_preview.md).
 - **Sprint 16 closed** — Commerce overlays, SerpApi HD resolver, materials estimate panel.
 - **Sprint 13 closed** — Capacitor 7 mobile shell, mini-RAG, corpus sync, prod on ECS `:11`. See [docs/sprint_13capacitor-implementation-overview.md](docs/sprint_13capacitor-implementation-overview.md).
 - **Production** — `https://permits.scottsalhanick.com`; Cognito auth; mobile CORS live.
@@ -41,8 +41,9 @@ py -m pytest tests/test_commerce_takeoff.py tests/test_commerce_product_resolver
 *None*
 
 ### Planned
-- [ ] Apply migration 018 + deploy backend with scan_id design-intent routes to prod ECS
-- [ ] Device smoke: Preview → Save → branch → AR → DXF export on iPhone
+- [ ] Apply migration 018 + deploy backend with scan_id design-intent routes + `/commerce/room-preview-image` to prod ECS
+- [ ] Device smoke: Preview → Generate image → Save → AR texture → DXF on iPhone ([docs/room_generative_preview.md](docs/room_generative_preview.md))
+- [ ] Optional: set `OPENAI_API_KEY` (+ SSM) for live generative room images (mock PNG works offline)
 - [ ] **Sign up for [SerpApi](https://serpapi.com/) account** — required for live Home Depot pricing/inventory (see [Commerce / SerpApi](#commerce--serpapi) below); mock catalog works without it for demos
 - [ ] [Sprint 14: 3D Room Capture](docs/sprint_14_3d-room-capture-agnostic-guide.md) — Capacitor plugin, interchange JSON v1.0, on-device metrics → `room_summary` API
 - [ ] [Sprint 11: Document Governance UI](docs/sprint11_document_updates.md) — metadata edit + supersede on `/documents`
@@ -58,6 +59,7 @@ py -m pytest tests/test_commerce_takeoff.py tests/test_commerce_product_resolver
 - [ ] 3D Map Integration — CesiumJS city boundaries + site overlay
 
 ### Completed
+- [x] Sprint 17: Room generative preview — `POST /commerce/room-preview-image`, OpenAI/mock images, device `asset_url`, AR prefers generated asset over product photo ([docs/room_generative_preview.md](docs/room_generative_preview.md))
 - [x] Sprint 17: Room design Preview/Save — scan_id design-intent API, token usage (migration 018), `redesign.json` v2 revisions on device, `RoomDesignPage`, DXF export, demoted Scan House
 - [x] Sprint 16: Commerce overlays — `commerce/` module, SerpApi HD resolver + mock fallback, `product_ref` / qty takeoff on design intent, product cards + materials estimate UI, AR product textures
 - [x] Sprint 15: Scan library UX — profile Room Scans, per-project dashboard (`/projects/:id/dashboard`), link scans from library, migration 017
@@ -135,6 +137,8 @@ Production (AWS/ECS) uses Terraform task env + SSM — no dotenv files in the co
 | `COGNITO_APP_CLIENT_ID` | e.g. `21admh46opa2gaaii3oaq0nlgd` (from AWS Cognito) |
 | `COGNITO_REGION` | e.g. `us-east-1` |
 | `SERPAPI_API_KEY` | *(optional)* SerpApi key for live Home Depot product search — see [Commerce / SerpApi](#commerce--serpapi) |
+| `OPENAI_API_KEY` | *(optional)* OpenAI key for generative room preview images — mock PNG when unset ([docs/room_generative_preview.md](docs/room_generative_preview.md)) |
+| `OPENAI_IMAGE_MODEL` | *(optional)* default `gpt-image-1` |
 
 Database URLs are in `.env.local` (already point at Docker on port 5433).
 
