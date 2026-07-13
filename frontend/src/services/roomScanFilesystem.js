@@ -132,8 +132,12 @@ export async function saveStructureScan(scope, structureScan) {
  * @returns {Promise<object>}
  */
 export async function saveRoomScanFile(scope, roomScan) {
-  const structureId = roomScan.parent_structure_id || roomScan.structure_id || `room_${roomScan.id || Date.now()}`;
   const roomId = roomScan.room_id || roomScan.id || `room_${Date.now()}`;
+  const structureId =
+    roomScan.parent_scan_id ||
+    roomScan.parent_structure_id ||
+    roomScan.structure_id ||
+    `room_${roomId}`;
   const base = roomBasePath(scope, structureId, roomId);
   await writeJson(`${base}/capture.json`, { ...roomScan, room_id: roomId });
   await writeJson(`${base}/redesign.json`, {
@@ -168,7 +172,7 @@ export async function loadRedesign(scope, structureId, roomId) {
  */
 export async function saveRedesignOverlays(scope, structureId, roomId, overlays) {
   const path = `${roomBasePath(scope, structureId, roomId)}/redesign.json`;
-  const current = await loadRedesign(projectId, structureId, roomId);
+  const current = await loadRedesign(scope, structureId, roomId);
   const merged = {
     ...current,
     overlays: [...(current.overlays || []), ...overlays],
@@ -211,4 +215,84 @@ export async function listProjectStructures(scope) {
  */
 export async function listLibraryStructures() {
   return listProjectStructures(LIBRARY_SCOPE);
+}
+
+/**
+ * Discover on-disk capture path for a room scan (handles legacy structureId layouts).
+ *
+ * @param {string} scope projectId or library scope
+ * @param {object} scanRow
+ * @returns {Promise<{ scope: string, structureId: string, roomId: string, capture: object | null }>}
+ */
+export async function findRoomFilesystemLocation(scope, scanRow) {
+  const roomId = scanRow?.id || scanRow?.room_id;
+  if (!roomId) {
+    return { scope, structureId: "", roomId: "", capture: null };
+  }
+
+  const structureCandidates = [
+    scanRow.structure_id,
+    scanRow.parent_scan_id,
+    `room_${roomId}`,
+  ].filter(Boolean);
+
+  const scopes = scope === LIBRARY_SCOPE ? [LIBRARY_SCOPE] : [scope, LIBRARY_SCOPE];
+
+  for (const activeScope of scopes) {
+    for (const structureId of [...new Set(structureCandidates)]) {
+      const roomIdVariations = [...new Set([roomId, roomId.toLowerCase(), roomId.toUpperCase()])];
+      const structureIdVariations = [...new Set([structureId, structureId.toLowerCase(), structureId.toUpperCase()])];
+
+      for (const sId of structureIdVariations) {
+        for (const rId of roomIdVariations) {
+          const capture = await readJson(`${roomBasePath(activeScope, sId, rId)}/capture.json`);
+          if (capture?.surfaces?.length) {
+            return { scope: activeScope, structureId: sId, roomId: rId, capture };
+          }
+        }
+      }
+    }
+    const discovered = await discoverRoomLocation(activeScope, roomId);
+    if (discovered) {
+      return { scope: activeScope, ...discovered };
+    }
+  }
+
+  const fallbackStructureId =
+    scanRow.parent_scan_id || scanRow.structure_id || `room_${roomId}`;
+  return {
+    scope,
+    structureId: fallbackStructureId,
+    roomId,
+    capture: null,
+  };
+}
+
+/**
+ * Scan scope directories for any structure folder containing this roomId.
+ *
+ * @param {string} scope
+ * @param {string} roomId
+ * @returns {Promise<{ structureId: string, roomId: string, capture: object } | null>}
+ */
+async function discoverRoomLocation(scope, roomId) {
+  const projectPath = `${ROOT}/${scope}`;
+  try {
+    const listing = await Filesystem.readdir({ path: projectPath, directory: Directory.Data });
+    const roomIdVariations = [...new Set([roomId, roomId.toLowerCase(), roomId.toUpperCase()])];
+    for (const entry of listing.files || []) {
+      if (entry.type !== "directory") {
+        continue;
+      }
+      for (const rId of roomIdVariations) {
+        const capture = await readJson(`${roomBasePath(scope, entry.name, rId)}/capture.json`);
+        if (capture?.surfaces?.length) {
+          return { structureId: entry.name, roomId: rId, capture };
+        }
+      }
+    }
+  } catch {
+    // scope directory may not exist yet
+  }
+  return null;
 }

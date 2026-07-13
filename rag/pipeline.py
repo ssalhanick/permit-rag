@@ -327,9 +327,9 @@ def batch_eval(
 if __name__ == "__main__":
     import argparse
 
-    from dotenv import load_dotenv
+    from api.load_env import bootstrap_env
 
-    load_dotenv()
+    bootstrap_env()
 
     parser = argparse.ArgumentParser(
         description="RAG retrieval pipeline — dense search via pgvector"

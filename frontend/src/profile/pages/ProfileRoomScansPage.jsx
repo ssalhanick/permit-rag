@@ -69,7 +69,8 @@ export default function ProfileRoomScansPage() {
         <h3>Your scans ({displayScans.length})</h3>
         <ScanLibraryList
           scans={displayScans}
-          emptyMessage="No scans yet. Use Scan House or Scan Single Room above."
+          emptyMessage="No scans yet. Use Scan Single Room above."
+          designHref={(scanId) => `/profile/room-scans/${scanId}/design`}
         />
       </section>
     </div>

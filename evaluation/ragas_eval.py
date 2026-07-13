@@ -1077,9 +1077,9 @@ if __name__ == "__main__":
     import argparse
     import sys
 
-    from dotenv import load_dotenv
+    from api.load_env import bootstrap_env
 
-    load_dotenv()
+    bootstrap_env()
 
     parser = argparse.ArgumentParser(
         description="RAGAs evaluation harness for permit_rag"

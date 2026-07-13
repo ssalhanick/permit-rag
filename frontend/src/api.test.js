@@ -56,3 +56,47 @@ test("requestJson rejects HTML body masquerading as success", async () => {
     /web page instead of API data/,
   );
 });
+
+test("postDesignIntentByScan uses scan_id route", async () => {
+  let calledUrl = "";
+  global.fetch = async (url) => {
+    calledUrl = String(url);
+    return {
+      ok: true,
+      status: 200,
+      text: async () =>
+        JSON.stringify({
+          overlays: [],
+          explanation: "ok",
+          product_candidates: [],
+          usage: { input_tokens: 0, output_tokens: 0, model: "rules" },
+        }),
+    };
+  };
+
+  const { postDesignIntentByScan } = await import("./api.js");
+  await postDesignIntentByScan("proj-1", "scan-1", { utterance: "tile" });
+  assert.ok(calledUrl.includes("/projects/proj-1/room-scans/scan-1/design-intent"));
+});
+
+test("postLibraryDesignIntent uses auth route", async () => {
+  let calledUrl = "";
+  global.fetch = async (url) => {
+    calledUrl = String(url);
+    return {
+      ok: true,
+      status: 200,
+      text: async () =>
+        JSON.stringify({
+          overlays: [],
+          explanation: "ok",
+          product_candidates: [],
+          usage: { input_tokens: 0, output_tokens: 0, model: "rules" },
+        }),
+    };
+  };
+
+  const { postLibraryDesignIntent } = await import("./api.js");
+  await postLibraryDesignIntent("scan-1", { utterance: "tile" });
+  assert.ok(calledUrl.includes("/auth/me/room-scans/scan-1/design-intent"));
+});

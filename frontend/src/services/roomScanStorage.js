@@ -82,7 +82,7 @@ export function loadRoomScans(projectId) {
  */
 export async function saveRoomScan(projectId, scan) {
   const entry = {
-    id: scan.id || scan.structure_id || `scan_${Date.now()}`,
+    id: scan.room_id || scan.id || scan.structure_id || `scan_${Date.now()}`,
     saved_at: new Date().toISOString(),
     ...scan,
   };
@@ -102,7 +102,12 @@ export async function saveRoomScan(projectId, scan) {
 
   entry.scan_type = "room";
   if (useFilesystemStorage()) {
-    await saveRoomScanFile(projectId, entry);
+    const saved = await saveRoomScanFile(projectId, entry);
+    entry.structure_id = saved.structureId;
+    entry.room_id = saved.roomId;
+    const manifest = loadLocalManifest(projectId);
+    manifest.push(entry);
+    saveLocalManifest(projectId, manifest);
     return entry;
   }
   const manifest = loadLocalManifest(projectId);
@@ -157,7 +162,7 @@ export async function loadUserLibrary() {
  */
 export async function saveToUserLibrary(scan) {
   const entry = {
-    id: scan.id || scan.structure_id || `scan_${Date.now()}`,
+    id: scan.room_id || scan.id || scan.structure_id || `scan_${Date.now()}`,
     saved_at: new Date().toISOString(),
     ...scan,
   };
@@ -175,7 +180,12 @@ export async function saveToUserLibrary(scan) {
   }
   entry.scan_type = "room";
   if (useFilesystemStorage()) {
-    await saveRoomScanFile(LIBRARY_SCOPE, entry);
+    const saved = await saveRoomScanFile(LIBRARY_SCOPE, entry);
+    entry.structure_id = saved.structureId;
+    entry.room_id = saved.roomId;
+    const manifest = loadLocalManifest(LIBRARY_KEY);
+    manifest.push(entry);
+    saveLocalManifest(LIBRARY_KEY, manifest);
   } else {
     const manifest = loadLocalManifest(LIBRARY_KEY);
     manifest.push(entry);

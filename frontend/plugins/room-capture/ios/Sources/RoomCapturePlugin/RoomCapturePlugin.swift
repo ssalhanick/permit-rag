@@ -127,15 +127,19 @@ public class RoomCapturePlugin: CAPPlugin, CAPBridgedPlugin {
             return
         }
         let roomLabel = call.getString("roomLabel") ?? "Room"
-        let presenter = RoomARPresenter(
-            call: call,
-            projectId: projectId,
-            structureId: structureId,
-            roomId: roomId,
-            roomLabel: roomLabel
-        )
-        activeARPresenters[roomId] = presenter
-        presenter.present(from: viewController)
+        DispatchQueue.main.async { [weak self] in
+            guard let self else { return }
+            let presenter = RoomARPresenter(
+                call: call,
+                plugin: self,
+                projectId: projectId,
+                structureId: structureId,
+                roomId: roomId,
+                roomLabel: roomLabel
+            )
+            self.activeARPresenters[roomId] = presenter
+            presenter.present(from: viewController)
+        }
         #else
         call.reject("AR viewer requires iOS RoomPlan build.")
         #endif
@@ -150,12 +154,15 @@ public class RoomCapturePlugin: CAPPlugin, CAPBridgedPlugin {
             return
         }
 
+        let productRef = call.getObject("productRef") as? [String: Any]
         let overlay: [String: Any] = [
             "surface_id": call.getString("surfaceId") as Any,
             "type": call.getString("type") ?? "paint",
             "material_id": call.getString("materialId") ?? "generic_paint",
             "color_hex": call.getString("colorHex") as Any,
             "asset_url": NSNull(),
+            "image_url": call.getString("imageUrl") as Any,
+            "product_ref": productRef as Any,
         ]
 
         if let presenter = activeARPresenters[roomId] {
@@ -163,7 +170,9 @@ public class RoomCapturePlugin: CAPPlugin, CAPBridgedPlugin {
                 surfaceId: call.getString("surfaceId"),
                 materialId: call.getString("materialId") ?? "generic_paint",
                 colorHex: call.getString("colorHex"),
-                type: call.getString("type") ?? "paint"
+                type: call.getString("type") ?? "paint",
+                imageUrl: call.getString("imageUrl"),
+                productRef: productRef
             )
             call.resolve(["applied": true, "overlay": applied, "persisted": true])
             return

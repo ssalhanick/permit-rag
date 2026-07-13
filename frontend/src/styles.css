@@ -991,6 +991,56 @@ button:disabled {
   padding: 0.5rem;
 }
 
+.room-design-page .room-design-textarea {
+  min-height: 5rem;
+  resize: vertical;
+}
+
+.room-design-explanation {
+  margin: 0.75rem 0;
+}
+
+.room-design-token-usage {
+  font-size: 0.85rem;
+}
+
+.room-design-history {
+  margin-top: 1.5rem;
+  padding-top: 1rem;
+  border-top: 1px solid var(--border, #e2e8f0);
+}
+
+.room-design-history-list {
+  list-style: none;
+  padding: 0;
+  margin: 0.5rem 0 0;
+}
+
+.room-design-history-list li {
+  padding: 0.75rem 0;
+  border-bottom: 1px solid var(--border, #e2e8f0);
+}
+
+.room-design-history-list li.active-revision {
+  background: var(--surface-muted, #f8fafc);
+}
+
+.room-design-history-meta {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  margin-bottom: 0.35rem;
+}
+
+.room-scan-button--muted {
+  opacity: 0.85;
+}
+
+.room-scan-advanced-hint {
+  font-size: 0.85rem;
+  margin-top: 0.35rem;
+}
+
 .room-compliance-cards ul {
   list-style: none;
   padding: 0;
@@ -2543,4 +2593,71 @@ body.native-app .site-nav {
     width: 100%;
     text-align: center;
   }
+}
+
+.product-card {
+  display: flex;
+  gap: 0.75rem;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  padding: 0.75rem;
+  background: #fff;
+}
+
+.product-card--selected {
+  border-color: #2563eb;
+  box-shadow: 0 0 0 1px #2563eb;
+}
+
+.product-card-image {
+  width: 72px;
+  height: 72px;
+  object-fit: cover;
+  border-radius: 6px;
+  flex-shrink: 0;
+}
+
+.product-card-body h4 {
+  margin: 0 0 0.25rem;
+  font-size: 0.95rem;
+}
+
+.product-card-price {
+  font-weight: 700;
+  color: #2563eb;
+  margin: 0.15rem 0;
+}
+
+.product-card-stock,
+.product-card-qty,
+.product-card-disclaimer {
+  font-size: 0.85rem;
+  margin: 0.2rem 0;
+}
+
+.product-card-alternates ul {
+  list-style: none;
+  margin: 0.25rem 0 0;
+  padding: 0;
+}
+
+.overlay-product-list {
+  margin-top: 1rem;
+}
+
+.overlay-product-grid {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.materials-estimate-lines {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.materials-estimate-lines li {
+  padding: 0.35rem 0;
+  border-bottom: 1px solid #f1f5f9;
 }

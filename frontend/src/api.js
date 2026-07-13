@@ -185,13 +185,35 @@ export async function setActiveRoomScan(projectId, scanId) {
 }
 
 export async function postDesignIntent(projectId, structureId, roomId, payload) {
+  return await postDesignIntentByScan(projectId, roomId, payload);
+}
+
+export async function postDesignIntentByScan(projectId, scanId, payload) {
   return await requestJson(
-    `/projects/${projectId}/room-scans/${structureId}/rooms/${roomId}/design-intent`,
+    `/projects/${projectId}/room-scans/${scanId}/design-intent`,
     {
       method: "POST",
       body: payload,
     },
   );
+}
+
+export async function postLibraryDesignIntent(scanId, payload) {
+  return await requestJson(`/auth/me/room-scans/${scanId}/design-intent`, {
+    method: "POST",
+    body: payload,
+  });
+}
+
+export async function searchProducts(query, zipCode = "75034", limit = 3) {
+  return await requestJson("/commerce/products/search", {
+    method: "POST",
+    body: { query, zip_code: zipCode, limit },
+  });
+}
+
+export async function fetchMaterialsEstimate(projectId) {
+  return await requestJson(`/commerce/projects/${projectId}/materials-estimate`);
 }
 
 export async function fetchUserRoomScans() {

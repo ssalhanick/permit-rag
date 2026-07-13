@@ -14,7 +14,7 @@ import logging
 import os
 from collections.abc import Generator
 from contextlib import contextmanager
-from datetime import date
+from datetime import date, datetime
 from typing import Any
 from uuid import UUID
 
@@ -533,7 +533,7 @@ def match_project_chunks(
             d.authority_level,
             d.doc_type,
             d.document_status,
-            c.chunk_status,
+            c.status AS chunk_status,
             d.source_tier,
             d.ingested_at,
             d.retrieval_weight,
@@ -543,7 +543,7 @@ def match_project_chunks(
         LEFT JOIN project_documents pd ON pd.document_id = d.id
         WHERE d.source_tier IN (2, 3)
           AND d.document_status = 'active'
-          AND c.chunk_status = 'active'
+          AND c.status = 'active'
           AND c.embedding IS NOT NULL
           AND (d.project_id = %(project_id)s OR pd.project_id = %(project_id)s)
         ORDER BY d.source_tier ASC, similarity DESC
@@ -585,7 +585,7 @@ def get_chunks_by_ids(chunk_ids: list[UUID]) -> list[dict[str, Any]]:
             d.authority_level,
             d.doc_type,
             d.document_status,
-            c.chunk_status,
+            c.status AS chunk_status,
             d.source_tier,
             d.ingested_at,
             d.retrieval_weight,
@@ -594,7 +594,7 @@ def get_chunks_by_ids(chunk_ids: list[UUID]) -> list[dict[str, Any]]:
         JOIN documents d ON d.id = c.document_id
         WHERE c.id = ANY(%(chunk_ids)s)
           AND d.document_status = 'active'
-          AND c.chunk_status = 'active';
+          AND c.status = 'active';
     """
     with get_conn() as conn:
         return conn.execute(sql, {"chunk_ids": chunk_ids}).fetchall()
@@ -631,7 +631,7 @@ def list_corpus_sync_chunks(
         JOIN documents d ON d.id = c.document_id
         WHERE d.source_tier = 1
           AND d.document_status = 'active'
-          AND c.chunk_status = 'active'
+          AND c.status = 'active'
           AND c.embedding IS NOT NULL
           AND (%(municipality)s IS NULL OR d.municipality = %(municipality)s)
         ORDER BY d.doc_id, c.chunk_index
@@ -673,6 +673,7 @@ def _search_chunks_with_tsquery(
         JOIN documents d ON d.id = c.document_id
         WHERE d.document_status = 'active'
           AND d.is_current = true
+          AND c.status = 'active'
           AND c.search_vector @@ {tsquery_func}('english', %(query_text)s)
           AND (%(municipality)s::text IS NULL OR d.municipality = %(municipality)s::text)
         ORDER BY similarity DESC, c.chunk_index ASC
@@ -1716,4 +1717,43 @@ def set_active_linked_room_scan(project_id: UUID, scan_id: UUID) -> dict[str, An
         )
         conn.commit()
     return row
+
+
+def insert_design_intent_usage(
+    *,
+    user_id: UUID,
+    project_id: UUID | None,
+    room_scan_id: UUID,
+    input_tokens: int,
+    output_tokens: int,
+    model: str,
+) -> dict[str, Any]:
+    """Log one design-intent LLM call for token accounting."""
+    sql = """
+        INSERT INTO design_intent_usage (
+            user_id, project_id, room_scan_id,
+            input_tokens, output_tokens, model
+        )
+        VALUES (%s, %s, %s, %s, %s, %s)
+        RETURNING *;
+    """
+    with get_conn() as conn:
+        row = conn.execute(
+            sql,
+            (user_id, project_id, room_scan_id, input_tokens, output_tokens, model),
+        ).fetchone()
+        conn.commit()
+    return row
+
+
+def sum_design_intent_tokens(user_id: UUID, *, since: datetime) -> int:
+    """Sum input + output tokens for a user since a timestamp."""
+    sql = """
+        SELECT COALESCE(SUM(input_tokens + output_tokens), 0) AS total
+        FROM design_intent_usage
+        WHERE user_id = %s AND created_at >= %s;
+    """
+    with get_conn() as conn:
+        row = conn.execute(sql, (user_id, since)).fetchone()
+    return int(row["total"]) if row else 0
 

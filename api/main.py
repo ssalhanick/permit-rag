@@ -31,6 +31,7 @@ from fastapi.responses import JSONResponse
 from api.routes import (
     admin_router,
     auth_router,
+    commerce_router,
     corpus_router,
     documents_router,
     projects_router,
@@ -143,6 +144,7 @@ api_router.include_router(admin_router)
 api_router.include_router(upload_router)
 api_router.include_router(auth_router)
 api_router.include_router(projects_router)
+api_router.include_router(commerce_router)
 api_router.include_router(corpus_router)
 app.include_router(api_router)
 

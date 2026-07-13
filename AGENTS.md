@@ -55,7 +55,8 @@ End with “Next step:” only
 ```
 ingestion/  →  may import: db/, standard library only
 rag/        →  may import: db/, audit/, standard library only
-api/        →  may import: rag/, db/, audit/, standard library only
+commerce/   →  may import: db/, standard library only
+api/        →  may import: rag/, commerce/, db/, audit/, standard library only
 audit/      →  may import: db/, standard library only
 evaluation/ →  may import: rag/, db/, standard library only
 scripts/    →  may import: anything (one-off use only)

@@ -154,7 +154,7 @@ final class RoomCapturePresenter: NSObject, RoomCaptureViewDelegate, RoomCapture
         let payload = RoomCaptureEncoder.encode(
             capturedRoom: processedResult,
             roomLabel: roomLabel,
-            roomId: UUID().uuidString
+            roomId: UUID().uuidString.lowercased()
         )
         dismissHost {
             self.finish {

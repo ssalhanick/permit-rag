@@ -14,6 +14,7 @@ import ProfileHistoryPage from "./profile/pages/ProfileHistoryPage.jsx";
 import ProfileDocumentsPage from "./profile/pages/ProfileDocumentsPage.jsx";
 import ProfileAccountPage from "./profile/pages/ProfileAccountPage.jsx";
 import ProfileRoomScansPage from "./profile/pages/ProfileRoomScansPage.jsx";
+import RoomDesignPage from "./profile/pages/RoomDesignPage.jsx";
 import ProjectLayout from "./projects/ProjectLayout.jsx";
 import { ProjectProvider } from "./projects/ProjectContext.jsx";
 import ProjectDashboardPage from "./projects/pages/ProjectDashboardPage.jsx";
@@ -84,6 +85,7 @@ ReactDOM.createRoot(document.getElementById("root")).render(
             <Route index element={<Navigate to="dashboard" replace />} />
             <Route path="dashboard" element={<ProjectDashboardPage />} />
             <Route path="scans" element={<ProjectScansPage />} />
+            <Route path="scans/:scanId/design" element={<RoomDesignPage />} />
             <Route path="queries" element={<ProjectQueriesPage />} />
             <Route path="documents" element={<ProjectDocumentsPage />} />
             <Route path="members" element={<ProjectMembersPage />} />
@@ -109,6 +111,7 @@ ReactDOM.createRoot(document.getElementById("root")).render(
             <Route path="history" element={<ProfileHistoryPage />} />
             <Route path="documents" element={<ProfileDocumentsPage />} />
             <Route path="room-scans" element={<ProfileRoomScansPage />} />
+            <Route path="room-scans/:scanId/design" element={<RoomDesignPage libraryMode />} />
             <Route path="account" element={<ProfileAccountPage />} />
           </Route>
           <Route

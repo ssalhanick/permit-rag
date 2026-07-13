@@ -185,7 +185,7 @@ final class StructureCapturePresenter: NSObject, RoomCaptureViewDelegate, RoomCa
             return
         }
 
-        let structureId = UUID().uuidString
+        let structureId = UUID().uuidString.lowercased()
         let payload = RoomCaptureEncoder.encodeStructure(
             rooms: capturedRooms,
             labels: roomLabels,

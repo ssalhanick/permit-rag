@@ -7,24 +7,30 @@ plus Texas state and federal regulations.
 
 ---
 
-## Current Status (2026-07-09)
+## Current Status (2026-07-13)
 
-- **Sprint 14 active** — 3D room capture per [docs/sprint_14_3d-room-capture-agnostic-guide.md](docs/sprint_14_3d-room-capture-agnostic-guide.md). Wire native plugin → interchange JSON v1.0 → `projects.room_summary`.
-- **Sprint 13 closed** — Capacitor 7 mobile shell, mini-RAG, corpus sync, prod on ECS `:11`. Android device: email login + RAG verified. See [docs/sprint_13capacitor-implementation-overview.md](docs/sprint_13capacitor-implementation-overview.md).
-- **Sprint 12 closed** — kickoff wizard + project detail summary on `/projects`.
+- **Sprint 17 active** — Single-room Scan → Design → Preview → Save; device `redesign.json` v2 revision history; DXF export; design token accounting (migration 018). See [STATE.md](STATE.md).
+- **Sprint 16 closed** — Commerce overlays, SerpApi HD resolver, materials estimate panel.
+- **Sprint 13 closed** — Capacitor 7 mobile shell, mini-RAG, corpus sync, prod on ECS `:11`. See [docs/sprint_13capacitor-implementation-overview.md](docs/sprint_13capacitor-implementation-overview.md).
 - **Production** — `https://permits.scottsalhanick.com`; Cognito auth; mobile CORS live.
 
-```powershell
-# Mobile build + tests
+```bash
+# Mobile build + open Xcode (run from repo root)
 cd frontend
 npm run test
 npm run build:mobile
-npx cap sync android
+npx cap sync ios
+npx cap open ios
+# In Xcode: select your iPhone → Product → Run (⌘R)
 
-# Backend smoke (Sprint 13 routes)
+# First time on a new Mac, if pods fail:
+cd ios/App && pod install && cd ../..
+```
+
+```powershell
+# Backend smoke
 .\.venv\Scripts\Activate.ps1
-py -m pytest tests/test_query_answer_route.py tests/test_mini_rag.py tests/test_api_main.py -v
-.\scripts\sprint12_p0_smoke.ps1
+py -m pytest tests/test_commerce_takeoff.py tests/test_commerce_product_resolver.py tests/test_project_room_scans.py -v
 ```
 
 ---
@@ -35,6 +41,9 @@ py -m pytest tests/test_query_answer_route.py tests/test_mini_rag.py tests/test_
 *None*
 
 ### Planned
+- [ ] Apply migration 018 + deploy backend with scan_id design-intent routes to prod ECS
+- [ ] Device smoke: Preview → Save → branch → AR → DXF export on iPhone
+- [ ] **Sign up for [SerpApi](https://serpapi.com/) account** — required for live Home Depot pricing/inventory (see [Commerce / SerpApi](#commerce--serpapi) below); mock catalog works without it for demos
 - [ ] [Sprint 14: 3D Room Capture](docs/sprint_14_3d-room-capture-agnostic-guide.md) — Capacitor plugin, interchange JSON v1.0, on-device metrics → `room_summary` API
 - [ ] [Sprint 11: Document Governance UI](docs/sprint11_document_updates.md) — metadata edit + supersede on `/documents`
 - [ ] [Agent Implementation Plan](../..\.gemini\antigravity\brain\acda4bb1-53b2-4cf2-b710-5e93089c1fab/agent_implementation_plan.md) — Implement single-responsibility agents (Query Deconstructor, Semantic Conflict Analyzer, Citation Verification) with the `instructor` library and dynamic token truncation.
@@ -42,12 +51,16 @@ py -m pytest tests/test_query_answer_route.py tests/test_mini_rag.py tests/test_
 - [ ] [CMS Admin Dashboard](.gemini\antigravity\brain\acda4bb1-53b2-4cf2-b710-5e93089c1fab\cms_admin_dashboard_plan.md)
 
 ### Upcoming
+- [ ] **SerpApi production key** — add `SERPAPI_API_KEY` to ECS task env / SSM after account signup (blocker for live HD prices; mocks work until then)
 - [ ] Add ability to update existing documents
 - [ ] Mobile OAuth deep links (M0-6/M0-7) + Firebase push (`google-services.json`)
 - [ ] Terraform: fix RDS `DATABASE_URL` drift or move to SSM before next `terraform apply`
 - [ ] 3D Map Integration — CesiumJS city boundaries + site overlay
 
 ### Completed
+- [x] Sprint 17: Room design Preview/Save — scan_id design-intent API, token usage (migration 018), `redesign.json` v2 revisions on device, `RoomDesignPage`, DXF export, demoted Scan House
+- [x] Sprint 16: Commerce overlays — `commerce/` module, SerpApi HD resolver + mock fallback, `product_ref` / qty takeoff on design intent, product cards + materials estimate UI, AR product textures
+- [x] Sprint 15: Scan library UX — profile Room Scans, per-project dashboard (`/projects/:id/dashboard`), link scans from library, migration 017
 - [x] Sprint 13: Capacitor Mobile — Capacitor 7 shell, mobile auth, mini-RAG, corpus sync, asset lifecycle scaffolds, room capture plugin stubs, migration 015, mobile CI, prod deploy ECS `:11`, Android Phase 0 (email + RAG)
 - [x] Sprint 12: Project Kickoff Wizard — 5-step post-login wizard (`/kickoff`), migration 014 fields (address, spaces, work types, recommended permits), rule-based permit recommendations, kickoff summary on `/projects` detail
 - [x] Cognito Auth Migration (Sprint 11) — Replaced custom JWT/Argon2id with Amazon Cognito RS256 JWKS verification, Google SSO, optional TOTP 2FA, lazy RDS user provisioning via `GET /auth/me`
@@ -121,8 +134,33 @@ Production (AWS/ECS) uses Terraform task env + SSM — no dotenv files in the co
 | `COGNITO_USER_POOL_ID` | e.g. `us-east-1_HF3i1xgNF` (from AWS Cognito) |
 | `COGNITO_APP_CLIENT_ID` | e.g. `21admh46opa2gaaii3oaq0nlgd` (from AWS Cognito) |
 | `COGNITO_REGION` | e.g. `us-east-1` |
+| `SERPAPI_API_KEY` | *(optional)* SerpApi key for live Home Depot product search — see [Commerce / SerpApi](#commerce--serpapi) |
 
 Database URLs are in `.env.local` (already point at Docker on port 5433).
+
+---
+
+## Commerce / SerpApi
+
+After a room scan, design intent (e.g. *"white subway tile backsplash"*) resolves to **real Home Depot SKUs** with price, stock hints, and a deep link. Implementation: [`commerce/serpapi_client.py`](commerce/serpapi_client.py) + [`commerce/product_resolver.py`](commerce/product_resolver.py).
+
+**What SerpApi does:** Home Depot has no public product API. SerpApi is a paid third-party service that searches `homedepot.com` by keyword + zip and returns structured JSON (title, price, image URL, product link, availability). Our backend calls SerpApi only — **never put the key in `frontend/.env.mobile`**.
+
+| Mode | When | What you get |
+|------|------|----------------|
+| **Mock catalog** | `SERPAPI_API_KEY` unset | Sample tile/paint products for demos and tests |
+| **Live HD data** | `SERPAPI_API_KEY` set in `.env` (local) or ECS/SSM (prod) | Real localized search results near project zip |
+
+**Blocker for production pricing:** Until you sign up at [serpapi.com](https://serpapi.com/) and add `SERPAPI_API_KEY` to prod ECS, the app shows **mock products** only. Permit queries and room scans still work; commerce cards use placeholder SKUs.
+
+**Local optional setup:**
+
+```bash
+# In .env (repo root) — not in frontend mobile env
+SERPAPI_API_KEY=your_serpapi_key
+```
+
+**Also required for full mobile commerce flow:** deploy backend with `/api/commerce/*` routes and migration 017 (`user_room_scans`, `project_room_scan_links`). If `run_migration.py` fails with `user_room_scans already exists`, migration 017 is already applied — skip it.
 
 ---
 

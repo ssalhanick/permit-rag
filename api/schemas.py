@@ -523,10 +523,50 @@ class DesignIntentRequest(BaseModel):
     surface_hints: list[dict] | None = None
 
 
+class DesignIntentUsage(BaseModel):
+    """Token usage from a design-intent LLM preview call."""
+    input_tokens: int
+    output_tokens: int
+    model: str
+
+
 class DesignIntentResponse(BaseModel):
     """Structured overlay patches for native AR application."""
     overlays: list[dict]
     explanation: str
+    product_candidates: list[dict] = Field(default_factory=list)
+    usage: DesignIntentUsage
+
+
+class ProductSearchRequest(BaseModel):
+    """Search retailer catalog for materials near a zip code."""
+    query: str = Field(..., min_length=1, max_length=200)
+    zip_code: str = Field(default="75034", pattern=r"^\d{5}$")
+    limit: int = Field(default=3, ge=1, le=10)
+
+
+class ProductSearchResponse(BaseModel):
+    """Home Depot product search results."""
+    products: list[dict]
+    zip_code: str
+    disclaimer: str = "Prices and availability change — confirm in store."
+
+
+class MaterialsEstimateLine(BaseModel):
+    """One BOM line for a project materials estimate."""
+    overlay_type: str
+    product_title: str | None = None
+    qty_estimate: dict | None = None
+    line_estimate: dict | None = None
+    product_ref: dict | None = None
+
+
+class MaterialsEstimateResponse(BaseModel):
+    """Aggregated materials estimate from design overlays."""
+    lines: list[MaterialsEstimateLine]
+    total_low: float | None = None
+    total_high: float | None = None
+    disclaimer: str = "Estimate only — confirm quantities and prices in store."
 
 
 class ProjectMemberResponse(BaseModel):

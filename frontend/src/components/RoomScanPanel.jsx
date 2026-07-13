@@ -1,10 +1,10 @@
 import React, { useCallback, useEffect, useState } from "react";
+import { Link, useNavigate } from "react-router-dom";
 import { isNativePlatform } from "../platform.js";
 import { fetchProjectRoomScans } from "../api.js";
-import { openRoomAR } from "../services/roomCapture.js";
-import { applyDesignIntent, applySpeechDesignIntent, listMaterials } from "../services/roomDesignIntent.js";
+import { openRoomARForScan } from "../services/roomCapture.js";
 import { buildComplianceChecks } from "../services/roomMetrics.js";
-import { getRoomCaptureStatus } from "../services/roomCapture.js";
+import { LIBRARY_SCOPE } from "../services/roomScanFilesystem.js";
 import {
   activateRoomScan,
   captureAndSyncRoom,
@@ -13,11 +13,12 @@ import {
 import { getRoomFromStructure, loadRoomScans } from "../services/roomScanStorage.js";
 
 /**
- * RoomScanPanel — structure/room capture, master plan room list, AR design entry.
+ * RoomScanPanel — structure/room capture, master plan room list, design entry links.
  *
  * @param {{ project?: object, canEdit: boolean, libraryMode?: boolean, onSynced: (summary: object) => void }} props
  */
 export default function RoomScanPanel({ project, canEdit, libraryMode = false, onSynced }) {
+  const navigate = useNavigate();
   const [status, setStatus] = useState({
     pluginLoaded: false,
     available: false,
@@ -29,8 +30,6 @@ export default function RoomScanPanel({ project, canEdit, libraryMode = false, o
   const [localStructures, setLocalStructures] = useState([]);
   const [selectedStructureId, setSelectedStructureId] = useState(null);
   const [activeRoomId, setActiveRoomId] = useState(null);
-  const [designText, setDesignText] = useState("");
-  const [designBusy, setDesignBusy] = useState(false);
 
   const refreshScans = useCallback(async () => {
     if (libraryMode || !project?.id) {
@@ -52,7 +51,7 @@ export default function RoomScanPanel({ project, canEdit, libraryMode = false, o
     } catch {
       setCloudScans([]);
     }
-  }, [project?.id]);
+  }, [project?.id, libraryMode]);
 
   useEffect(() => {
     let active = true;
@@ -60,6 +59,7 @@ export default function RoomScanPanel({ project, canEdit, libraryMode = false, o
       if (!isNativePlatform()) {
         return;
       }
+      const { getRoomCaptureStatus } = await import("../services/roomCapture.js");
       const next = await getRoomCaptureStatus();
       if (active) {
         setStatus(next);
@@ -89,6 +89,11 @@ export default function RoomScanPanel({ project, canEdit, libraryMode = false, o
     (r) => r.scan_type === "room" && !r.parent_scan_id,
   );
 
+  const activeStandalone =
+    standaloneCloudRooms.find((r) => r.id === activeRoomId) ||
+    standaloneCloudRooms.find((r) => r.is_active) ||
+    null;
+
   const activeRoom =
     rooms.find((r) => r.room_id === activeRoomId) ||
     (cloudRoomRows.find((r) => r.is_active)
@@ -98,10 +103,23 @@ export default function RoomScanPanel({ project, canEdit, libraryMode = false, o
           derived: cloudRoomRows.find((r) => r.is_active)?.derived,
         }
       : rooms[0]) ||
-    null;
+    (activeStandalone
+      ? {
+          room_id: activeStandalone.id,
+          label: activeStandalone.room_label,
+          derived: activeStandalone.derived,
+        }
+      : null);
 
   const derived = activeRoom?.derived || project?.room_summary?.derived;
   const compliance = derived ? buildComplianceChecks(derived) : [];
+
+  const designPathForScan = (scanId) => {
+    if (libraryMode) {
+      return `/profile/room-scans/${scanId}/design`;
+    }
+    return `/projects/${project?.id}/scans/${scanId}/design`;
+  };
 
   const handleScanRoom = async () => {
     if ((!libraryMode && !project?.id) || !canEdit) {
@@ -114,10 +132,14 @@ export default function RoomScanPanel({ project, canEdit, libraryMode = false, o
         room_label: "Room",
         is_active: !libraryMode,
       });
+      const active = scans.find((s) => s.is_active) || scans[scans.length - 1];
+      if (active?.id) {
+        setActiveRoomId(active.id);
+        navigate(designPathForScan(active.id));
+      }
       if (!libraryMode) {
         await refreshScans();
       }
-      const active = scans.find((s) => s.is_active) || scans[scans.length - 1];
       onSynced?.({
         schema_version: "2.0",
         room_label: active?.room_label,
@@ -185,65 +207,25 @@ export default function RoomScanPanel({ project, canEdit, libraryMode = false, o
   };
 
   const handleOpenAR = async (room) => {
-    if (!project?.id || !structureId || !room?.room_id) {
+    if (!room?.room_id) {
       return;
     }
+    const row = cloudScans.find((r) => r.id === room.room_id) || {
+      id: room.room_id,
+      room_id: room.room_id,
+      room_label: room.label || room.room_label,
+      parent_scan_id: structureId || null,
+      structure_id: structureId || null,
+    };
+    const activeScope = libraryMode ? LIBRARY_SCOPE : project?.id;
     setError("");
     try {
-      await openRoomAR({
-        projectId: project.id,
-        structureId,
-        roomId: room.room_id,
+      await openRoomARForScan(row, {
+        scope: activeScope,
         roomLabel: room.label || room.room_label,
       });
     } catch (err) {
       setError(err.message || "AR viewer unavailable.");
-    }
-  };
-
-  const handleApplyDesign = async () => {
-    if (!designText.trim() || !project?.id || !structureId || !activeRoom?.room_id) {
-      return;
-    }
-    setDesignBusy(true);
-    setError("");
-    try {
-      await applyDesignIntent({
-        projectId: project.id,
-        structureId,
-        roomId: activeRoom.room_id,
-        utterance: designText.trim(),
-        roomLabel: activeRoom.label || activeRoom.room_label,
-        roomDerived: activeRoom.derived,
-        surfaceHints: (activeRoom.surfaces || []).map((s) => ({ id: s.id, category: s.category })),
-      });
-      setDesignText("");
-    } catch (err) {
-      setError(err.message || "Design intent failed.");
-    } finally {
-      setDesignBusy(false);
-    }
-  };
-
-  const handleSpeechDesign = async () => {
-    if (!project?.id || !structureId || !activeRoom?.room_id) {
-      return;
-    }
-    setDesignBusy(true);
-    setError("");
-    try {
-      const { transcript } = await applySpeechDesignIntent({
-        projectId: project.id,
-        structureId,
-        roomId: activeRoom.room_id,
-        roomLabel: activeRoom.label || activeRoom.room_label,
-        roomDerived: activeRoom.derived,
-      });
-      setDesignText(transcript);
-    } catch (err) {
-      setError(err.message || "Speech design failed.");
-    } finally {
-      setDesignBusy(false);
     }
   };
 
@@ -260,7 +242,7 @@ export default function RoomScanPanel({ project, canEdit, libraryMode = false, o
     if (!status.available) {
       return status.reason || "This device does not support RoomPlan scanning.";
     }
-    return "Scan whole house or single room. Saves to your library first — link to projects anytime.";
+    return "Scan a single room to start designing. Full geometry stays on your phone.";
   })();
 
   return (
@@ -272,21 +254,24 @@ export default function RoomScanPanel({ project, canEdit, libraryMode = false, o
         <div className="room-scan-actions">
           <button
             type="button"
-            className="secondary-button room-scan-button"
-            onClick={handleScanStructure}
-            disabled={scanning}
-          >
-            {scanning ? "Scanning…" : "Scan House"}
-          </button>
-          <button
-            type="button"
-            className="secondary-button room-scan-button"
+            className="primary-button room-scan-button"
             onClick={handleScanRoom}
             disabled={scanning}
           >
             {scanning ? "Scanning…" : "Scan Single Room"}
           </button>
+          <button
+            type="button"
+            className="secondary-button room-scan-button room-scan-button--muted"
+            onClick={handleScanStructure}
+            disabled={scanning}
+          >
+            {scanning ? "Scanning…" : "Scan House"}
+          </button>
         </div>
+      )}
+      {canEdit && isNativePlatform() && (
+        <p className="muted room-scan-advanced-hint">Scan House is advanced — multi-room whole house capture.</p>
       )}
 
       {error && <div className="error-box">{error}</div>}
@@ -301,6 +286,23 @@ export default function RoomScanPanel({ project, canEdit, libraryMode = false, o
                   {row.room_label}
                   {row.is_active ? " (active)" : ""}
                 </button>
+                <Link to={designPathForScan(row.id)} className="secondary-button room-design-button">
+                  Design
+                </Link>
+                {isNativePlatform() && (
+                  <button
+                    type="button"
+                    className="secondary-button room-design-button"
+                    onClick={() =>
+                      handleOpenAR({
+                        room_id: row.id,
+                        label: row.room_label,
+                      })
+                    }
+                  >
+                    AR
+                  </button>
+                )}
               </li>
             ))}
           </ul>
@@ -318,13 +320,16 @@ export default function RoomScanPanel({ project, canEdit, libraryMode = false, o
                   {room.label || room.room_label}
                   {room.room_id === activeRoomId ? " (active)" : ""}
                 </button>
+                <Link to={designPathForScan(room.room_id)} className="secondary-button room-design-button">
+                  Design
+                </Link>
                 {isNativePlatform() && (
                   <button
                     type="button"
                     className="secondary-button room-design-button"
                     onClick={() => handleOpenAR(room)}
                   >
-                    Design in AR
+                    AR
                   </button>
                 )}
               </li>
@@ -342,37 +347,6 @@ export default function RoomScanPanel({ project, canEdit, libraryMode = false, o
           />
           {compliance.length > 0 && <ComplianceCards checks={compliance} />}
         </>
-      )}
-
-      {isNativePlatform() && activeRoom && structureId && canEdit && (
-        <div className="room-design-intent">
-          <h4>Design changes — {activeRoom.label || activeRoom.room_label}</h4>
-          <input
-            type="text"
-            className="room-design-input"
-            placeholder='e.g. "white subway tile on backsplash wall"'
-            value={designText}
-            onChange={(e) => setDesignText(e.target.value)}
-          />
-          <div className="room-scan-actions">
-            <button type="button" className="secondary-button" onClick={handleApplyDesign} disabled={designBusy}>
-              {designBusy ? "Applying…" : "Apply text"}
-            </button>
-            <button type="button" className="secondary-button" onClick={handleSpeechDesign} disabled={designBusy}>
-              Mic
-            </button>
-          </div>
-          <details className="material-catalog">
-            <summary>Material catalog</summary>
-            <ul>
-              {listMaterials().map((m) => (
-                <li key={m.id}>
-                  {m.label} ({m.type})
-                </li>
-              ))}
-            </ul>
-          </details>
-        </div>
       )}
     </section>
   );

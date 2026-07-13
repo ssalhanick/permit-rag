@@ -2,40 +2,84 @@
  * roomDesignIntent.js — voice/text remodel intent → overlay patches.
  */
 
-import { postDesignIntent } from "../api.js";
-import { saveRedesignOverlays } from "./roomScanFilesystem.js";
+import {
+  postDesignIntentByScan,
+  postLibraryDesignIntent,
+} from "../api.js";
+import { saveRevision } from "./designHistory.js";
 import { applyMaterial, startSpeechRecognition } from "./roomCapture.js";
 import { MATERIAL_CATALOG } from "./materialCatalog.js";
 
 /**
- * Send utterance to design-intent API and persist overlays on device.
+ * Preview design intent via cloud LLM (no device persistence).
  *
  * @param {object} opts
- * @returns {Promise<{ overlays: object[], explanation: string, redesign: object }>}
+ * @returns {Promise<{ overlays: object[], explanation: string, productCandidates: object[], usage: object }>}
  */
-export async function applyDesignIntent(opts) {
+export async function previewDesignIntent(opts) {
   const {
     projectId,
-    structureId,
-    roomId,
+    scanId,
     utterance,
     roomLabel,
     roomDerived,
     surfaceHints,
+    libraryMode = false,
   } = opts;
 
-  const result = await postDesignIntent(projectId, structureId, roomId, {
+  const payload = {
     utterance,
     room_label: roomLabel,
     room_derived: roomDerived,
     surface_hints: surfaceHints,
+  };
+
+  const result = libraryMode
+    ? await postLibraryDesignIntent(scanId, payload)
+    : await postDesignIntentByScan(projectId, scanId, payload);
+
+  return {
+    overlays: result.data?.overlays || [],
+    explanation: result.data?.explanation || "",
+    productCandidates: result.data?.product_candidates || [],
+    usage: result.data?.usage || { input_tokens: 0, output_tokens: 0, model: "unknown" },
+  };
+}
+
+/**
+ * Persist the last preview as a saved revision (no API call).
+ *
+ * @param {object} opts
+ * @returns {Promise<object>}
+ */
+export async function saveDesignPreview(opts) {
+  const {
+    scope,
+    structureId,
+    roomId,
+    utterance,
+    explanation,
+    overlays,
+    parentRevisionId = null,
+  } = opts;
+
+  return saveRevision(scope, structureId, roomId, {
+    utterance,
+    explanation,
+    overlays,
+    parentRevisionId,
   });
-  const overlays = result.data?.overlays || [];
-  const explanation = result.data?.explanation || "";
+}
 
-  const redesign = await saveRedesignOverlays(projectId, structureId, roomId, overlays);
-
-  for (const overlay of overlays) {
+/**
+ * Apply overlays to native AR session (optional live preview).
+ *
+ * @param {object} opts
+ * @returns {Promise<void>}
+ */
+export async function applyOverlaysToAR(opts) {
+  const { projectId, structureId, roomId, overlays } = opts;
+  for (const overlay of overlays || []) {
     try {
       await applyMaterial({
         projectId,
@@ -45,13 +89,54 @@ export async function applyDesignIntent(opts) {
         materialId: overlay.material_id,
         colorHex: overlay.color_hex,
         type: overlay.type,
+        imageUrl: overlay.product_ref?.image_url,
+        productRef: overlay.product_ref,
       });
     } catch {
       // native AR may be unavailable on web
     }
   }
+}
 
-  return { overlays, explanation, redesign };
+/**
+ * Send utterance to design-intent API and persist overlays on device (legacy).
+ *
+ * @param {object} opts
+ * @returns {Promise<{ overlays: object[], explanation: string, redesign: object }>}
+ */
+export async function applyDesignIntent(opts) {
+  const preview = await previewDesignIntent({
+    projectId: opts.projectId,
+    scanId: opts.roomId,
+    utterance: opts.utterance,
+    roomLabel: opts.roomLabel,
+    roomDerived: opts.roomDerived,
+    surfaceHints: opts.surfaceHints,
+    libraryMode: opts.libraryMode,
+  });
+
+  const redesign = await saveDesignPreview({
+    scope: opts.scope || opts.projectId,
+    structureId: opts.structureId,
+    roomId: opts.roomId,
+    utterance: opts.utterance,
+    explanation: preview.explanation,
+    overlays: preview.overlays,
+  });
+
+  await applyOverlaysToAR({
+    projectId: opts.projectId || opts.scope,
+    structureId: opts.structureId,
+    roomId: opts.roomId,
+    overlays: preview.overlays,
+  });
+
+  return {
+    overlays: preview.overlays,
+    explanation: preview.explanation,
+    redesign,
+    productCandidates: preview.productCandidates,
+  };
 }
 
 /**

@@ -334,6 +334,31 @@ def set_active_room_scan(
 
 
 @router.post(
+    "/{project_id}/room-scans/{scan_id}/design-intent",
+    response_model=DesignIntentResponse,
+)
+def room_design_intent_by_scan(
+    project_id: UUID,
+    scan_id: UUID,
+    body: DesignIntentRequest,
+    current_user: CurrentUser,
+) -> dict:
+    """Parse remodel intent for a linked room scan (standalone or structure child)."""
+    from api.design_intent_helpers import _resolve_room_scan_row, run_design_intent
+
+    _require_role(project_id, current_user["user_id"], {"owner", "editor", "viewer"})
+    rows = db_client.list_linked_project_room_scans(project_id)
+    room_row = _resolve_room_scan_row(rows, scan_id)
+    return run_design_intent(
+        user_id=current_user["user_id"],
+        project_id=project_id,
+        scan_id=scan_id,
+        room_row=room_row,
+        body=body,
+    )
+
+
+@router.post(
     "/{project_id}/room-scans/{structure_id}/rooms/{room_id}/design-intent",
     response_model=DesignIntentResponse,
 )
@@ -344,24 +369,24 @@ def room_design_intent(
     body: DesignIntentRequest,
     current_user: CurrentUser,
 ) -> dict:
-    """Parse voice/text remodel intent into structured overlay patches (derived context only)."""
+    """Legacy nested route — delegates to scan_id resolver."""
     _require_role(project_id, current_user["user_id"], {"owner", "editor", "viewer"})
-    from rag.design_intent import parse_design_intent
-
-    rows = db_client.list_project_room_scans(project_id)
+    rows = db_client.list_linked_project_room_scans(project_id)
     room_row = next((r for r in rows if r["id"] == room_id), None)
     if not room_row or room_row.get("scan_type") != "room":
         raise HTTPException(status_code=404, detail="Room scan not found.")
-    if room_row.get("parent_scan_id") != structure_id:
+    parent = room_row.get("parent_scan_id")
+    if parent is not None and parent != structure_id:
+        raise HTTPException(status_code=404, detail="Room does not belong to structure.")
+    if parent is None and structure_id != room_id:
         raise HTTPException(status_code=404, detail="Room does not belong to structure.")
 
-    result = parse_design_intent(
-        body.utterance,
-        room_label=body.room_label or room_row.get("room_label"),
-        room_derived=body.room_derived or room_row.get("derived"),
-        surface_hints=body.surface_hints,
+    from api.design_intent_helpers import run_design_intent
+
+    return run_design_intent(
+        user_id=current_user["user_id"],
+        project_id=project_id,
+        scan_id=room_id,
+        room_row=room_row,
+        body=body,
     )
-    return {
-        "overlays": result.get("overlays", []),
-        "explanation": result.get("explanation", ""),
-    }

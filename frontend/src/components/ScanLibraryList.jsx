@@ -1,4 +1,5 @@
 import React from "react";
+import { Link } from "react-router-dom";
 
 /**
  * Display structure/room scan rows from library or project links.
@@ -9,6 +10,7 @@ import React from "react";
  *   onSetActive?: (scanId: string) => void,
  *   onUnlink?: (scanId: string) => void,
  *   showActive?: boolean,
+ *   designHref?: (scanId: string) => string,
  * }} props
  */
 export default function ScanLibraryList({
@@ -17,6 +19,7 @@ export default function ScanLibraryList({
   onSetActive,
   onUnlink,
   showActive = false,
+  designHref,
 }) {
   if (!scans?.length) {
     return <p className="muted">{emptyMessage}</p>;
@@ -57,6 +60,11 @@ export default function ScanLibraryList({
                           Remove
                         </button>
                       )}
+                      {designHref && (
+                        <Link to={designHref(room.id)} className="text-button">
+                          Design
+                        </Link>
+                      )}
                     </div>
                   </li>
                 ))}
@@ -85,6 +93,11 @@ export default function ScanLibraryList({
                 <button type="button" className="text-button" onClick={() => onUnlink(room.id)}>
                   Remove
                 </button>
+              )}
+              {designHref && (
+                <Link to={designHref(room.id)} className="text-button">
+                  Design
+                </Link>
               )}
             </div>
             {room.derived && (

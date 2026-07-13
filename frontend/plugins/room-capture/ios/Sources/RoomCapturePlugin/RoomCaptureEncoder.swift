@@ -8,7 +8,7 @@ import simd
 enum RoomCaptureEncoder {
 
     static func encode(capturedRoom: CapturedRoom, roomLabel: String, roomId: String? = nil) -> [String: Any] {
-        let rid = roomId ?? UUID().uuidString
+        let rid = (roomId ?? UUID().uuidString).lowercased()
         var surfaces: [[String: Any]] = []
         surfaces.append(contentsOf: capturedRoom.walls.enumerated().map {
             encodeSurface($0.element, category: "wall", prefix: "\(rid)-wall", index: $0.offset)
@@ -50,7 +50,7 @@ enum RoomCaptureEncoder {
 
         var roomPayloads: [[String: Any]] = []
         for (index, room) in rooms.enumerated() {
-            let roomId = UUID().uuidString
+            let roomId = UUID().uuidString.lowercased()
             let label = index < labels.count ? labels[index] : "Room \(index + 1)"
             let section = index < sections.count ? sections[index] : nil
             let encoded = encode(capturedRoom: room, roomLabel: label, roomId: String(roomId))

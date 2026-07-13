@@ -20,15 +20,20 @@ final class RoomARPresenter: NSObject, UITableViewDelegate, UITableViewDataSourc
     private var surfaces: [[String: Any]] = []
     private var arView: ARView?
     private var viewController: UIViewController?
+    private var textureCache: [String: TextureResource] = [:]
+    private weak var plugin: RoomCapturePlugin?
+    private var dictateButton: UIButton?
 
     init(
         call: CAPPluginCall? = nil,
+        plugin: RoomCapturePlugin? = nil,
         projectId: String,
         structureId: String,
         roomId: String,
         roomLabel: String
     ) {
         self.call = call
+        self.plugin = plugin
         self.projectId = projectId
         self.structureId = structureId
         self.roomId = roomId
@@ -37,6 +42,13 @@ final class RoomARPresenter: NSObject, UITableViewDelegate, UITableViewDataSourc
     }
 
     func present(from host: UIViewController) {
+        if !Thread.isMainThread {
+            DispatchQueue.main.async { [weak self] in
+                self?.present(from: host)
+            }
+            return
+        }
+
         let capturePath = RoomScanPaths.roomCapturePath(
             projectId: projectId,
             structureId: structureId,
@@ -48,6 +60,11 @@ final class RoomARPresenter: NSObject, UITableViewDelegate, UITableViewDataSourc
             roomId: roomId
         )
         capture = RoomScanJSON.read(path: capturePath) ?? [:]
+        if (capture["surfaces"] as? [[String: Any]] ?? []).isEmpty {
+            if let discovered = discoverCapture(projectId: projectId, roomId: roomId) {
+                capture = discovered
+            }
+        }
         redesign = RoomScanJSON.read(path: redesignPath) ?? [
             "schema_version": "1.0",
             "scan_id": roomId,
@@ -79,6 +96,14 @@ final class RoomARPresenter: NSObject, UITableViewDelegate, UITableViewDataSourc
         close.addTarget(self, action: #selector(closeTapped), for: .touchUpInside)
         vc.view.addSubview(close)
 
+        let dictate = UIButton(type: .system)
+        dictate.setTitle("Dictate Command", for: .normal)
+        dictate.tintColor = .systemBlue
+        dictate.translatesAutoresizingMaskIntoConstraints = false
+        dictate.addTarget(self, action: #selector(dictateTapped), for: .touchUpInside)
+        vc.view.addSubview(dictate)
+        self.dictateButton = dictate
+
         NSLayoutConstraint.activate([
             arView.topAnchor.constraint(equalTo: vc.view.topAnchor),
             arView.leadingAnchor.constraint(equalTo: vc.view.leadingAnchor),
@@ -89,7 +114,9 @@ final class RoomARPresenter: NSObject, UITableViewDelegate, UITableViewDataSourc
             table.trailingAnchor.constraint(equalTo: vc.view.trailingAnchor),
             table.bottomAnchor.constraint(equalTo: vc.view.safeAreaLayoutGuide.bottomAnchor, constant: -44),
             close.bottomAnchor.constraint(equalTo: vc.view.safeAreaLayoutGuide.bottomAnchor, constant: -8),
-            close.centerXAnchor.constraint(equalTo: vc.view.centerXAnchor),
+            close.leadingAnchor.constraint(equalTo: vc.view.leadingAnchor, constant: 20),
+            dictate.bottomAnchor.constraint(equalTo: vc.view.safeAreaLayoutGuide.bottomAnchor, constant: -8),
+            dictate.trailingAnchor.constraint(equalTo: vc.view.trailingAnchor, constant: -20),
         ])
 
         addWallAnchors(to: arView)
@@ -99,6 +126,44 @@ final class RoomARPresenter: NSObject, UITableViewDelegate, UITableViewDataSourc
         }
     }
 
+    private func discoverCapture(projectId: String, roomId: String) -> [String: Any]? {
+        let scopes = projectId == "library" ? ["library"] : [projectId, "library"]
+        for scope in scopes {
+            let scopePath = RoomScanPaths.fileURL(relativePath: "room_scans/\(scope)")
+            guard let entries = try? FileManager.default.contentsOfDirectory(
+                at: scopePath,
+                includingPropertiesForKeys: nil
+            ) else {
+                continue
+            }
+            for entry in entries where entry.hasDirectoryPath {
+                let structureId = entry.lastPathComponent
+                let roomsPath = scopePath.appendingPathComponent("\(structureId)/rooms")
+                guard let roomEntries = try? FileManager.default.contentsOfDirectory(
+                    at: roomsPath,
+                    includingPropertiesForKeys: nil
+                ) else {
+                    continue
+                }
+                for roomEntry in roomEntries where roomEntry.hasDirectoryPath {
+                    let rId = roomEntry.lastPathComponent
+                    if rId.caseInsensitiveCompare(roomId) == .orderedSame {
+                        let relative = RoomScanPaths.roomCapturePath(
+                            projectId: scope,
+                            structureId: structureId,
+                            roomId: rId
+                        )
+                        if let json = RoomScanJSON.read(path: relative),
+                           !(json["surfaces"] as? [[String: Any]] ?? []).isEmpty {
+                            return json
+                        }
+                    }
+                }
+            }
+        }
+        return nil
+    }
+
     private func addWallAnchors(to arView: ARView) {
         let anchor = AnchorEntity(world: .zero)
         for (index, surface) in surfaces.enumerated() where (surface["category"] as? String) == "wall" {
@@ -106,10 +171,56 @@ final class RoomARPresenter: NSObject, UITableViewDelegate, UITableViewDataSourc
             let width = Float(dims["width"] ?? 1)
             let height = Float(dims["height"] ?? 2.4)
             let mesh = MeshResource.generatePlane(width: width, height: height)
-            var material = SimpleMaterial(color: .white.withAlphaComponent(0.35), isMetallic: false)
-            if let overlay = overlayForSurface(surface["id"] as? String) {
-                material = materialForOverlay(overlay)
+            let overlay = overlayForSurface(surface["id"] as? String)
+            let material = materialForOverlay(overlay ?? [:], texture: textureForOverlay(overlay))
+            let entity = ModelEntity(mesh: mesh, materials: [material])
+            entity.position = SIMD3<Float>(Float(index) * 0.05, 0, -1.5)
+            anchor.addChild(entity)
+        }
+        arView.scene.addAnchor(anchor)
+        preloadOverlayTextures()
+    }
+
+    private func imageUrlForOverlay(_ overlay: [String: Any]?) -> String? {
+        guard let overlay else { return nil }
+        if let product = overlay["product_ref"] as? [String: Any],
+           let url = product["image_url"] as? String, !url.isEmpty {
+            return url
+        }
+        if let url = overlay["image_url"] as? String, !url.isEmpty {
+            return url
+        }
+        return nil
+    }
+
+    private func textureForOverlay(_ overlay: [String: Any]?) -> TextureResource? {
+        guard let url = imageUrlForOverlay(overlay) else { return nil }
+        return textureCache[url]
+    }
+
+    private func preloadOverlayTextures() {
+        let overlays = activeOverlays()
+        for overlay in overlays {
+            guard let url = imageUrlForOverlay(overlay), textureCache[url] == nil else { continue }
+            loadTexture(from: url) { [weak self] _ in
+                guard let self, let arView = self.arView else { return }
+                DispatchQueue.main.async {
+                    arView.scene.anchors.removeAll()
+                    self.addWallAnchorsWithoutPreload(to: arView)
+                }
             }
+        }
+    }
+
+    private func addWallAnchorsWithoutPreload(to arView: ARView) {
+        let anchor = AnchorEntity(world: .zero)
+        for (index, surface) in surfaces.enumerated() where (surface["category"] as? String) == "wall" {
+            let dims = surface["dimensions"] as? [String: Double] ?? [:]
+            let width = Float(dims["width"] ?? 1)
+            let height = Float(dims["height"] ?? 2.4)
+            let mesh = MeshResource.generatePlane(width: width, height: height)
+            let overlay = overlayForSurface(surface["id"] as? String)
+            let material = materialForOverlay(overlay ?? [:], texture: textureForOverlay(overlay))
             let entity = ModelEntity(mesh: mesh, materials: [material])
             entity.position = SIMD3<Float>(Float(index) * 0.05, 0, -1.5)
             anchor.addChild(entity)
@@ -117,41 +228,175 @@ final class RoomARPresenter: NSObject, UITableViewDelegate, UITableViewDataSourc
         arView.scene.addAnchor(anchor)
     }
 
+    private func loadTexture(from urlString: String, completion: @escaping (TextureResource?) -> Void) {
+        if let cached = textureCache[urlString] {
+            completion(cached)
+            return
+        }
+        guard let url = URL(string: urlString) else {
+            completion(nil)
+            return
+        }
+        URLSession.shared.dataTask(with: url) { [weak self] data, _, _ in
+            guard let self,
+                  let data = data,
+                  let image = UIImage(data: data),
+                  let cgImage = image.cgImage else {
+                DispatchQueue.main.async { completion(nil) }
+                return
+            }
+            do {
+                let texture = try TextureResource.generate(from: cgImage, options: .init(semantic: .color))
+                DispatchQueue.main.async {
+                    self.textureCache[urlString] = texture
+                    completion(texture)
+                }
+            } catch {
+                DispatchQueue.main.async { completion(nil) }
+            }
+        }.resume()
+    }
+
+    private func activeOverlays() -> [[String: Any]] {
+        if let version = redesign["schema_version"] as? String, version == "2.0",
+           let activeId = redesign["active_revision_id"] as? String,
+           let revisions = redesign["revisions"] as? [[String: Any]] {
+            if let rev = revisions.first(where: { ($0["id"] as? String) == activeId }) {
+                return rev["overlays"] as? [[String: Any]] ?? []
+            }
+        }
+        return redesign["overlays"] as? [[String: Any]] ?? []
+    }
+
     private func overlayForSurface(_ surfaceId: String?) -> [String: Any]? {
         guard let surfaceId else { return nil }
-        let overlays = redesign["overlays"] as? [[String: Any]] ?? []
+        let overlays = activeOverlays()
         return overlays.last { ($0["surface_id"] as? String) == surfaceId || $0["surface_id"] == nil }
     }
 
-    private func materialForOverlay(_ overlay: [String: Any]) -> SimpleMaterial {
+    private func materialForOverlay(_ overlay: [String: Any], texture: TextureResource? = nil) -> Material {
+        if let texture {
+            var material = UnlitMaterial()
+            material.color = .init(tint: .white.withAlphaComponent(0.92), texture: .init(texture))
+            return material
+        }
         let hex = overlay["color_hex"] as? String ?? "#FFFFFF"
-        return SimpleMaterial(color: UIColor(hex: hex) ?? .white, isMetallic: overlay["type"] as? String == "appliance")
+        return SimpleMaterial(
+            color: (UIColor(hex: hex) ?? .white).withAlphaComponent(0.75),
+            isMetallic: overlay["type"] as? String == "appliance"
+        )
     }
 
-    func applyMaterial(surfaceId: String?, materialId: String, colorHex: String?, type: String) -> [String: Any] {
-        let overlay: [String: Any] = [
+    func applyMaterial(
+        surfaceId: String?,
+        materialId: String,
+        colorHex: String?,
+        type: String,
+        imageUrl: String? = nil,
+        productRef: [String: Any]? = nil
+    ) -> [String: Any] {
+        var overlay: [String: Any] = [
             "surface_id": surfaceId as Any,
             "type": type,
             "material_id": materialId,
             "color_hex": colorHex as Any,
             "asset_url": NSNull(),
         ]
-        var overlays = redesign["overlays"] as? [[String: Any]] ?? []
-        overlays.append(overlay)
-        redesign["overlays"] = overlays
+        if let productRef {
+            overlay["product_ref"] = productRef
+        }
+        if let imageUrl {
+            overlay["image_url"] = imageUrl
+        }
+
+        if let version = redesign["schema_version"] as? String, version == "2.0",
+           let activeId = redesign["active_revision_id"] as? String,
+           var revisions = redesign["revisions"] as? [[String: Any]] {
+            if let idx = revisions.firstIndex(where: { ($0["id"] as? String) == activeId }) {
+                var rev = revisions[idx]
+                var overlays = rev["overlays"] as? [[String: Any]] ?? []
+                overlays.append(overlay)
+                rev["overlays"] = overlays
+                revisions[idx] = rev
+                redesign["revisions"] = revisions
+            }
+        } else {
+            var overlays = redesign["overlays"] as? [[String: Any]] ?? []
+            overlays.append(overlay)
+            redesign["overlays"] = overlays
+        }
         redesign["updated_at"] = ISO8601DateFormatter().string(from: Date())
 
         let path = RoomScanPaths.redesignPath(projectId: projectId, structureId: structureId, roomId: roomId)
         try? RoomScanJSON.write(path: path, object: redesign)
         if let arView {
-            arView.scene.anchors.removeAll()
-            addWallAnchors(to: arView)
+            let refresh = { [weak self] in
+                guard let self else { return }
+                arView.scene.anchors.removeAll()
+                self.addWallAnchors(to: arView)
+            }
+            if Thread.isMainThread {
+                refresh()
+            } else {
+                DispatchQueue.main.async(execute: refresh)
+            }
         }
         return overlay
     }
 
     @objc private func closeTapped() {
         viewController?.dismiss(animated: true)
+    }
+
+    @objc private func dictateTapped() {
+        dictateButton?.isEnabled = false
+        dictateButton?.setTitle("Listening...", for: .normal)
+        
+        SpeechCapture.requestAuthorization { [weak self] granted in
+            guard let self = self else { return }
+            guard granted else {
+                DispatchQueue.main.async {
+                    self.showError("Speech authorization denied.")
+                    self.resetDictateButton()
+                }
+                return
+            }
+            
+            guard let vc = self.viewController else { return }
+            SpeechCapture.recognize(from: vc) { [weak self] result in
+                guard let self = self else { return }
+                DispatchQueue.main.async {
+                    self.resetDictateButton()
+                    switch result {
+                    case .success(let transcript):
+                        self.handleDictationResult(transcript)
+                    case .failure(let error):
+                        self.showError(error.localizedDescription)
+                    }
+                }
+            }
+        }
+    }
+    
+    private func resetDictateButton() {
+        dictateButton?.isEnabled = true
+        dictateButton?.setTitle("Dictate Command", for: .normal)
+    }
+    
+    private func showError(_ message: String) {
+        let alert = UIAlertController(title: "Speech Recognition", message: message, preferredStyle: .alert)
+        alert.addAction(UIAlertAction(title: "OK", style: .default))
+        viewController?.present(alert, animated: true)
+    }
+    
+    private func handleDictationResult(_ transcript: String) {
+        guard let plugin = self.plugin else { return }
+        plugin.notifyListeners("onARSpeechCommand", data: [
+            "projectId": projectId,
+            "structureId": structureId,
+            "roomId": roomId,
+            "transcript": transcript
+        ])
     }
 
     func tableView(_ tableView: UITableView, numberOfRowsInSection section: Int) -> Int {

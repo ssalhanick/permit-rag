@@ -14,7 +14,13 @@ from uuid import UUID
 from fastapi import APIRouter, Depends, HTTPException
 
 from api.auth import get_current_user
-from api.schemas import UserMeResponse, UpsertRoomScansRequest, UserRoomScanResponse
+from api.schemas import (
+    DesignIntentRequest,
+    DesignIntentResponse,
+    UserMeResponse,
+    UpsertRoomScansRequest,
+    UserRoomScanResponse,
+)
 from db import client as db_client
 
 router = APIRouter(prefix="/auth", tags=["auth"])
@@ -60,3 +66,26 @@ def upsert_my_room_scans(
     payload = [scan.model_dump() for scan in body.scans]
     rows = db_client.upsert_user_room_scans(current_user["user_id"], payload)
     return [dict(row) for row in rows]
+
+
+@router.post(
+    "/me/room-scans/{scan_id}/design-intent",
+    response_model=DesignIntentResponse,
+)
+def library_room_design_intent(
+    scan_id: UUID,
+    body: DesignIntentRequest,
+    current_user: Annotated[dict, Depends(get_current_user)],
+) -> dict:
+    """Parse remodel intent for a scan in the caller's personal library."""
+    from api.design_intent_helpers import _resolve_room_scan_row, run_design_intent
+
+    rows = db_client.list_user_room_scans(current_user["user_id"])
+    room_row = _resolve_room_scan_row(rows, scan_id)
+    return run_design_intent(
+        user_id=current_user["user_id"],
+        project_id=None,
+        scan_id=scan_id,
+        room_row=room_row,
+        body=body,
+    )

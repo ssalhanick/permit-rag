@@ -1,98 +1,87 @@
 # permit_rag — State
 
-_Updated: 2026-07-12 (scan library UX + per-project dashboard)_
+_Updated: 2026-07-13 (room design Preview/Save + revision history + AR live dictation)_
 
 ## Phase
 
-**Sprint 14–15 active** — User scan library + project dashboard UX shipped in frontend. Backend migration 017 + library/link API coded; **not yet applied to prod**.
+**Sprint 17 active** — Single-room Scan → Design (text/mic) → Preview → Save; device-only `redesign.json` v2 revisions; DXF export; design token accounting (migration 018); AR live voice dictation.
 
-**Sprint 13 closed.** Prod backend on ECS task def **`:11`**. Deploy needed for migrations 016–017 + new API routes.
+**Sprint 16 closed** — commerce overlays, product resolver, materials estimate.
 
 ## Blocked on
 
 1. **Mobile OAuth deep links (deferred)** — M0-6/M0-7 device Google/Apple roundtrip
 2. **Terraform ECS task def** — do **not** bare `terraform apply` until RDS `DATABASE_URL` drift fixed
-3. **Prod deploy gap** — apply migrations 016 + **017** and deploy backend before library/link sync works on device against prod
+3. **Prod deploy gap** — apply migration **018** and deploy backend with scan_id design-intent routes
 
-## Sprint 14–15 deliverables
+## Sprint 17 deliverables
 
-- [x] Capture boundary — single room + structure (multi-room) Capacitor plugin
-- [x] Interchange JSON schema v1.0 (room) + v2.0 (structure with rooms[])
-- [x] Local persist — Capacitor Filesystem + `library` scope for user collection
-- [x] Migration 016 — `project_room_scans` (derived only, A+C)
-- [x] **Migration 017** — `user_room_scans` + `project_room_scan_links` (library → project attach)
-- [x] API — project room-scans + **GET/POST /auth/me/room-scans**, link/unlink on projects
-- [x] UI — **profile Room Scans library**, **home promo**, **per-project dashboard** (scans, queries, docs, members)
-- [x] RAG — active room `derived` + kickoff in `generate_answer()` when `project_id` set
-- [x] iOS AR — openRoomAR, applyMaterial, redesign.json per room
-- [x] Speech — native startSpeechRecognition + design-intent overlay patches
-- [ ] Android room capture — ARCore or manual polygon fallback
-- [ ] Optional: OAuth deep links; Firebase push
+- [x] Migration `018_design_intent_usage.sql` + `db/client.py` token helpers
+- [x] `POST /projects/{id}/room-scans/{scan_id}/design-intent` (standalone + structure child)
+- [x] `POST /auth/me/room-scans/{scan_id}/design-intent` (library)
+- [x] `rag/design_intent.py` returns usage; soft monthly cap via `DESIGN_INTENT_MONTHLY_TOKEN_CAP`
+- [x] `RoomDesignPage` — Preview (LLM) / Save (device), revision history, branch, AR + DXF export
+- [x] `redesign.json` v2 revisions on device; iOS AR reads `active_revision_id`
+- [x] Demote Scan House; post-scan nav to design page; single-room `structureId` fix
+- [ ] Apply migration 018 to prod RDS (manual)
+- [ ] Deploy backend with new design-intent routes to ECS
+- [ ] Device smoke: Preview → Save → branch → AR → DXF share sheet
 
 ## Verification
 
-**Migrations 016 + 017:**
+**Migration 018:**
 
 ```bash
-ENVIRONMENT=production python scripts/run_migration.py db/migrations/016_project_room_scans.sql
-ENVIRONMENT=production python scripts/run_migration.py db/migrations/017_user_room_scan_library.sql
-ENVIRONMENT=production python scripts/check_room_scans.py
+ENVIRONMENT=production python scripts/run_migration.py db/migrations/018_design_intent_usage.sql
 ```
 
-**Backend tests (venv):**
+**Backend tests:**
 
 ```bash
-python -m pytest tests/test_project_room_scans.py tests/test_query_answer_route.py -v
+.venv/bin/python -m pytest tests/test_room_design_intent.py tests/test_commerce_takeoff.py tests/test_commerce_product_resolver.py -v
 ```
 
 **Frontend:**
 
 ```bash
-cd frontend && npm run test
-npm run build:mobile && npx cap sync ios
+cd frontend && npm install && npm run test && npm run build:mobile && npx cap sync ios
 ```
 
 **Device pass:**
-- Profile → Room Scans → capture house/room → appears in library
-- Project → Scans → Add from library → set active → Query uses room context
-- Home page shows Room Scans promo card
-- Project dashboard shows linked scans + recent queries
-
-**RAGAs:** run after prod deploy if generator prompt changed materially (faithfulness >= 0.85).
+- Profile → Scan Single Room → design page
+- Preview "white subway tile" → product cards; Save → revision in history
+- Branch from revision → new Preview/Save without re-LLM on Save
+- AR shows active revision; Export DXF → share sheet
+- Project-linked scan uses project design route; tokens logged with `project_id`
 
 ## Next tasks
 
-1. **Apply migration 017** to prod RDS
-2. **Deploy backend** with library/link routes to prod ECS
-3. **Device smoke** — library capture + link-to-project on iPhone
-4. **Android** — stub methods exist; implement ARCore or 2D fallback
-5. Optional: M0-6/M0-7 OAuth; Firebase push
+1. Apply migration 018 + deploy backend to prod ECS
+2. iPhone device smoke (Preview/Save/branch/AR/DXF)
+3. Optional: library scan list → project link CTA from design page
 
 ## Module status
 
 | Module | Current state |
 |--------|---------------|
-| db | Migrations 001–**017**; `user_room_scans`, `project_room_scan_links`, legacy `project_room_scans` |
-| api | User library CRUD; project link/unlink; room-scans + design-intent |
-| rag | `project_context` + `design_intent`; generator accepts `project_context` |
-| frontend | Scan library, project dashboard layout, home promo, 50 frontend tests |
-| eval | avg faithfulness **0.910** ✅ (re-run after deploy) |
+| api | scan_id design-intent routes; token usage in response |
+| rag | `design_intent.py` usage metadata |
+| frontend | `RoomDesignPage`, `designHistory.js`, `roomCadExport.js`, case-insensitive lookups, 60 tests pass |
+| iOS | AR v2 `active_revision_id` overlay resolution; lowercased UUID alignment |
 
 ## Decisions log
 
 | Decision | Choice |
 |----------|--------|
-| Multi-scan privacy | **A+C** — geometry on device; derived summaries in RDS |
-| Scan ownership | **User library first** — link scans/structures/rooms to projects on demand |
-| Structure hierarchy | `scan_type` structure + room rows linked by `parent_scan_id` |
-| Design generative layer | LLM → overlay patch only; RealityKit renders materials |
-| Active scan for chat | One `is_active` room per project via `project_room_scan_links` |
+| Revision storage | Device-only `redesign.json` v2; no cloud sync of full history |
+| LLM timing | Cloud Haiku on Preview only; Save persists without API |
+| Terminology | Preview / Save — never "draft" |
+| Token cap | Soft monthly cap per user (`DESIGN_INTENT_MONTHLY_TOKEN_CAP`, default 500k) |
 
 ## Canonical validation
 
 ```bash
-python -m pytest tests/test_project_room_scans.py tests/test_query_answer_route.py -v
+.venv/bin/python -m pytest tests/test_room_design_intent.py tests/test_commerce_takeoff.py -v
 cd frontend && npm run test
 npm run build:mobile && npx cap sync ios
-ENVIRONMENT=production python scripts/check_room_scans.py
 ```

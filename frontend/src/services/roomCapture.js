@@ -57,6 +57,27 @@ export async function openRoomAR(opts) {
 }
 
 /**
+ * Resolve on-device capture path then open AR for a scan row.
+ *
+ * @param {object} scanRow
+ * @param {{ scope: string, roomLabel?: string }} opts
+ * @returns {Promise<object>}
+ */
+export async function openRoomARForScan(scanRow, opts) {
+  const { findRoomFilesystemLocation } = await import("./roomScanFilesystem.js");
+  const location = await findRoomFilesystemLocation(opts.scope, scanRow);
+  if (!location.capture?.surfaces?.length) {
+    throw new Error("Room geometry not found on device. Re-scan this room.");
+  }
+  return openRoomAR({
+    projectId: location.scope,
+    structureId: location.structureId,
+    roomId: location.roomId,
+    roomLabel: opts.roomLabel || scanRow.room_label,
+  });
+}
+
+/**
  * Apply a material overlay in the native AR session.
  *
  * @param {object} opts
@@ -71,6 +92,8 @@ export async function applyMaterial(opts) {
     materialId: opts.materialId,
     colorHex: opts.colorHex,
     type: opts.type,
+    imageUrl: opts.imageUrl,
+    productRef: opts.productRef,
   });
 }
 

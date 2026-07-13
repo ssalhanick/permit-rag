@@ -2,6 +2,7 @@ import React, { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import ProjectKickoffSummary from "../../components/ProjectKickoffSummary.jsx";
 import ScanLibraryList from "../../components/ScanLibraryList.jsx";
+import MaterialsEstimatePanel from "../../components/MaterialsEstimatePanel.jsx";
 import { fetchProjectRoomScans, fetchQueryHistory } from "../../api.js";
 import { formatKickoffSummary } from "../../projectKickoffSummary.js";
 import { buildKickoffPath } from "../../projectKickoffRoutes.js";
@@ -69,6 +70,13 @@ export default function ProjectDashboardPage() {
           scans={scans}
           emptyMessage="No scans linked yet. Add from your library or scan on the Scans tab."
         />
+      </section>
+
+      <section className="panel">
+        <div className="dashboard-section-header">
+          <h3>Materials estimate</h3>
+        </div>
+        <MaterialsEstimatePanel projectId={projectId} />
       </section>
 
       <section className="panel">

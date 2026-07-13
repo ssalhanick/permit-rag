@@ -16,7 +16,8 @@ _DESIGN_SYSTEM = """\
 You convert remodel instructions into structured AR overlay patches for a scanned room.
 Return ONLY valid JSON with keys: overlays (array), explanation (string).
 Each overlay object must include: surface_id (string or null), type (paint|tile|trim|appliance),
-material_id (string), color_hex (string or null), asset_url (null unless appliance).
+material_id (string), color_hex (string or null), asset_url (null unless appliance),
+product_search (object with product_category, attributes dict, query string).
 Use surface_id null when the target wall is ambiguous; the client may prompt the user.
 Do not invent measurements. Use only the provided room context.
 """
@@ -40,7 +41,7 @@ def parse_design_intent(
 
     api_key = os.environ.get("ANTHROPIC_API_KEY", "").strip()
     if not api_key:
-        return _parse_design_intent_rules(utterance, room_label=room_label)
+        return _with_usage(_parse_design_intent_rules(utterance, room_label=room_label), "rules")
 
     try:
         return _parse_design_intent_llm(
@@ -51,7 +52,15 @@ def parse_design_intent(
         )
     except Exception as exc:
         log.warning("design_intent LLM failed (%s); using rules fallback", exc)
-        return _parse_design_intent_rules(utterance, room_label=room_label)
+        return _with_usage(_parse_design_intent_rules(utterance, room_label=room_label), "rules")
+
+
+def _with_usage(result: dict[str, Any], model: str) -> dict[str, Any]:
+    """Attach zero-token usage metadata to a parse result."""
+    return {
+        **result,
+        "usage": {"input_tokens": 0, "output_tokens": 0, "model": model},
+    }
 
 
 def _parse_design_intent_rules(
@@ -141,4 +150,12 @@ def _parse_design_intent_llm(
     parsed = json.loads(text)
     if "overlays" not in parsed:
         raise ValueError("LLM response missing overlays key")
-    return parsed
+    return {
+        "overlays": parsed["overlays"],
+        "explanation": parsed.get("explanation", ""),
+        "usage": {
+            "input_tokens": int(response.usage.input_tokens),
+            "output_tokens": int(response.usage.output_tokens),
+            "model": model,
+        },
+    }
