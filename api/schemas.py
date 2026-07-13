@@ -538,6 +538,28 @@ class DesignIntentResponse(BaseModel):
     usage: DesignIntentUsage
 
 
+class RoomPreviewImageRequest(BaseModel):
+    """Generate a photoreal room redesign preview from design intent."""
+    utterance: str = Field(..., min_length=1, max_length=2000)
+    room_label: str | None = Field(default=None, max_length=120)
+    overlays: list[dict] = Field(default_factory=list)
+    source_image_b64: str | None = Field(
+        default=None,
+        description="Optional room photo (base64, no data: prefix) for layout hints.",
+        max_length=8_000_000,
+    )
+
+
+class RoomPreviewImageResponse(BaseModel):
+    """Base64 image payload for on-device storage as overlay asset_url."""
+    image_base64: str
+    mime_type: str
+    provider: str
+    model: str
+    prompt: str
+    mock: bool = False
+
+
 class ProductSearchRequest(BaseModel):
     """Search retailer catalog for materials near a zip code."""
     query: str = Field(..., min_length=1, max_length=200)

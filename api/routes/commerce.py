@@ -14,14 +14,31 @@ from api.schemas import (
     MaterialsEstimateResponse,
     ProductSearchRequest,
     ProductSearchResponse,
+    RoomPreviewImageRequest,
+    RoomPreviewImageResponse,
 )
 from commerce.product_resolver import resolve_products_for_overlays
+from commerce.room_image import generate_room_preview_image
 from commerce.serpapi_client import search_home_depot
 from commerce.takeoff import extract_zip_from_address
 from db import client as db_client
 
 router = APIRouter(prefix="/commerce", tags=["commerce"])
 CurrentUser = Annotated[dict, Depends(get_current_user)]
+
+
+@router.post("/room-preview-image", response_model=RoomPreviewImageResponse)
+def room_preview_image(
+    body: RoomPreviewImageRequest,
+    _current_user: CurrentUser,
+) -> dict:
+    """Generate a room redesign preview image for iPhone AR asset_url."""
+    return generate_room_preview_image(
+        utterance=body.utterance,
+        overlays=body.overlays,
+        room_label=body.room_label,
+        source_image_b64=body.source_image_b64,
+    )
 
 
 @router.post("/products/search", response_model=ProductSearchResponse)
