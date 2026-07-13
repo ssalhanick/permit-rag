@@ -25,4 +25,35 @@ public class RoomCapturePlugin extends Plugin {
         ret.put("error", "ARCore room semantics not yet implemented — use manual fallback.");
         call.resolve(ret);
     }
+
+    @PluginMethod
+    public void startStructureCapture(PluginCall call) {
+        JSObject ret = new JSObject();
+        ret.put("schema_version", "2.0");
+        ret.put("error", "Structure capture not yet implemented on Android.");
+        call.resolve(ret);
+    }
+
+    @PluginMethod
+    public void openRoomAR(PluginCall call) {
+        JSObject ret = new JSObject();
+        ret.put("opened", false);
+        ret.put("error", "AR viewer not yet implemented on Android.");
+        call.resolve(ret);
+    }
+
+    @PluginMethod
+    public void applyMaterial(PluginCall call) {
+        JSObject ret = new JSObject();
+        ret.put("applied", false);
+        call.resolve(ret);
+    }
+
+    @PluginMethod
+    public void startSpeechRecognition(PluginCall call) {
+        JSObject ret = new JSObject();
+        ret.put("transcript", "");
+        ret.put("error", "Speech not yet implemented on Android.");
+        call.resolve(ret);
+    }
 }

@@ -454,6 +454,81 @@ class RoomSummaryRequest(BaseModel):
     room_summary: dict
 
 
+class RoomScanUpsertItem(BaseModel):
+    """One structure or room derived summary row (no surfaces)."""
+    id: UUID
+    scan_type: str = Field(..., pattern=r"^(structure|room)$")
+    parent_scan_id: UUID | None = None
+    room_label: str = Field(..., min_length=1, max_length=120)
+    section: str | None = Field(default=None, max_length=64)
+    structure_label: str | None = Field(default=None, max_length=120)
+    captured_at: datetime
+    derived: dict
+    is_active: bool = False
+
+
+class UpsertRoomScansRequest(BaseModel):
+    """Batch upsert of structure + room derived summaries."""
+    scans: list[RoomScanUpsertItem] = Field(..., min_length=1)
+
+
+class UserRoomScanResponse(BaseModel):
+    """User-owned derived scan summary (library entry)."""
+    id: UUID
+    user_id: UUID
+    scan_type: str
+    parent_scan_id: UUID | None = None
+    room_label: str
+    section: str | None = None
+    structure_label: str | None = None
+    captured_at: datetime
+    derived: dict
+    created_at: datetime
+    updated_at: datetime
+
+
+class ProjectLinkedRoomScanResponse(UserRoomScanResponse):
+    """Scan linked to a project workspace."""
+    project_id: UUID
+    is_active: bool
+    linked_at: datetime
+
+
+class LinkRoomScansRequest(BaseModel):
+    """Attach existing library scans to a project."""
+    scan_ids: list[UUID] = Field(..., min_length=1)
+    active_scan_id: UUID | None = None
+
+
+class RoomScanResponse(BaseModel):
+    """Derived room/structure scan row."""
+    id: UUID
+    project_id: UUID
+    scan_type: str
+    parent_scan_id: UUID | None = None
+    room_label: str
+    section: str | None = None
+    captured_at: datetime
+    derived: dict
+    is_active: bool
+    created_at: datetime
+    updated_at: datetime
+
+
+class DesignIntentRequest(BaseModel):
+    """Voice/text remodel instruction for a room-scoped AR overlay."""
+    utterance: str = Field(..., min_length=1, max_length=2000)
+    room_label: str | None = Field(default=None, max_length=120)
+    room_derived: dict | None = None
+    surface_hints: list[dict] | None = None
+
+
+class DesignIntentResponse(BaseModel):
+    """Structured overlay patches for native AR application."""
+    overlays: list[dict]
+    explanation: str
+
+
 class ProjectMemberResponse(BaseModel):
     """Project member details response."""
     user_id: UUID

@@ -10,7 +10,7 @@ const RoomCapture = registerPlugin("RoomCapture", {
 });
 
 /**
- * Start native room scan; returns schema v1.0 JSON + derived metrics.
+ * Start native single-room scan; returns schema v1.0 JSON + derived metrics.
  *
  * @param {{ room_label?: string }} opts
  * @returns {Promise<object>}
@@ -24,6 +24,63 @@ export async function startRoomCapture(opts = {}) {
     ...result,
     derived,
   };
+}
+
+/**
+ * Start multi-room structure capture; returns schema v2.0 with rooms[].
+ *
+ * @param {{ structure_label?: string }} opts
+ * @returns {Promise<object>}
+ */
+export async function startStructureCapture(opts = {}) {
+  const result = await RoomCapture.startStructureCapture({
+    structure_label: opts.structure_label || "Whole house",
+  });
+  const rooms = (result.rooms || []).map((room) => ({
+    ...room,
+    derived: room.derived || deriveRoomMetrics(room),
+  }));
+  return {
+    ...result,
+    rooms,
+  };
+}
+
+/**
+ * Open room-scoped AR design viewer for one room in a structure.
+ *
+ * @param {{ projectId: string, structureId: string, roomId: string, roomLabel?: string }} opts
+ * @returns {Promise<object>}
+ */
+export async function openRoomAR(opts) {
+  return RoomCapture.openRoomAR(opts);
+}
+
+/**
+ * Apply a material overlay in the native AR session.
+ *
+ * @param {object} opts
+ * @returns {Promise<object>}
+ */
+export async function applyMaterial(opts) {
+  return RoomCapture.applyMaterial({
+    projectId: opts.projectId,
+    structureId: opts.structureId,
+    roomId: opts.roomId,
+    surfaceId: opts.surfaceId,
+    materialId: opts.materialId,
+    colorHex: opts.colorHex,
+    type: opts.type,
+  });
+}
+
+/**
+ * Start native speech recognition for design commands.
+ *
+ * @returns {Promise<{ transcript: string }>}
+ */
+export async function startSpeechRecognition() {
+  return RoomCapture.startSpeechRecognition();
 }
 
 /**

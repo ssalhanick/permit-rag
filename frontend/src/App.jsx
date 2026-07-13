@@ -3,6 +3,7 @@ import { Link } from "react-router-dom";
 import { API_BASE_URL, DEFAULT_BASE_URL, fetchAnswer, fetchHealth, fetchProjects } from "./api.js";
 import { useAuth } from "./context/AuthContext.jsx";
 import AddressAutocomplete from "./components/AddressAutocomplete.jsx";
+import RoomScansHomePromo from "./components/RoomScansHomePromo.jsx";
 
 // shadcn component imports
 import { Button } from "@/components/ui/button";
@@ -368,6 +369,8 @@ function App() {
         </aside>
 
         <div className="query-page-main space-y-6">
+          <RoomScansHomePromo />
+
           <Card className="shadow-md">
             <CardHeader>
               <CardTitle className="text-2xl font-bold flex items-center gap-2">

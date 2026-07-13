@@ -92,6 +92,27 @@ def _extract_cache_tokens(usage: Any) -> tuple[int, int]:
     return created, read
 
 
+def _build_user_message(
+    query: str,
+    chunks: list[dict[str, Any]],
+    project_context: dict[str, Any] | None = None,
+) -> str:
+    """Assemble user message with optional project facts and retrieved chunks."""
+    from rag.project_context import format_project_context_block
+
+    context = _format_chunks_for_prompt(chunks)
+    project_block = format_project_context_block(project_context)
+    parts = [f"Question: {query}"]
+    if project_block:
+        parts.append(f"\n{project_block}")
+    parts.append(f"\nContext ({len(chunks)} chunks):\n\n{context}")
+    parts.append(
+        "\nProvide a strictly grounded, cited answer based on the code context. "
+        "Project measurements are supporting facts only — cite code chunks for requirements."
+    )
+    return "\n".join(parts)
+
+
 def _generate_with_ollama(
     query: str,
     chunks: list[dict[str, Any]],
@@ -99,6 +120,7 @@ def _generate_with_ollama(
     model: str,
     max_tokens: int,
     temperature: float,
+    project_context: dict[str, Any] | None = None,
 ) -> GenerationResult:
     """Generate answer using local Ollama runtime."""
     import requests
@@ -106,13 +128,7 @@ def _generate_with_ollama(
     base_url = os.environ.get("OLLAMA_BASE_URL", "http://localhost:11434").rstrip("/")
     timeout_s = int(os.environ.get("OLLAMA_TIMEOUT_SECONDS", "180"))
 
-    context = _format_chunks_for_prompt(chunks)
-    user_message = (
-        f"Question: {query}\n\n"
-        f"Context ({len(chunks)} chunks):\n\n"
-        f"{context}\n\n"
-        "Provide a thorough, cited answer based on the above context."
-    )
+    user_message = _build_user_message(query, chunks, project_context)
 
     payload = {
         "model": model,
@@ -268,6 +284,7 @@ def generate_answer(
     model: str | None = None,
     max_tokens: int = 1024,
     temperature: float = 0.0,
+    project_context: dict[str, Any] | None = None,
 ) -> GenerationResult:
     """
     Generate a cited answer from retrieved chunks via configured provider.
@@ -278,6 +295,7 @@ def generate_answer(
         model: Model name. Defaults to provider-specific env var.
         max_tokens: Maximum output tokens.
         temperature: Sampling temperature (low = more deterministic).
+        project_context: Optional kickoff + active room derived facts (not cited).
 
     Returns:
         GenerationResult with answer text, parsed citations, and usage stats.
@@ -296,6 +314,7 @@ def generate_answer(
             model=local_model,
             max_tokens=max_tokens,
             temperature=temperature,
+            project_context=project_context,
         )
 
     import anthropic
@@ -317,13 +336,7 @@ def generate_answer(
         )
 
     # Format context
-    context = _format_chunks_for_prompt(chunks)
-    user_message = (
-        f"Question: {query}\n\n"
-        f"Context ({len(chunks)} chunks):\n\n"
-        f"{context}\n\n"
-        f"Provide a strictly grounded, cited answer based on the above context. Use only facts explicitly present in context."
-    )
+    user_message = _build_user_message(query, chunks, project_context)
 
     t0 = time.perf_counter()
 

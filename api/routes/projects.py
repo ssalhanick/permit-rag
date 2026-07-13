@@ -16,13 +16,20 @@ from api.schemas import (
     AssetSyncAckRequest,
     AssetSyncAckResponse,
     CreateProjectRequest,
+    DesignIntentRequest,
+    DesignIntentResponse,
     DocumentSummaryResponse,
+    LinkRoomScansRequest,
+    ProjectLinkedRoomScanResponse,
     ProjectMemberResponse,
     ProjectResponse,
+    RoomScanResponse,
     RoomSummaryRequest,
     ShareDocumentRequest,
     TransferOwnershipRequest,
     UpdateProjectRequest,
+    UpsertRoomScansRequest,
+    UserRoomScanResponse,
 )
 from db import client as db_client
 
@@ -230,7 +237,7 @@ def update_room_summary(
     body: RoomSummaryRequest,
     current_user: CurrentUser,
 ) -> dict:
-    """Persist derived room capture summary (no raw mesh)."""
+    """Persist derived room capture summary (no raw mesh). Deprecated — prefer room-scans."""
     _require_role(project_id, current_user["user_id"], {"owner", "editor"})
     updated = db_client.update_project(
         project_id,
@@ -239,3 +246,122 @@ def update_room_summary(
     if not updated:
         raise HTTPException(status_code=404, detail="Project not found.")
     return dict(updated)
+
+
+@router.get("/{project_id}/room-scans", response_model=list[ProjectLinkedRoomScanResponse])
+def list_room_scans(project_id: UUID, current_user: CurrentUser) -> list[dict]:
+    """List library scans linked to this project."""
+    _require_role(project_id, current_user["user_id"], {"owner", "editor", "viewer"})
+    rows = db_client.list_linked_project_room_scans(project_id)
+    return [dict(row) for row in rows]
+
+
+@router.post("/{project_id}/room-scans", response_model=list[ProjectLinkedRoomScanResponse])
+def upsert_room_scans(
+    project_id: UUID,
+    body: UpsertRoomScansRequest,
+    current_user: CurrentUser,
+) -> list[dict]:
+    """Upsert user library scans and link them to the project."""
+    _require_role(project_id, current_user["user_id"], {"owner", "editor"})
+    for scan in body.scans:
+        if "surfaces" in (scan.derived or {}):
+            raise HTTPException(
+                status_code=422,
+                detail="Derived summaries must not include surfaces.",
+            )
+    payload = [scan.model_dump() for scan in body.scans]
+    db_client.upsert_user_room_scans(current_user["user_id"], payload)
+    db_client.upsert_project_room_scans(project_id, payload)
+    scan_ids = [scan["id"] for scan in payload]
+    active = next((s["id"] for s in payload if s.get("is_active")), None)
+    rows = db_client.link_scans_to_project(
+        project_id,
+        current_user["user_id"],
+        scan_ids,
+        active_scan_id=active,
+    )
+    return [dict(row) for row in rows]
+
+
+@router.post("/{project_id}/room-scans/link", response_model=list[ProjectLinkedRoomScanResponse])
+def link_room_scans(
+    project_id: UUID,
+    body: LinkRoomScansRequest,
+    current_user: CurrentUser,
+) -> list[dict]:
+    """Attach existing library scans to a project."""
+    _require_role(project_id, current_user["user_id"], {"owner", "editor"})
+    try:
+        rows = db_client.link_scans_to_project(
+            project_id,
+            current_user["user_id"],
+            body.scan_ids,
+            active_scan_id=body.active_scan_id,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    return [dict(row) for row in rows]
+
+
+@router.delete("/{project_id}/room-scans/{scan_id}", status_code=200)
+def unlink_room_scan(
+    project_id: UUID,
+    scan_id: UUID,
+    current_user: CurrentUser,
+) -> dict:
+    """Remove a scan from the project (keeps it in the user's library)."""
+    _require_role(project_id, current_user["user_id"], {"owner", "editor"})
+    if not db_client.unlink_scan_from_project(project_id, scan_id):
+        raise HTTPException(status_code=404, detail="Scan link not found.")
+    return {"detail": "Scan unlinked from project."}
+
+
+@router.patch("/{project_id}/room-scans/{scan_id}/active", response_model=ProjectLinkedRoomScanResponse)
+def set_active_room_scan(
+    project_id: UUID,
+    scan_id: UUID,
+    current_user: CurrentUser,
+) -> dict:
+    """Set the active room scan used for chat context."""
+    _require_role(project_id, current_user["user_id"], {"owner", "editor"})
+    updated = db_client.set_active_room_scan(project_id, scan_id)
+    if not updated:
+        raise HTTPException(status_code=404, detail="Room scan not found.")
+    rows = db_client.list_linked_project_room_scans(project_id)
+    match = next((r for r in rows if r["id"] == scan_id), updated)
+    return dict(match)
+
+
+@router.post(
+    "/{project_id}/room-scans/{structure_id}/rooms/{room_id}/design-intent",
+    response_model=DesignIntentResponse,
+)
+def room_design_intent(
+    project_id: UUID,
+    structure_id: UUID,
+    room_id: UUID,
+    body: DesignIntentRequest,
+    current_user: CurrentUser,
+) -> dict:
+    """Parse voice/text remodel intent into structured overlay patches (derived context only)."""
+    _require_role(project_id, current_user["user_id"], {"owner", "editor", "viewer"})
+    from rag.design_intent import parse_design_intent
+
+    rows = db_client.list_project_room_scans(project_id)
+    room_row = next((r for r in rows if r["id"] == room_id), None)
+    if not room_row or room_row.get("scan_type") != "room":
+        raise HTTPException(status_code=404, detail="Room scan not found.")
+    if room_row.get("parent_scan_id") != structure_id:
+        raise HTTPException(status_code=404, detail="Room does not belong to structure.")
+
+    result = parse_design_intent(
+        body.utterance,
+        room_label=body.room_label or room_row.get("room_label"),
+        room_derived=body.room_derived or room_row.get("derived"),
+        surface_hints=body.surface_hints,
+    )
+    return {
+        "overlays": result.get("overlays", []),
+        "explanation": result.get("explanation", ""),
+    }

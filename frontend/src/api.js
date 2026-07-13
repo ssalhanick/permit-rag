@@ -167,6 +167,61 @@ export async function patchProjectRoomSummary(projectId, roomSummary) {
   });
 }
 
+export async function fetchProjectRoomScans(projectId) {
+  return await requestJson(`/projects/${projectId}/room-scans`);
+}
+
+export async function postProjectRoomScans(projectId, scans) {
+  return await requestJson(`/projects/${projectId}/room-scans`, {
+    method: "POST",
+    body: { scans },
+  });
+}
+
+export async function setActiveRoomScan(projectId, scanId) {
+  return await requestJson(`/projects/${projectId}/room-scans/${scanId}/active`, {
+    method: "PATCH",
+  });
+}
+
+export async function postDesignIntent(projectId, structureId, roomId, payload) {
+  return await requestJson(
+    `/projects/${projectId}/room-scans/${structureId}/rooms/${roomId}/design-intent`,
+    {
+      method: "POST",
+      body: payload,
+    },
+  );
+}
+
+export async function fetchUserRoomScans() {
+  return await requestJson("/auth/me/room-scans");
+}
+
+export async function postUserRoomScans(scans) {
+  return await requestJson("/auth/me/room-scans", {
+    method: "POST",
+    body: { scans },
+  });
+}
+
+export async function linkScansToProject(projectId, scanIds, activeScanId = null) {
+  return await requestJson(`/projects/${projectId}/room-scans/link`, {
+    method: "POST",
+    body: { scan_ids: scanIds, active_scan_id: activeScanId },
+  });
+}
+
+export async function unlinkScanFromProject(projectId, scanId) {
+  return await requestJson(`/projects/${projectId}/room-scans/${scanId}`, {
+    method: "DELETE",
+  });
+}
+
+export async function fetchProject(projectId) {
+  return await requestJson(`/projects/${projectId}`);
+}
+
 function buildDocumentQuery(filters = {}) {
   const params = new URLSearchParams();
   if (filters.municipality) {

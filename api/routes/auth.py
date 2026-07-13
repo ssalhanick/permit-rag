@@ -14,7 +14,7 @@ from uuid import UUID
 from fastapi import APIRouter, Depends, HTTPException
 
 from api.auth import get_current_user
-from api.schemas import UserMeResponse
+from api.schemas import UserMeResponse, UpsertRoomScansRequest, UserRoomScanResponse
 from db import client as db_client
 
 router = APIRouter(prefix="/auth", tags=["auth"])
@@ -39,3 +39,24 @@ def get_me(current_user: Annotated[dict, Depends(get_current_user)]) -> UserMeRe
         cognito_sub=user["cognito_sub"],
         created_at=user["created_at"],
     )
+
+
+@router.get("/me/room-scans", response_model=list[UserRoomScanResponse])
+def list_my_room_scans(current_user: Annotated[dict, Depends(get_current_user)]) -> list[dict]:
+    """List all room/structure scans in the caller's personal library."""
+    rows = db_client.list_user_room_scans(current_user["user_id"])
+    return [dict(row) for row in rows]
+
+
+@router.post("/me/room-scans", response_model=list[UserRoomScanResponse])
+def upsert_my_room_scans(
+    body: UpsertRoomScansRequest,
+    current_user: Annotated[dict, Depends(get_current_user)],
+) -> list[dict]:
+    """Upsert derived scan summaries into the caller's library (no project link)."""
+    for scan in body.scans:
+        if "surfaces" in (scan.derived or {}):
+            raise HTTPException(status_code=422, detail="Derived summaries must not include surfaces.")
+    payload = [scan.model_dump() for scan in body.scans]
+    rows = db_client.upsert_user_room_scans(current_user["user_id"], payload)
+    return [dict(row) for row in rows]

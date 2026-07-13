@@ -49,6 +49,10 @@
 	<string>Camera access is required to scan room dimensions with LiDAR.</string>
 	<key>NSMotionUsageDescription</key>
 	<string>Motion sensors help align room scans for accurate measurements.</string>
+	<key>NSMicrophoneUsageDescription</key>
+	<string>Microphone access lets you describe design changes by voice during room AR sessions.</string>
+	<key>NSSpeechRecognitionUsageDescription</key>
+	<string>Speech recognition converts your remodel instructions into AR material overlays.</string>
 	<key>CFBundleURLTypes</key>
 	<array>
 		<dict>

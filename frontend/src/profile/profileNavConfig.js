@@ -2,6 +2,7 @@
 
 export const PROFILE_NAV_ITEMS = [
   { label: "Dashboard", path: "/profile/dashboard", end: true },
+  { label: "Room Scans", path: "/profile/room-scans" },
   { label: "Query History", path: "/profile/history" },
   { label: "My Documents", path: "/profile/documents" },
   { label: "Account", path: "/profile/account" },
@@ -15,6 +16,7 @@ export const PROFILE_EXTERNAL_LINKS = [
 /** @type {Record<string, string>} */
 export const PROFILE_PAGE_TITLES = {
   "/profile/dashboard": "Dashboard",
+  "/profile/room-scans": "Room Scans",
   "/profile/history": "Query History",
   "/profile/documents": "My Documents",
   "/profile/account": "Account",

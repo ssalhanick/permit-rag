@@ -6,9 +6,10 @@ import {
   PROFILE_PAGE_TITLES,
 } from "./profileNavConfig.js";
 
-test("profile nav includes dashboard and history routes", () => {
+test("profile nav includes dashboard, room scans, and history routes", () => {
   const paths = PROFILE_NAV_ITEMS.map((item) => item.path);
   assert.ok(paths.includes("/profile/dashboard"));
+  assert.ok(paths.includes("/profile/room-scans"));
   assert.ok(paths.includes("/profile/history"));
 });
 

@@ -390,6 +390,15 @@ def query_answer(
             log.warning("mini_rag conflict check failed (%s)", exc)
 
     # 2. Generate answer
+    project_context = None
+    if body.project_id:
+        try:
+            from rag.project_context import load_project_context
+
+            project_context = load_project_context(body.project_id)
+        except Exception as exc:
+            log.warning("project_context load failed (%s)", exc)
+
     generation_trace = _start_trace(
         name="api_generation",
         run_type="llm",
@@ -402,7 +411,7 @@ def query_answer(
         parent=root_trace,
     ) if tracing_on else None
     try:
-        gen = generate_answer(body.query, result.chunks)
+        gen = generate_answer(body.query, result.chunks, project_context=project_context)
         _end_trace(
             generation_trace,
             outputs={

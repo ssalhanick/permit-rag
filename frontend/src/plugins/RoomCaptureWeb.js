@@ -13,6 +13,27 @@ export class RoomCaptureWeb {
     };
   }
 
+  async startStructureCapture() {
+    return {
+      schema_version: "2.0",
+      scan_type: "structure",
+      rooms: [],
+      error: "Structure capture requires native iOS build.",
+    };
+  }
+
+  async openRoomAR() {
+    return { opened: false, error: "AR viewer requires native iOS build." };
+  }
+
+  async applyMaterial() {
+    return { applied: false };
+  }
+
+  async startSpeechRecognition() {
+    return { transcript: "", error: "Speech requires native iOS build." };
+  }
+
   async isAvailable() {
     return { available: false };
   }

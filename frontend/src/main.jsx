@@ -13,6 +13,14 @@ import ProfileDashboardPage from "./profile/pages/ProfileDashboardPage.jsx";
 import ProfileHistoryPage from "./profile/pages/ProfileHistoryPage.jsx";
 import ProfileDocumentsPage from "./profile/pages/ProfileDocumentsPage.jsx";
 import ProfileAccountPage from "./profile/pages/ProfileAccountPage.jsx";
+import ProfileRoomScansPage from "./profile/pages/ProfileRoomScansPage.jsx";
+import ProjectLayout from "./projects/ProjectLayout.jsx";
+import { ProjectProvider } from "./projects/ProjectContext.jsx";
+import ProjectDashboardPage from "./projects/pages/ProjectDashboardPage.jsx";
+import ProjectScansPage from "./projects/pages/ProjectScansPage.jsx";
+import ProjectQueriesPage from "./projects/pages/ProjectQueriesPage.jsx";
+import ProjectDocumentsPage from "./projects/pages/ProjectDocumentsPage.jsx";
+import ProjectMembersPage from "./projects/pages/ProjectMembersPage.jsx";
 import ProtectedRoute from "./components/ProtectedRoute.jsx";
 import NotFoundPage from "./components/NotFoundPage.jsx";
 import OfflineBanner from "./components/OfflineBanner.jsx";
@@ -64,6 +72,23 @@ ReactDOM.createRoot(document.getElementById("root")).render(
             }
           />
           <Route
+            path="/projects/:projectId"
+            element={
+              <ProtectedRoute>
+                <ProjectProvider>
+                  <ProjectLayout />
+                </ProjectProvider>
+              </ProtectedRoute>
+            }
+          >
+            <Route index element={<Navigate to="dashboard" replace />} />
+            <Route path="dashboard" element={<ProjectDashboardPage />} />
+            <Route path="scans" element={<ProjectScansPage />} />
+            <Route path="queries" element={<ProjectQueriesPage />} />
+            <Route path="documents" element={<ProjectDocumentsPage />} />
+            <Route path="members" element={<ProjectMembersPage />} />
+          </Route>
+          <Route
             path="/projects"
             element={
               <ProtectedRoute>
@@ -83,6 +108,7 @@ ReactDOM.createRoot(document.getElementById("root")).render(
             <Route path="dashboard" element={<ProfileDashboardPage />} />
             <Route path="history" element={<ProfileHistoryPage />} />
             <Route path="documents" element={<ProfileDocumentsPage />} />
+            <Route path="room-scans" element={<ProfileRoomScansPage />} />
             <Route path="account" element={<ProfileAccountPage />} />
           </Route>
           <Route

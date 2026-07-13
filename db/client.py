@@ -1299,3 +1299,421 @@ def delete_user_and_clean_up(user_id: UUID) -> bool:
         conn.commit()
     return cur.rowcount > 0
 
+
+# ════════════════════════════════════════════════
+#  PROJECT ROOM SCANS (Sprint 14+ multi-scan)
+# ════════════════════════════════════════════════
+
+
+def list_project_room_scans(project_id: UUID) -> list[dict[str, Any]]:
+    """List derived room/structure scan rows for a project."""
+    sql = """
+        SELECT *
+        FROM project_room_scans
+        WHERE project_id = %s
+        ORDER BY captured_at DESC, room_label ASC;
+    """
+    with get_conn() as conn:
+        return conn.execute(sql, (project_id,)).fetchall()
+
+
+def get_active_room_scan(project_id: UUID) -> dict[str, Any] | None:
+    """Return the active room scan row for chat context."""
+    sql = """
+        SELECT urs.*
+        FROM project_room_scan_links l
+        JOIN user_room_scans urs ON urs.id = l.scan_id
+        WHERE l.project_id = %s AND l.is_active = true AND urs.scan_type = 'room'
+        LIMIT 1;
+    """
+    with get_conn() as conn:
+        row = conn.execute(sql, (project_id,)).fetchone()
+        if row:
+            return row
+        legacy_sql = """
+            SELECT *
+            FROM project_room_scans
+            WHERE project_id = %s AND scan_type = 'room' AND is_active = true
+            LIMIT 1;
+        """
+        return conn.execute(legacy_sql, (project_id,)).fetchone()
+
+
+def _room_summary_mirror_payload(
+    *,
+    room_label: str,
+    section: str | None,
+    captured_at: Any,
+    derived: dict[str, Any] | None,
+) -> dict[str, Any]:
+    """Build JSON-serializable room_summary mirror from an active room scan."""
+    captured_value = (
+        captured_at.isoformat()
+        if hasattr(captured_at, "isoformat")
+        else captured_at
+    )
+    return {
+        "schema_version": "2.0",
+        "room_label": room_label,
+        "section": section,
+        "captured_at": captured_value,
+        "derived": derived or {},
+    }
+
+
+def upsert_project_room_scans(
+    project_id: UUID,
+    scans: list[dict[str, Any]],
+) -> list[dict[str, Any]]:
+    """
+    Upsert structure and room scan summary rows (derived metrics only).
+
+    When any room row sets is_active=true, clears other active room flags first.
+    Mirrors active room derived to projects.room_summary for backward compatibility.
+    """
+    import json as _json
+
+    if not scans:
+        return list_project_room_scans(project_id)
+
+    active_room_id: UUID | None = None
+    active_summary: dict[str, Any] | None = None
+    for scan in scans:
+        if scan.get("scan_type") == "room" and scan.get("is_active"):
+            active_room_id = scan["id"]
+            active_summary = _room_summary_mirror_payload(
+                room_label=scan.get("room_label", "room"),
+                section=scan.get("section"),
+                captured_at=scan.get("captured_at"),
+                derived=scan.get("derived"),
+            )
+            break
+
+    upsert_sql = """
+        INSERT INTO project_room_scans (
+            id, project_id, scan_type, parent_scan_id,
+            room_label, section, captured_at, derived, is_active
+        )
+        VALUES (
+            %(id)s, %(project_id)s, %(scan_type)s, %(parent_scan_id)s,
+            %(room_label)s, %(section)s, %(captured_at)s,
+            %(derived)s::jsonb, %(is_active)s
+        )
+        ON CONFLICT (id) DO UPDATE SET
+            scan_type = EXCLUDED.scan_type,
+            parent_scan_id = EXCLUDED.parent_scan_id,
+            room_label = EXCLUDED.room_label,
+            section = EXCLUDED.section,
+            captured_at = EXCLUDED.captured_at,
+            derived = EXCLUDED.derived,
+            is_active = EXCLUDED.is_active,
+            updated_at = now()
+        RETURNING *;
+    """
+
+    with get_conn() as conn:
+        if active_room_id is not None:
+            conn.execute(
+                """
+                UPDATE project_room_scans
+                SET is_active = false
+                WHERE project_id = %s AND scan_type = 'room' AND id <> %s;
+                """,
+                (project_id, active_room_id),
+            )
+        for scan in scans:
+            conn.execute(
+                upsert_sql,
+                {
+                    "id": scan["id"],
+                    "project_id": project_id,
+                    "scan_type": scan["scan_type"],
+                    "parent_scan_id": scan.get("parent_scan_id"),
+                    "room_label": scan["room_label"],
+                    "section": scan.get("section"),
+                    "captured_at": scan["captured_at"],
+                    "derived": _json.dumps(scan.get("derived") or {}),
+                    "is_active": bool(scan.get("is_active")),
+                },
+            )
+        if active_summary is not None:
+            conn.execute(
+                """
+                UPDATE projects
+                SET room_summary = %(room_summary)s::jsonb
+                WHERE id = %(project_id)s;
+                """,
+                {
+                    "project_id": project_id,
+                    "room_summary": _json.dumps(active_summary),
+                },
+            )
+        conn.commit()
+    return list_project_room_scans(project_id)
+
+
+def set_active_room_scan(project_id: UUID, scan_id: UUID) -> dict[str, Any] | None:
+    """Mark one room scan active and mirror derived summary to projects.room_summary."""
+    import json as _json
+
+    linked = set_active_linked_room_scan(project_id, scan_id)
+    if linked:
+        return linked
+
+    with get_conn() as conn:
+        row = conn.execute(
+            """
+            SELECT *
+            FROM project_room_scans
+            WHERE id = %s AND project_id = %s AND scan_type = 'room';
+            """,
+            (scan_id, project_id),
+        ).fetchone()
+        if not row:
+            return None
+        conn.execute(
+            """
+            UPDATE project_room_scans
+            SET is_active = false
+            WHERE project_id = %s AND scan_type = 'room';
+            """,
+            (project_id,),
+        )
+        updated = conn.execute(
+            """
+            UPDATE project_room_scans
+            SET is_active = true
+            WHERE id = %s
+            RETURNING *;
+            """,
+            (scan_id,),
+        ).fetchone()
+        summary = _room_summary_mirror_payload(
+            room_label=updated["room_label"],
+            section=updated.get("section"),
+            captured_at=updated["captured_at"],
+            derived=updated.get("derived"),
+        )
+        conn.execute(
+            """
+            UPDATE projects
+            SET room_summary = %(room_summary)s::jsonb
+            WHERE id = %(project_id)s;
+            """,
+            {"project_id": project_id, "room_summary": _json.dumps(summary)},
+        )
+        conn.commit()
+    return updated
+
+
+# ════════════════════════════════════════════════
+#  USER ROOM SCAN LIBRARY (Sprint 15)
+# ════════════════════════════════════════════════
+
+
+def list_user_room_scans(user_id: UUID) -> list[dict[str, Any]]:
+    """List all scans in a user's personal library."""
+    sql = """
+        SELECT *
+        FROM user_room_scans
+        WHERE user_id = %s
+        ORDER BY captured_at DESC, room_label ASC;
+    """
+    with get_conn() as conn:
+        return conn.execute(sql, (user_id,)).fetchall()
+
+
+def upsert_user_room_scans(
+    user_id: UUID,
+    scans: list[dict[str, Any]],
+) -> list[dict[str, Any]]:
+    """Upsert derived summaries into the user's scan library."""
+    import json as _json
+
+    if not scans:
+        return list_user_room_scans(user_id)
+
+    upsert_sql = """
+        INSERT INTO user_room_scans (
+            id, user_id, scan_type, parent_scan_id, room_label, section,
+            structure_label, captured_at, derived
+        )
+        VALUES (
+            %(id)s, %(user_id)s, %(scan_type)s, %(parent_scan_id)s,
+            %(room_label)s, %(section)s, %(structure_label)s,
+            %(captured_at)s, %(derived)s::jsonb
+        )
+        ON CONFLICT (id) DO UPDATE SET
+            scan_type = EXCLUDED.scan_type,
+            parent_scan_id = EXCLUDED.parent_scan_id,
+            room_label = EXCLUDED.room_label,
+            section = EXCLUDED.section,
+            structure_label = EXCLUDED.structure_label,
+            captured_at = EXCLUDED.captured_at,
+            derived = EXCLUDED.derived,
+            updated_at = now()
+        RETURNING *;
+    """
+    with get_conn() as conn:
+        for scan in scans:
+            conn.execute(
+                upsert_sql,
+                {
+                    "id": scan["id"],
+                    "user_id": user_id,
+                    "scan_type": scan["scan_type"],
+                    "parent_scan_id": scan.get("parent_scan_id"),
+                    "room_label": scan["room_label"],
+                    "section": scan.get("section"),
+                    "structure_label": scan.get("structure_label"),
+                    "captured_at": scan["captured_at"],
+                    "derived": _json.dumps(scan.get("derived") or {}),
+                },
+            )
+        conn.commit()
+    return list_user_room_scans(user_id)
+
+
+def list_linked_project_room_scans(project_id: UUID) -> list[dict[str, Any]]:
+    """List library scans linked to a project."""
+    sql = """
+        SELECT
+            urs.*,
+            l.project_id,
+            l.is_active,
+            l.linked_at
+        FROM project_room_scan_links l
+        JOIN user_room_scans urs ON urs.id = l.scan_id
+        WHERE l.project_id = %s
+        ORDER BY urs.captured_at DESC, urs.room_label ASC;
+    """
+    with get_conn() as conn:
+        rows = conn.execute(sql, (project_id,)).fetchall()
+    if rows:
+        return rows
+    return list_project_room_scans(project_id)
+
+
+def link_scans_to_project(
+    project_id: UUID,
+    user_id: UUID,
+    scan_ids: list[UUID],
+    *,
+    active_scan_id: UUID | None = None,
+) -> list[dict[str, Any]]:
+    """Attach library scans to a project; optionally set active room."""
+    import json as _json
+
+    owned = list_user_room_scans(user_id)
+    owned_ids = {row["id"] for row in owned}
+    for scan_id in scan_ids:
+        if scan_id not in owned_ids:
+            raise ValueError(f"Scan {scan_id} not found in user library.")
+
+    with get_conn() as conn:
+        for scan_id in scan_ids:
+            conn.execute(
+                """
+                INSERT INTO project_room_scan_links (project_id, scan_id, is_active)
+                VALUES (%s, %s, false)
+                ON CONFLICT (project_id, scan_id) DO NOTHING;
+                """,
+                (project_id, scan_id),
+            )
+        if active_scan_id is not None:
+            conn.execute(
+                "UPDATE project_room_scan_links SET is_active = false WHERE project_id = %s;",
+                (project_id,),
+            )
+            conn.execute(
+                """
+                UPDATE project_room_scan_links
+                SET is_active = true
+                WHERE project_id = %s AND scan_id = %s;
+                """,
+                (project_id, active_scan_id),
+            )
+            row = conn.execute(
+                """
+                SELECT urs.*
+                FROM project_room_scan_links l
+                JOIN user_room_scans urs ON urs.id = l.scan_id
+                WHERE l.project_id = %s AND l.scan_id = %s AND urs.scan_type = 'room';
+                """,
+                (project_id, active_scan_id),
+            ).fetchone()
+            if row:
+                summary = _room_summary_mirror_payload(
+                    room_label=row["room_label"],
+                    section=row.get("section"),
+                    captured_at=row["captured_at"],
+                    derived=row.get("derived"),
+                )
+                conn.execute(
+                    """
+                    UPDATE projects SET room_summary = %(room_summary)s::jsonb
+                    WHERE id = %(project_id)s;
+                    """,
+                    {"project_id": project_id, "room_summary": _json.dumps(summary)},
+                )
+        conn.commit()
+    return list_linked_project_room_scans(project_id)
+
+
+def unlink_scan_from_project(project_id: UUID, scan_id: UUID) -> bool:
+    """Remove a scan link from a project (library entry remains)."""
+    with get_conn() as conn:
+        cur = conn.execute(
+            """
+            DELETE FROM project_room_scan_links
+            WHERE project_id = %s AND scan_id = %s;
+            """,
+            (project_id, scan_id),
+        )
+        conn.commit()
+    return cur.rowcount > 0
+
+
+def set_active_linked_room_scan(project_id: UUID, scan_id: UUID) -> dict[str, Any] | None:
+    """Mark a linked room scan active for project chat context."""
+    import json as _json
+
+    with get_conn() as conn:
+        row = conn.execute(
+            """
+            SELECT urs.*
+            FROM project_room_scan_links l
+            JOIN user_room_scans urs ON urs.id = l.scan_id
+            WHERE l.project_id = %s AND l.scan_id = %s AND urs.scan_type = 'room';
+            """,
+            (project_id, scan_id),
+        ).fetchone()
+        if not row:
+            return None
+        conn.execute(
+            "UPDATE project_room_scan_links SET is_active = false WHERE project_id = %s;",
+            (project_id,),
+        )
+        conn.execute(
+            """
+            UPDATE project_room_scan_links
+            SET is_active = true
+            WHERE project_id = %s AND scan_id = %s;
+            """,
+            (project_id, scan_id),
+        )
+        summary = _room_summary_mirror_payload(
+            room_label=row["room_label"],
+            section=row.get("section"),
+            captured_at=row["captured_at"],
+            derived=row.get("derived"),
+        )
+        conn.execute(
+            """
+            UPDATE projects SET room_summary = %(room_summary)s::jsonb WHERE id = %(project_id)s;
+            """,
+            {"project_id": project_id, "room_summary": _json.dumps(summary)},
+        )
+        conn.commit()
+    return row
+
