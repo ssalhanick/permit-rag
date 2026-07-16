@@ -20,7 +20,7 @@ _Updated: 2026-07-13 (generative room preview + AR asset_url)_
 - [x] Product `image_url` → AR textures
 - [x] Generative room preview — `commerce/room_image.py`, `POST /commerce/room-preview-image`
 - [x] Device `asset_url` stamp + iOS prefer asset over product photo
-- [ ] Apply migration 018 to prod RDS (manual)
+- [x] Apply migration 018 to prod RDS (already applied)
 - [ ] Deploy backend with new routes to ECS
 - [ ] Optional: `OPENAI_API_KEY` in prod for live images (mock works)
 - [ ] Device smoke: Preview → Generate image → Save → AR → DXF

@@ -24,6 +24,7 @@ export async function previewDesignIntent(opts) {
     roomLabel,
     roomDerived,
     surfaceHints,
+    selectedSurfaceId,
     libraryMode = false,
   } = opts;
 
@@ -32,6 +33,7 @@ export async function previewDesignIntent(opts) {
     room_label: roomLabel,
     room_derived: roomDerived,
     surface_hints: surfaceHints,
+    selected_surface_id: selectedSurfaceId,
   };
 
   const result = libraryMode

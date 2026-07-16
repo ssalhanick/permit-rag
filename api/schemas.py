@@ -521,6 +521,7 @@ class DesignIntentRequest(BaseModel):
     room_label: str | None = Field(default=None, max_length=120)
     room_derived: dict | None = None
     surface_hints: list[dict] | None = None
+    selected_surface_id: str | None = Field(default=None, max_length=250)
 
 
 class DesignIntentUsage(BaseModel):

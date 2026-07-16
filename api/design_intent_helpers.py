@@ -74,6 +74,7 @@ def run_design_intent(
         room_label=body.room_label or room_row.get("room_label"),
         room_derived=body.room_derived or room_row.get("derived"),
         surface_hints=body.surface_hints,
+        selected_surface_id=body.selected_surface_id,
     )
     usage = _usage_from_result(result)
 

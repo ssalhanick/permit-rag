@@ -107,6 +107,7 @@ export default function RoomDesignPage({ libraryMode = false }) {
             projectId,
             scanId,
             utterance: data.transcript,
+            selectedSurfaceId: data.selectedSurfaceId,
             roomLabel: scanRow?.room_label || "Room",
             roomDerived: scanRow?.derived,
             surfaceHints: (capture?.surfaces || []).map((s) => ({

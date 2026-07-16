@@ -15,10 +15,23 @@ log = logging.getLogger(__name__)
 _DESIGN_SYSTEM = """\
 You convert remodel instructions into structured AR overlay patches for a scanned room.
 Return ONLY valid JSON with keys: overlays (array), explanation (string).
-Each overlay object must include: surface_id (string or null), type (paint|tile|trim|appliance),
-material_id (string), color_hex (string or null), asset_url (null unless appliance),
-product_search (object with product_category, attributes dict, query string).
-Use surface_id null when the target wall is ambiguous; the client may prompt the user.
+Each overlay object must include:
+- surface_id: (string or null). If selected_surface_id is provided in context, target that surface_id primarily unless instruction implies another wall.
+- type: (paint|tile|trim|appliance)
+- material_id: (string)
+- color_hex: (string or null)
+- asset_url: (null unless appliance)
+- product_search: (object with product_category, attributes dict, query string)
+- y_min: (float, optional, default 0.0). Fractional lower height boundary of the texture segment on the wall (from 0.0 to 1.0).
+- y_max: (float, optional, default 1.0). Fractional upper height boundary of the texture segment on the wall (from 0.0 to 1.0).
+- x_min: (float, optional, default 0.0). Fractional left boundary (from 0.0 to 1.0).
+- x_max: (float, optional, default 1.0). Fractional right boundary (from 0.0 to 1.0).
+
+Wall Bisection / Splits:
+If the user wants different textures on parts of the same wall (e.g. "backsplash on bottom half"), return MULTIPLE overlays for that surface_id representing segments. E.g.:
+1. Tile backsplash on bottom half: y_min: 0.0, y_max: 0.5, type: tile, material_id: white_subway_tile.
+2. Paint on top half: y_min: 0.5, y_max: 1.0, type: paint, material_id: generic_paint.
+Calculate these boundaries based on the wall dimensions in surface_hints if user specifies exact units (e.g. "bottom 1 meter" on a wall with height 2.5m is y_min: 0.0, y_max: 0.4).
 Do not invent measurements. Use only the provided room context.
 """
 
@@ -29,6 +42,7 @@ def parse_design_intent(
     room_label: str | None = None,
     room_derived: dict[str, Any] | None = None,
     surface_hints: list[dict[str, Any]] | None = None,
+    selected_surface_id: str | None = None,
 ) -> dict[str, Any]:
     """
     Parse a remodel utterance into overlay patches via the configured LLM provider.
@@ -41,7 +55,7 @@ def parse_design_intent(
 
     api_key = os.environ.get("ANTHROPIC_API_KEY", "").strip()
     if not api_key:
-        return _with_usage(_parse_design_intent_rules(utterance, room_label=room_label), "rules")
+        return _with_usage(_parse_design_intent_rules(utterance, room_label=room_label, selected_surface_id=selected_surface_id), "rules")
 
     try:
         return _parse_design_intent_llm(
@@ -49,10 +63,11 @@ def parse_design_intent(
             room_label=room_label,
             room_derived=room_derived,
             surface_hints=surface_hints,
+            selected_surface_id=selected_surface_id,
         )
     except Exception as exc:
         log.warning("design_intent LLM failed (%s); using rules fallback", exc)
-        return _with_usage(_parse_design_intent_rules(utterance, room_label=room_label), "rules")
+        return _with_usage(_parse_design_intent_rules(utterance, room_label=room_label, selected_surface_id=selected_surface_id), "rules")
 
 
 def _with_usage(result: dict[str, Any], model: str) -> dict[str, Any]:
@@ -67,6 +82,7 @@ def _parse_design_intent_rules(
     utterance: str,
     *,
     room_label: str | None = None,
+    selected_surface_id: str | None = None,
 ) -> dict[str, Any]:
     """Lightweight keyword parser for offline/tests."""
     lower = utterance.lower()
@@ -106,7 +122,7 @@ def _parse_design_intent_rules(
     return {
         "overlays": [
             {
-                "surface_id": None,
+                "surface_id": selected_surface_id,
                 "type": overlay_type,
                 "material_id": material_id,
                 "color_hex": color_hex,
@@ -123,6 +139,7 @@ def _parse_design_intent_llm(
     room_label: str | None,
     room_derived: dict[str, Any] | None,
     surface_hints: list[dict[str, Any]] | None,
+    selected_surface_id: str | None = None,
 ) -> dict[str, Any]:
     """Call Anthropic for structured overlay patches."""
     import anthropic
@@ -133,6 +150,7 @@ def _parse_design_intent_llm(
         "room_label": room_label,
         "derived": room_derived or {},
         "surface_hints": surface_hints or [],
+        "selected_surface_id": selected_surface_id,
     }
     user_message = (
         f"Room context:\n{json.dumps(context, indent=2)}\n\n"

@@ -23,6 +23,7 @@ final class RoomARPresenter: NSObject, UITableViewDelegate, UITableViewDataSourc
     private var textureCache: [String: TextureResource] = [:]
     private weak var plugin: RoomCapturePlugin?
     private var dictateButton: UIButton?
+    private var selectedSurfaceId: String? = nil
 
     init(
         call: CAPPluginCall? = nil,
@@ -48,6 +49,10 @@ final class RoomARPresenter: NSObject, UITableViewDelegate, UITableViewDataSourc
             }
             return
         }
+
+        print("[RoomAR] --- START DIRECTORY DEBUG LIST ---")
+        debugListDirectory(url: RoomScanPaths.dataDirectory())
+        print("[RoomAR] --- END DIRECTORY DEBUG LIST ---")
 
         let capturePath = RoomScanPaths.roomCapturePath(
             projectId: projectId,
@@ -81,6 +86,9 @@ final class RoomARPresenter: NSObject, UITableViewDelegate, UITableViewDataSourc
         arView.automaticallyConfigureSession = true
         vc.view.addSubview(arView)
         self.arView = arView
+
+        let tapGesture = UITapGestureRecognizer(target: self, action: #selector(handleARViewTap(_:)))
+        arView.addGestureRecognizer(tapGesture)
 
         let table = UITableView(frame: .zero, style: .insetGrouped)
         table.translatesAutoresizingMaskIntoConstraints = false
@@ -167,14 +175,7 @@ final class RoomARPresenter: NSObject, UITableViewDelegate, UITableViewDataSourc
     private func addWallAnchors(to arView: ARView) {
         let anchor = AnchorEntity(world: .zero)
         for (index, surface) in surfaces.enumerated() where (surface["category"] as? String) == "wall" {
-            let dims = surface["dimensions"] as? [String: Double] ?? [:]
-            let width = Float(dims["width"] ?? 1)
-            let height = Float(dims["height"] ?? 2.4)
-            let mesh = MeshResource.generatePlane(width: width, height: height)
-            let overlay = overlayForSurface(surface["id"] as? String)
-            let material = materialForOverlay(overlay ?? [:], texture: textureForOverlay(overlay))
-            let entity = ModelEntity(mesh: mesh, materials: [material])
-            entity.position = SIMD3<Float>(Float(index) * 1.05 - 1.0, 0, -1.8)
+            let entity = buildWallEntity(surface: surface, index: index)
             anchor.addChild(entity)
         }
         arView.scene.addAnchor(anchor)
@@ -226,14 +227,7 @@ final class RoomARPresenter: NSObject, UITableViewDelegate, UITableViewDataSourc
     private func addWallAnchorsWithoutPreload(to arView: ARView) {
         let anchor = AnchorEntity(world: .zero)
         for (index, surface) in surfaces.enumerated() where (surface["category"] as? String) == "wall" {
-            let dims = surface["dimensions"] as? [String: Double] ?? [:]
-            let width = Float(dims["width"] ?? 1)
-            let height = Float(dims["height"] ?? 2.4)
-            let mesh = MeshResource.generatePlane(width: width, height: height)
-            let overlay = overlayForSurface(surface["id"] as? String)
-            let material = materialForOverlay(overlay ?? [:], texture: textureForOverlay(overlay))
-            let entity = ModelEntity(mesh: mesh, materials: [material])
-            entity.position = SIMD3<Float>(Float(index) * 1.05 - 1.0, 0, -1.8)
+            let entity = buildWallEntity(surface: surface, index: index)
             anchor.addChild(entity)
         }
         arView.scene.addAnchor(anchor)
@@ -248,31 +242,55 @@ final class RoomARPresenter: NSObject, UITableViewDelegate, UITableViewDataSourc
             completion(nil)
             return
         }
+
         let finish: (Data?) -> Void = { [weak self] data in
-            guard let self,
-                  let data = data,
-                  let image = UIImage(data: data),
-                  let cgImage = image.cgImage else {
+            guard let self = self else { return }
+            guard let data = data else {
+                print("[RoomAR] finish: Data was nil for url: \(urlString)")
+                DispatchQueue.main.async { completion(nil) }
+                return
+            }
+            guard let image = UIImage(data: data) else {
+                print("[RoomAR] finish: Failed to parse UIImage from data (size: \(data.count) bytes) for url: \(urlString)")
+                DispatchQueue.main.async { completion(nil) }
+                return
+            }
+            guard let cgImage = image.cgImage else {
+                print("[RoomAR] finish: Failed to get cgImage from UIImage for url: \(urlString)")
                 DispatchQueue.main.async { completion(nil) }
                 return
             }
             do {
                 let texture = try TextureResource.generate(from: cgImage, options: .init(semantic: .color))
+                print("[RoomAR] finish: Successfully generated TextureResource for url: \(urlString)")
                 DispatchQueue.main.async {
                     self.textureCache[urlString] = texture
                     completion(texture)
                 }
             } catch {
+                print("[RoomAR] finish: TextureResource.generate failed: \(error.localizedDescription) for url: \(urlString)")
                 DispatchQueue.main.async { completion(nil) }
             }
         }
+
         if url.isFileURL {
             DispatchQueue.global(qos: .userInitiated).async {
-                finish(try? Data(contentsOf: url))
+                let data = try? Data(contentsOf: url)
+                if data == nil {
+                    print("[RoomAR] Failed to load local file: \(url.path)")
+                } else {
+                    print("[RoomAR] Loaded local file: \(url.path) (size: \(data?.count ?? 0) bytes)")
+                }
+                finish(data)
             }
             return
         }
-        URLSession.shared.dataTask(with: url) { data, _, _ in
+
+        print("[RoomAR] Loading remote texture: \(urlString)")
+        URLSession.shared.dataTask(with: url) { data, response, error in
+            if let error = error {
+                print("[RoomAR] Remote texture task failed: \(error.localizedDescription)")
+            }
             finish(data)
         }.resume()
     }
@@ -311,7 +329,10 @@ final class RoomARPresenter: NSObject, UITableViewDelegate, UITableViewDataSourc
         return overlays.last
     }
 
-    private func materialForOverlay(_ overlay: [String: Any], texture: TextureResource? = nil) -> Material {
+    private func materialForOverlay(_ overlay: [String: Any], texture: TextureResource? = nil, isSelected: Bool = false) -> Material {
+        if isSelected {
+            return SimpleMaterial(color: UIColor.systemBlue.withAlphaComponent(0.65), isMetallic: false)
+        }
         if let texture {
             var material = UnlitMaterial()
             material.color = .init(tint: .white.withAlphaComponent(0.92), texture: .init(texture))
@@ -418,7 +439,7 @@ final class RoomARPresenter: NSObject, UITableViewDelegate, UITableViewDataSourc
     
     private func resetDictateButton() {
         dictateButton?.isEnabled = true
-        dictateButton?.setTitle("Dictate Command", for: .normal)
+        updateDictateButtonTitle()
     }
     
     private func showError(_ message: String) {
@@ -433,7 +454,8 @@ final class RoomARPresenter: NSObject, UITableViewDelegate, UITableViewDataSourc
             "projectId": projectId,
             "structureId": structureId,
             "roomId": roomId,
-            "transcript": transcript
+            "transcript": transcript,
+            "selectedSurfaceId": selectedSurfaceId ?? ""
         ])
     }
 
@@ -464,21 +486,161 @@ final class RoomARPresenter: NSObject, UITableViewDelegate, UITableViewDataSourc
     func tableView(_ tableView: UITableView, didSelectRowAt indexPath: IndexPath) {
         tableView.deselectRow(at: indexPath, animated: true)
         guard indexPath.row < surfaces.count else { return }
-        let surface = surfaces[indexPath.row]
+        if let surfaceId = surfaces[indexPath.row]["id"] as? String {
+            showMaterialPicker(for: surfaceId)
+        }
+    }
+
+    private func debugListDirectory(url: URL, depth: Int = 0) {
+        let indent = String(repeating: "  ", count: depth)
+        guard let entries = try? FileManager.default.contentsOfDirectory(at: url, includingPropertiesForKeys: nil) else {
+            print("[RoomAR] debugList: Cannot read \(url.path)")
+            return
+        }
+        print("[RoomAR] debugList:\(indent)Dir: \(url.lastPathComponent)")
+        for entry in entries {
+            let isDir = (try? entry.resourceValues(forKeys: [.isDirectoryKey]).isDirectory) ?? false
+            if isDir {
+                debugListDirectory(url: entry, depth: depth + 1)
+            } else {
+                print("[RoomAR] debugList:\(indent)  - File: \(entry.lastPathComponent)")
+            }
+        }
+    }
+
+    @objc private func handleARViewTap(_ gesture: UITapGestureRecognizer) {
+        guard let arView = arView else { return }
+        let location = gesture.location(in: arView)
+        if let hitEntity = arView.entity(at: location) {
+            var current: Entity? = hitEntity
+            while let node = current {
+                if !node.name.isEmpty && node.name.contains("-wall-") {
+                    if selectedSurfaceId == node.name {
+                        selectedSurfaceId = nil
+                    } else {
+                        selectedSurfaceId = node.name
+                    }
+                    
+                    arView.scene.anchors.removeAll()
+                    addWallAnchors(to: arView)
+                    
+                    updateDictateButtonTitle()
+                    return
+                }
+                current = node.parent
+            }
+        }
+    }
+
+    private func updateDictateButtonTitle() {
+        if let _ = selectedSurfaceId {
+            dictateButton?.setTitle("Dictate for Selected Wall", for: .normal)
+        } else {
+            dictateButton?.setTitle("Dictate Command", for: .normal)
+        }
+    }
+
+    private func showMaterialPicker(for surfaceId: String) {
         let alert = UIAlertController(title: "Apply material", message: nil, preferredStyle: .actionSheet)
+        if let popover = alert.popoverPresentationController {
+            popover.sourceView = viewController?.view
+            let bounds = viewController?.view.bounds ?? .zero
+            popover.sourceRect = CGRect(
+                x: bounds.midX,
+                y: bounds.midY,
+                width: 0,
+                height: 0
+            )
+            popover.permittedArrowDirections = []
+        }
         for preset in MaterialCatalog.presets {
-            alert.addAction(UIAlertAction(title: preset.label, style: .default) { _ in
+            alert.addAction(UIAlertAction(title: preset.label, style: .default) { [weak self] _ in
+                guard let self = self else { return }
                 _ = self.applyMaterial(
-                    surfaceId: surface["id"] as? String,
+                    surfaceId: surfaceId,
                     materialId: preset.id,
                     colorHex: preset.colorHex,
                     type: preset.type
                 )
-                tableView.reloadData()
+                if let arView = self.arView {
+                    arView.scene.anchors.removeAll()
+                    self.addWallAnchors(to: arView)
+                }
             })
         }
         alert.addAction(UIAlertAction(title: "Cancel", style: .cancel))
         viewController?.present(alert, animated: true)
+    }
+
+    private func buildWallEntity(surface: [String: Any], index: Int) -> Entity {
+        let dims = surface["dimensions"] as? [String: Double] ?? [:]
+        let width = Float(dims["width"] ?? 1)
+        let height = Float(dims["height"] ?? 2.4)
+        let surfaceId = surface["id"] as? String
+        
+        let parent = Entity()
+        parent.name = surfaceId ?? "wall_\(index)"
+        
+        let isSelected = (selectedSurfaceId != nil && selectedSurfaceId == surfaceId)
+        
+        let overlays = activeOverlays().filter {
+            ($0["surface_id"] as? String) == surfaceId
+        }
+        
+        if overlays.isEmpty {
+            let overlay = overlayForSurface(surfaceId)
+            let mesh = MeshResource.generatePlane(width: width, height: height)
+            let material = materialForOverlay(overlay ?? [:], texture: textureForOverlay(overlay), isSelected: isSelected)
+            let child = ModelEntity(mesh: mesh, materials: [material])
+            child.name = parent.name
+            child.orientation = simd_quatf(angle: -Float.pi / 2, axis: SIMD3<Float>(1, 0, 0))
+            child.generateCollisionShapes(recursive: true)
+            parent.addChild(child)
+        } else {
+            for (idx, overlay) in overlays.enumerated() {
+                let xMin = Float(overlay["x_min"] as? Double ?? 0.0)
+                let xMax = Float(overlay["x_max"] as? Double ?? 1.0)
+                let yMin = Float(overlay["y_min"] as? Double ?? 0.0)
+                let yMax = Float(overlay["y_max"] as? Double ?? 1.0)
+                
+                let w = width * (xMax - xMin)
+                let h = height * (yMax - yMin)
+                
+                let mesh = MeshResource.generatePlane(width: w, height: h)
+                let material = materialForOverlay(overlay, texture: textureForOverlay(overlay), isSelected: isSelected)
+                
+                let child = ModelEntity(mesh: mesh, materials: [material])
+                child.name = parent.name
+                child.orientation = simd_quatf(angle: -Float.pi / 2, axis: SIMD3<Float>(1, 0, 0))
+                
+                let localX = -width / 2.0 + xMin * width + w / 2.0
+                let localY = -height / 2.0 + yMin * height + h / 2.0
+                let localZ = Float(idx) * 0.001
+                
+                child.position = SIMD3<Float>(localX, localY, localZ)
+                child.generateCollisionShapes(recursive: true)
+                parent.addChild(child)
+            }
+        }
+        
+        if let matrixArray = surface["transform_matrix"] as? [Double],
+           let matrix = transformMatrix(from: matrixArray) {
+            parent.transform.matrix = matrix
+        } else {
+            parent.position = SIMD3<Float>(Float(index) * 1.05 - 1.0, 0, -1.8)
+        }
+        
+        return parent
+    }
+
+    private func transformMatrix(from array: [Double]?) -> simd_float4x4? {
+        guard let array = array, array.count == 16 else { return nil }
+        var matrix = simd_float4x4()
+        matrix.columns.0 = SIMD4<Float>(Float(array[0]), Float(array[1]), Float(array[2]), Float(array[3]))
+        matrix.columns.1 = SIMD4<Float>(Float(array[4]), Float(array[5]), Float(array[6]), Float(array[7]))
+        matrix.columns.2 = SIMD4<Float>(Float(array[8]), Float(array[9]), Float(array[10]), Float(array[11]))
+        matrix.columns.3 = SIMD4<Float>(Float(array[12]), Float(array[13]), Float(array[14]), Float(array[15]))
+        return matrix
     }
 }
 

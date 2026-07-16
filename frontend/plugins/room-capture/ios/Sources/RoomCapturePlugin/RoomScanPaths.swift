@@ -3,8 +3,7 @@ import Foundation
 /// Resolves Capacitor Filesystem Directory.Data paths on iOS.
 enum RoomScanPaths {
     static func dataDirectory() -> URL {
-        let library = FileManager.default.urls(for: .libraryDirectory, in: .userDomainMask)[0]
-        return library.appendingPathComponent("NoCloud", isDirectory: true)
+        FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
     }
 
     static func fileURL(relativePath: String) -> URL {
