@@ -190,9 +190,22 @@ public class RoomCapturePlugin: CAPPlugin, CAPBridgedPlugin {
             "scan_id": roomId,
             "overlays": [],
         ]
-        var overlays = redesign["overlays"] as? [[String: Any]] ?? []
-        overlays.append(overlay)
-        redesign["overlays"] = overlays
+        // Prefer v2 active revision — Open AR only reads that path.
+        if let version = redesign["schema_version"] as? String, version == "2.0",
+           let activeId = redesign["active_revision_id"] as? String,
+           var revisions = redesign["revisions"] as? [[String: Any]],
+           let idx = revisions.firstIndex(where: { ($0["id"] as? String) == activeId }) {
+            var rev = revisions[idx]
+            var overlays = rev["overlays"] as? [[String: Any]] ?? []
+            overlays.append(overlay)
+            rev["overlays"] = overlays
+            revisions[idx] = rev
+            redesign["revisions"] = revisions
+        } else {
+            var overlays = redesign["overlays"] as? [[String: Any]] ?? []
+            overlays.append(overlay)
+            redesign["overlays"] = overlays
+        }
         redesign["updated_at"] = ISO8601DateFormatter().string(from: Date())
         try? RoomScanJSON.write(path: redesignPath, object: redesign)
         call.resolve(["applied": true, "overlay": overlay, "persisted": true])

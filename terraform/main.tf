@@ -351,7 +351,8 @@ resource "aws_ecs_task_definition" "backend" {
         { name = "CORPUS_WRITER_URL", value = "postgresql://postgres:${random_password.db_password.result}@${aws_db_instance.postgres.endpoint}/permit_rag" },
         { name = "APP_READER_URL", value = "postgresql://postgres:${random_password.db_password.result}@${aws_db_instance.postgres.endpoint}/permit_rag" },
         { name = "LLM_MODEL", value = "claude-haiku-4-5-20251001" },
-        { name = "LLM_PROVIDER", value = "anthropic" }
+        { name = "LLM_PROVIDER", value = "anthropic" },
+        { name = "OPENAI_IMAGE_MODEL", value = "gpt-image-1" }
       ]
       secrets = [
         {
@@ -365,6 +366,10 @@ resource "aws_ecs_task_definition" "backend" {
         {
           name      = "ANTHROPIC_API_KEY"
           valueFrom = "arn:aws:ssm:${data.aws_region.current.name}:${data.aws_caller_identity.current.account_id}:parameter/permit_rag/prod/anthropic_api_key"
+        },
+        {
+          name      = "OPENAI_API_KEY"
+          valueFrom = "arn:aws:ssm:${data.aws_region.current.name}:${data.aws_caller_identity.current.account_id}:parameter/permit_rag/prod/openai_api_key"
         },
         {
           name      = "API_JWT_SECRET"

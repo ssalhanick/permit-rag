@@ -174,7 +174,7 @@ final class RoomARPresenter: NSObject, UITableViewDelegate, UITableViewDataSourc
             let overlay = overlayForSurface(surface["id"] as? String)
             let material = materialForOverlay(overlay ?? [:], texture: textureForOverlay(overlay))
             let entity = ModelEntity(mesh: mesh, materials: [material])
-            entity.position = SIMD3<Float>(Float(index) * 0.05, 0, -1.5)
+            entity.position = SIMD3<Float>(Float(index) * 1.05 - 1.0, 0, -1.8)
             anchor.addChild(entity)
         }
         arView.scene.addAnchor(anchor)
@@ -233,7 +233,7 @@ final class RoomARPresenter: NSObject, UITableViewDelegate, UITableViewDataSourc
             let overlay = overlayForSurface(surface["id"] as? String)
             let material = materialForOverlay(overlay ?? [:], texture: textureForOverlay(overlay))
             let entity = ModelEntity(mesh: mesh, materials: [material])
-            entity.position = SIMD3<Float>(Float(index) * 0.05, 0, -1.5)
+            entity.position = SIMD3<Float>(Float(index) * 1.05 - 1.0, 0, -1.8)
             anchor.addChild(entity)
         }
         arView.scene.addAnchor(anchor)
@@ -289,9 +289,26 @@ final class RoomARPresenter: NSObject, UITableViewDelegate, UITableViewDataSourc
     }
 
     private func overlayForSurface(_ surfaceId: String?) -> [String: Any]? {
-        guard let surfaceId else { return nil }
         let overlays = activeOverlays()
-        return overlays.last { ($0["surface_id"] as? String) == surfaceId || $0["surface_id"] == nil }
+        guard !overlays.isEmpty else { return nil }
+
+        func isNullSurface(_ value: Any?) -> Bool {
+            if value == nil { return true }
+            if value is NSNull { return true }
+            if let s = value as? String { return s.isEmpty }
+            return false
+        }
+
+        if let surfaceId {
+            if let exact = overlays.last(where: { ($0["surface_id"] as? String) == surfaceId }) {
+                return exact
+            }
+        }
+        // Design-intent often returns surface_id: null — apply to every wall.
+        if let roomWide = overlays.last(where: { isNullSurface($0["surface_id"]) }) {
+            return roomWide
+        }
+        return overlays.last
     }
 
     private func materialForOverlay(_ overlay: [String: Any], texture: TextureResource? = nil) -> Material {

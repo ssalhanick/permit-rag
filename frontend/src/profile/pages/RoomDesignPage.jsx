@@ -282,17 +282,37 @@ export default function RoomDesignPage({ libraryMode = false }) {
   };
 
   const handleOpenAR = async () => {
-    if (!scanRow) {
+    if (!scanRow || !fsIds) {
       return;
     }
     setError("");
+    setBusy(true);
     try {
+      // Open AR only reads redesign.json — persist current preview first.
+      if (preview?.overlays?.length) {
+        const next = await saveDesignPreview({
+          scope: fsIds.scope,
+          structureId: fsIds.structureId,
+          roomId: fsIds.roomId,
+          utterance: preview.utterance,
+          explanation: preview.explanation,
+          overlays: preview.overlays,
+          parentRevisionId: branchParentId,
+        });
+        setHistory(next);
+        setPreview(null);
+        setGeneratedPreviewSrc(null);
+        setBranchParentId(null);
+        setMessage("Saved preview for AR.");
+      }
       await openRoomARForScan(scanRow, {
         scope,
         roomLabel: scanRow.room_label,
       });
     } catch (err) {
       setError(err.message || "AR unavailable.");
+    } finally {
+      setBusy(false);
     }
   };
 
