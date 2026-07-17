@@ -24,6 +24,12 @@ final class RoomARPresenter: NSObject, UITableViewDelegate, UITableViewDataSourc
     private weak var plugin: RoomCapturePlugin?
     private var dictateButton: UIButton?
     private var selectedSurfaceId: String? = nil
+    private var pointedSurfaceId: String? = nil
+    private var raycastTimer: Timer? = nil
+    private var hudLabel: UILabel? = nil
+    private var nudgeStack: UIStackView? = nil
+    private var overlayOpacity: Float = 0.3
+    private var overlayImageView: UIImageView? = nil
 
     init(
         call: CAPPluginCall? = nil,
@@ -87,8 +93,45 @@ final class RoomARPresenter: NSObject, UITableViewDelegate, UITableViewDataSourc
         vc.view.addSubview(arView)
         self.arView = arView
 
+        let overlayImageView = UIImageView()
+        overlayImageView.translatesAutoresizingMaskIntoConstraints = false
+        overlayImageView.contentMode = .scaleAspectFill
+        overlayImageView.clipsToBounds = true
+        overlayImageView.alpha = CGFloat(overlayOpacity)
+        vc.view.insertSubview(overlayImageView, aboveSubview: arView)
+        self.overlayImageView = overlayImageView
+
+        let previewPath = "room_scans/\(projectId)/\(structureId)/rooms/\(roomId)/generated_preview.png"
+        let previewURL = RoomScanPaths.fileURL(relativePath: previewPath)
+        if FileManager.default.fileExists(atPath: previewURL.path) {
+            if let img = UIImage(contentsOfFile: previewURL.path) {
+                overlayImageView.image = img
+                print("[RoomAR] Loaded full-screen preview overlay image: \(previewURL.path)")
+            }
+        }
+
+        let hud = UILabel()
+        hud.translatesAutoresizingMaskIntoConstraints = false
+        hud.textColor = .green
+        hud.backgroundColor = UIColor.black.withAlphaComponent(0.65)
+        hud.font = UIFont.systemFont(ofSize: 11, weight: .bold)
+        hud.numberOfLines = 0
+        hud.layer.cornerRadius = 6
+        hud.layer.masksToBounds = true
+        vc.view.addSubview(hud)
+        self.hudLabel = hud
+
         let tapGesture = UITapGestureRecognizer(target: self, action: #selector(handleARViewTap(_:)))
         arView.addGestureRecognizer(tapGesture)
+
+        let longPress = UILongPressGestureRecognizer(target: self, action: #selector(handleARViewLongPress(_:)))
+        longPress.minimumPressDuration = 0.5
+        arView.addGestureRecognizer(longPress)
+
+        let controlPanel = UIView()
+        controlPanel.translatesAutoresizingMaskIntoConstraints = false
+        controlPanel.backgroundColor = UIColor.black.withAlphaComponent(0.85)
+        vc.view.addSubview(controlPanel)
 
         let table = UITableView(frame: .zero, style: .insetGrouped)
         table.translatesAutoresizingMaskIntoConstraints = false
@@ -102,32 +145,81 @@ final class RoomARPresenter: NSObject, UITableViewDelegate, UITableViewDataSourc
         close.tintColor = .white
         close.translatesAutoresizingMaskIntoConstraints = false
         close.addTarget(self, action: #selector(closeTapped), for: .touchUpInside)
-        vc.view.addSubview(close)
+        controlPanel.addSubview(close)
 
         let dictate = UIButton(type: .system)
         dictate.setTitle("Dictate Command", for: .normal)
         dictate.tintColor = .systemBlue
         dictate.translatesAutoresizingMaskIntoConstraints = false
         dictate.addTarget(self, action: #selector(dictateTapped), for: .touchUpInside)
-        vc.view.addSubview(dictate)
+        controlPanel.addSubview(dictate)
         self.dictateButton = dictate
+
+        let nudge = UIStackView()
+        nudge.axis = .horizontal
+        nudge.distribution = .fillEqually
+        nudge.spacing = 4
+        nudge.translatesAutoresizingMaskIntoConstraints = false
+        controlPanel.addSubview(nudge)
+        self.nudgeStack = nudge
+
+        let titles = ["X-", "X+", "Y-", "Y+", "W-", "W+", "H-", "H+", "O-", "O+"]
+        for (index, title) in titles.enumerated() {
+            let btn = UIButton(type: .system)
+            btn.setTitle(title, for: .normal)
+            btn.titleLabel?.font = UIFont.systemFont(ofSize: 10, weight: .bold)
+            btn.backgroundColor = UIColor.systemGray6.withAlphaComponent(0.8)
+            btn.layer.cornerRadius = 4
+            btn.tag = index
+            btn.addTarget(self, action: #selector(nudgeTapped(_:)), for: .touchUpInside)
+            nudge.addArrangedSubview(btn)
+        }
 
         NSLayoutConstraint.activate([
             arView.topAnchor.constraint(equalTo: vc.view.topAnchor),
             arView.leadingAnchor.constraint(equalTo: vc.view.leadingAnchor),
             arView.trailingAnchor.constraint(equalTo: vc.view.trailingAnchor),
             arView.heightAnchor.constraint(equalTo: vc.view.heightAnchor, multiplier: 0.55),
+            
+            overlayImageView.topAnchor.constraint(equalTo: arView.topAnchor),
+            overlayImageView.leadingAnchor.constraint(equalTo: arView.leadingAnchor),
+            overlayImageView.trailingAnchor.constraint(equalTo: arView.trailingAnchor),
+            overlayImageView.bottomAnchor.constraint(equalTo: arView.bottomAnchor),
+            
+            hud.topAnchor.constraint(equalTo: arView.topAnchor, constant: 12),
+            hud.leadingAnchor.constraint(equalTo: arView.leadingAnchor, constant: 12),
+            hud.trailingAnchor.constraint(equalTo: arView.trailingAnchor, constant: -12),
+            
             table.topAnchor.constraint(equalTo: arView.bottomAnchor),
             table.leadingAnchor.constraint(equalTo: vc.view.leadingAnchor),
             table.trailingAnchor.constraint(equalTo: vc.view.trailingAnchor),
-            table.bottomAnchor.constraint(equalTo: vc.view.safeAreaLayoutGuide.bottomAnchor, constant: -44),
-            close.bottomAnchor.constraint(equalTo: vc.view.safeAreaLayoutGuide.bottomAnchor, constant: -8),
-            close.leadingAnchor.constraint(equalTo: vc.view.leadingAnchor, constant: 20),
-            dictate.bottomAnchor.constraint(equalTo: vc.view.safeAreaLayoutGuide.bottomAnchor, constant: -8),
-            dictate.trailingAnchor.constraint(equalTo: vc.view.trailingAnchor, constant: -20),
+            table.bottomAnchor.constraint(equalTo: controlPanel.topAnchor),
+            
+            controlPanel.leadingAnchor.constraint(equalTo: vc.view.leadingAnchor),
+            controlPanel.trailingAnchor.constraint(equalTo: vc.view.trailingAnchor),
+            controlPanel.bottomAnchor.constraint(equalTo: vc.view.bottomAnchor),
+            controlPanel.topAnchor.constraint(equalTo: vc.view.safeAreaLayoutGuide.bottomAnchor, constant: -110),
+            
+            nudge.topAnchor.constraint(equalTo: controlPanel.topAnchor, constant: 10),
+            nudge.leadingAnchor.constraint(equalTo: controlPanel.leadingAnchor, constant: 12),
+            nudge.trailingAnchor.constraint(equalTo: controlPanel.trailingAnchor, constant: -12),
+            nudge.heightAnchor.constraint(equalToConstant: 32),
+            
+            close.topAnchor.constraint(equalTo: nudge.bottomAnchor, constant: 12),
+            close.leadingAnchor.constraint(equalTo: controlPanel.leadingAnchor, constant: 20),
+            close.heightAnchor.constraint(equalToConstant: 44),
+            
+            dictate.topAnchor.constraint(equalTo: nudge.bottomAnchor, constant: 12),
+            dictate.trailingAnchor.constraint(equalTo: controlPanel.trailingAnchor, constant: -20),
+            dictate.heightAnchor.constraint(equalToConstant: 44),
         ])
 
         addWallAnchors(to: arView)
+        
+        self.raycastTimer = Timer.scheduledTimer(withTimeInterval: 0.3, repeats: true) { [weak self] _ in
+            self?.performCenterRaycast()
+        }
+        
         viewController = vc
         host.present(vc, animated: true) {
             self.call?.resolve(["opened": true, "room_id": self.roomId])
@@ -173,12 +265,31 @@ final class RoomARPresenter: NSObject, UITableViewDelegate, UITableViewDataSourc
     }
 
     private func addWallAnchors(to arView: ARView) {
+        let centroid = calculateCentroid()
         let anchor = AnchorEntity(world: .zero)
-        for (index, surface) in surfaces.enumerated() where (surface["category"] as? String) == "wall" {
+        anchor.position = SIMD3<Float>(0, -0.5, -1.8) - centroid
+        
+        var wallCount = 0
+        var doorCount = 0
+        var windowCount = 0
+        var openingCount = 0
+        
+        for (index, surface) in surfaces.enumerated() {
+            let cat = surface["category"] as? String ?? ""
+            guard cat == "wall" || cat == "door" || cat == "window" || cat == "opening" else { continue }
+            
+            if cat == "wall" { wallCount += 1 }
+            else if cat == "door" { doorCount += 1 }
+            else if cat == "window" { windowCount += 1 }
+            else if cat == "opening" { openingCount += 1 }
+            
             let entity = buildWallEntity(surface: surface, index: index)
             anchor.addChild(entity)
         }
         arView.scene.addAnchor(anchor)
+        
+        hudLabel?.text = " Scan Loaded: \(surfaces.count) surfaces\n - Walls: \(wallCount) | Doors: \(doorCount)\n - Windows: \(windowCount) | Openings: \(openingCount)\n Centroid: \(String(format: "%.2f, %.2f, %.2f", centroid.x, centroid.y, centroid.z))"
+        
         preloadOverlayTextures()
     }
 
@@ -225,12 +336,73 @@ final class RoomARPresenter: NSObject, UITableViewDelegate, UITableViewDataSourc
     }
 
     private func addWallAnchorsWithoutPreload(to arView: ARView) {
+        let centroid = calculateCentroid()
         let anchor = AnchorEntity(world: .zero)
-        for (index, surface) in surfaces.enumerated() where (surface["category"] as? String) == "wall" {
+        anchor.position = SIMD3<Float>(0, -0.5, -1.8) - centroid
+        
+        for (index, surface) in surfaces.enumerated() {
+            let cat = surface["category"] as? String ?? ""
+            guard cat == "wall" || cat == "door" || cat == "window" || cat == "opening" else { continue }
             let entity = buildWallEntity(surface: surface, index: index)
             anchor.addChild(entity)
         }
         arView.scene.addAnchor(anchor)
+    }
+
+    private func updateWallMaterials() {
+        guard let arView = arView else { return }
+        for anchor in arView.scene.anchors {
+            for parentEntity in anchor.children {
+                let surfaceId = parentEntity.name
+                guard !surfaceId.isEmpty else { continue }
+                
+                guard let surface = surfaces.first(where: { ($0["id"] as? String) == surfaceId }) else { continue }
+                let category = surface["category"] as? String ?? "wall"
+                let isSelected = (selectedSurfaceId != nil && selectedSurfaceId == surfaceId)
+                let isPointed = (selectedSurfaceId == nil && pointedSurfaceId != nil && pointedSurfaceId == surfaceId)
+                
+                let overlays = activeOverlays().filter { ($0["surface_id"] as? String) == surfaceId }
+                
+                for (idx, subEntity) in parentEntity.children.enumerated() {
+                    guard let modelEntity = subEntity as? ModelEntity else { continue }
+                    
+                    let material: Material
+                    if category == "door" {
+                        var unlit = UnlitMaterial()
+                        unlit.color = .init(tint: isSelected ? UIColor.systemBlue.withAlphaComponent(0.65) : (isPointed ? UIColor.systemGreen.withAlphaComponent(0.35) : (UIColor(hex: "#8B5A2B")?.withAlphaComponent(0.4) ?? .brown.withAlphaComponent(0.4))))
+                        material = unlit
+                    } else if category == "window" {
+                        var unlit = UnlitMaterial()
+                        unlit.color = .init(tint: isSelected ? UIColor.systemBlue.withAlphaComponent(0.65) : (isPointed ? UIColor.systemGreen.withAlphaComponent(0.35) : (UIColor(hex: "#ADD8E6")?.withAlphaComponent(0.3) ?? .blue.withAlphaComponent(0.3))))
+                        material = unlit
+                    } else if category == "opening" {
+                        var unlit = UnlitMaterial()
+                        unlit.color = .init(tint: isSelected ? UIColor.systemBlue.withAlphaComponent(0.65) : (isPointed ? UIColor.systemGreen.withAlphaComponent(0.35) : UIColor.lightGray.withAlphaComponent(0.15)))
+                        material = unlit
+                    } else {
+                        // Wall
+                        if overlays.isEmpty {
+                            let overlay = overlayForSurface(surfaceId)
+                            if let overlay {
+                                material = materialForOverlay(overlay, texture: textureForOverlay(overlay), isSelected: isSelected, isPointed: isPointed)
+                            } else {
+                                var unlit = UnlitMaterial()
+                                unlit.color = .init(tint: isSelected ? UIColor.systemBlue.withAlphaComponent(0.6) : (isPointed ? UIColor.systemGreen.withAlphaComponent(0.35) : UIColor.white.withAlphaComponent(0.2)))
+                                material = unlit
+                            }
+                        } else if idx < overlays.count {
+                            let overlay = overlays[idx]
+                            material = materialForOverlay(overlay, texture: textureForOverlay(overlay), isSelected: isSelected, isPointed: isPointed)
+                        } else {
+                            var unlit = UnlitMaterial()
+                            unlit.color = .init(tint: isSelected ? UIColor.systemBlue.withAlphaComponent(0.6) : (isPointed ? UIColor.systemGreen.withAlphaComponent(0.35) : UIColor.white.withAlphaComponent(0.2)))
+                            material = unlit
+                        }
+                    }
+                    modelEntity.model?.materials = [material]
+                }
+            }
+        }
     }
 
     private func loadTexture(from urlString: String, completion: @escaping (TextureResource?) -> Void) {
@@ -326,23 +498,29 @@ final class RoomARPresenter: NSObject, UITableViewDelegate, UITableViewDataSourc
         if let roomWide = overlays.last(where: { isNullSurface($0["surface_id"]) }) {
             return roomWide
         }
-        return overlays.last
+        return nil
     }
 
-    private func materialForOverlay(_ overlay: [String: Any], texture: TextureResource? = nil, isSelected: Bool = false) -> Material {
+    private func materialForOverlay(_ overlay: [String: Any], texture: TextureResource? = nil, isSelected: Bool = false, isPointed: Bool = false) -> Material {
         if isSelected {
-            return SimpleMaterial(color: UIColor.systemBlue.withAlphaComponent(0.65), isMetallic: false)
+            var material = UnlitMaterial()
+            material.color = .init(tint: UIColor.systemBlue.withAlphaComponent(0.65))
+            return material
+        }
+        if isPointed {
+            var material = UnlitMaterial()
+            material.color = .init(tint: UIColor.systemGreen.withAlphaComponent(0.35))
+            return material
         }
         if let texture {
             var material = UnlitMaterial()
-            material.color = .init(tint: .white.withAlphaComponent(0.92), texture: .init(texture))
+            material.color = .init(tint: .white.withAlphaComponent(CGFloat(overlayOpacity)), texture: .init(texture))
             return material
         }
         let hex = overlay["color_hex"] as? String ?? "#FFFFFF"
-        return SimpleMaterial(
-            color: (UIColor(hex: hex) ?? .white).withAlphaComponent(0.75),
-            isMetallic: overlay["type"] as? String == "appliance"
-        )
+        var material = UnlitMaterial()
+        material.color = .init(tint: (UIColor(hex: hex) ?? .white).withAlphaComponent(CGFloat(overlayOpacity)))
+        return material
     }
 
     func applyMaterial(
@@ -404,6 +582,8 @@ final class RoomARPresenter: NSObject, UITableViewDelegate, UITableViewDataSourc
     }
 
     @objc private func closeTapped() {
+        raycastTimer?.invalidate()
+        raycastTimer = nil
         viewController?.dismiss(animated: true)
     }
 
@@ -455,7 +635,7 @@ final class RoomARPresenter: NSObject, UITableViewDelegate, UITableViewDataSourc
             "structureId": structureId,
             "roomId": roomId,
             "transcript": transcript,
-            "selectedSurfaceId": selectedSurfaceId ?? ""
+            "selectedSurfaceId": selectedSurfaceId ?? pointedSurfaceId ?? ""
         ])
     }
 
@@ -487,6 +667,9 @@ final class RoomARPresenter: NSObject, UITableViewDelegate, UITableViewDataSourc
         tableView.deselectRow(at: indexPath, animated: true)
         guard indexPath.row < surfaces.count else { return }
         if let surfaceId = surfaces[indexPath.row]["id"] as? String {
+            selectedSurfaceId = surfaceId
+            updateWallMaterials()
+            updateDictateButtonTitle()
             showMaterialPicker(for: surfaceId)
         }
     }
@@ -514,16 +697,14 @@ final class RoomARPresenter: NSObject, UITableViewDelegate, UITableViewDataSourc
         if let hitEntity = arView.entity(at: location) {
             var current: Entity? = hitEntity
             while let node = current {
-                if !node.name.isEmpty && node.name.contains("-wall-") {
+                if !node.name.isEmpty && surfaces.contains(where: { ($0["id"] as? String) == node.name }) {
                     if selectedSurfaceId == node.name {
                         selectedSurfaceId = nil
                     } else {
                         selectedSurfaceId = node.name
                     }
                     
-                    arView.scene.anchors.removeAll()
-                    addWallAnchors(to: arView)
-                    
+                    updateWallMaterials()
                     updateDictateButtonTitle()
                     return
                 }
@@ -531,10 +712,77 @@ final class RoomARPresenter: NSObject, UITableViewDelegate, UITableViewDataSourc
             }
         }
     }
+    @objc private func handleARViewLongPress(_ gesture: UILongPressGestureRecognizer) {
+        guard gesture.state == .began, let arView = arView else { return }
+        let location = gesture.location(in: arView)
+        if let hitEntity = arView.entity(at: location) {
+            var current: Entity? = hitEntity
+            while let node = current {
+                if !node.name.isEmpty && surfaces.contains(where: { ($0["id"] as? String) == node.name }) {
+                    selectedSurfaceId = node.name
+                    updateWallMaterials()
+                    updateDictateButtonTitle()
+                    
+                    showGenerativeDialog(for: node.name)
+                    return
+                }
+                current = node.parent
+            }
+        }
+    }
+
+    private func showGenerativeDialog(for surfaceId: String) {
+        let alert = UIAlertController(
+            title: "Generative Refurbish",
+            message: "Enter custom prompt or select a suggested texture below:",
+            preferredStyle: .alert
+        )
+        
+        alert.addTextField { textField in
+            textField.placeholder = "e.g., green marble, floral wallpaper"
+        }
+        
+        let generateAction = UIAlertAction(title: "Generate", style: .default) { [weak self] _ in
+            guard let self = self else { return }
+            let prompt = alert.textFields?.first?.text ?? ""
+            guard !prompt.isEmpty else { return }
+            self.handleCustomPrompt(prompt, surfaceId: surfaceId)
+        }
+        alert.addAction(generateAction)
+        
+        for preset in MaterialCatalog.presets {
+            let action = UIAlertAction(title: preset.label, style: .default) { [weak self] _ in
+                guard let self = self else { return }
+                _ = self.applyMaterial(
+                    surfaceId: surfaceId,
+                    materialId: preset.id,
+                    colorHex: preset.colorHex,
+                    type: preset.type
+                )
+            }
+            alert.addAction(action)
+        }
+        
+        alert.addAction(UIAlertAction(title: "Cancel", style: .cancel))
+        viewController?.present(alert, animated: true)
+    }
+
+    private func handleCustomPrompt(_ prompt: String, surfaceId: String) {
+        guard let plugin = self.plugin else { return }
+        plugin.notifyListeners("onARSpeechCommand", data: [
+            "projectId": projectId,
+            "structureId": structureId,
+            "roomId": roomId,
+            "transcript": prompt,
+            "selectedSurfaceId": surfaceId
+        ])
+    }
 
     private func updateDictateButtonTitle() {
         if let _ = selectedSurfaceId {
             dictateButton?.setTitle("Dictate for Selected Wall", for: .normal)
+        } else if let _ = pointedSurfaceId {
+            dictateButton?.setTitle("Dictate for Pointed Wall", for: .normal)
         } else {
             dictateButton?.setTitle("Dictate Command", for: .normal)
         }
@@ -562,13 +810,17 @@ final class RoomARPresenter: NSObject, UITableViewDelegate, UITableViewDataSourc
                     colorHex: preset.colorHex,
                     type: preset.type
                 )
-                if let arView = self.arView {
-                    arView.scene.anchors.removeAll()
-                    self.addWallAnchors(to: arView)
-                }
+                self.selectedSurfaceId = nil
+                self.updateWallMaterials()
+                self.updateDictateButtonTitle()
             })
         }
-        alert.addAction(UIAlertAction(title: "Cancel", style: .cancel))
+        alert.addAction(UIAlertAction(title: "Cancel", style: .cancel) { [weak self] _ in
+            guard let self = self else { return }
+            self.selectedSurfaceId = nil
+            self.updateWallMaterials()
+            self.updateDictateButtonTitle()
+        })
         viewController?.present(alert, animated: true)
     }
 
@@ -577,51 +829,86 @@ final class RoomARPresenter: NSObject, UITableViewDelegate, UITableViewDataSourc
         let width = Float(dims["width"] ?? 1)
         let height = Float(dims["height"] ?? 2.4)
         let surfaceId = surface["id"] as? String
+        let category = surface["category"] as? String ?? "wall"
         
         let parent = Entity()
-        parent.name = surfaceId ?? "wall_\(index)"
+        parent.name = surfaceId ?? "\(category)_\(index)"
         
         let isSelected = (selectedSurfaceId != nil && selectedSurfaceId == surfaceId)
+        let isPointed = (selectedSurfaceId == nil && pointedSurfaceId != nil && pointedSurfaceId == surfaceId)
         
         let overlays = activeOverlays().filter {
             ($0["surface_id"] as? String) == surfaceId
         }
         
-        if overlays.isEmpty {
-            let overlay = overlayForSurface(surfaceId)
-            let mesh = MeshResource.generatePlane(width: width, height: height)
-            let material = materialForOverlay(overlay ?? [:], texture: textureForOverlay(overlay), isSelected: isSelected)
-            let child = ModelEntity(mesh: mesh, materials: [material])
-            child.name = parent.name
-            child.orientation = simd_quatf(angle: -Float.pi / 2, axis: SIMD3<Float>(1, 0, 0))
-            child.generateCollisionShapes(recursive: true)
-            parent.addChild(child)
+        let mesh = MeshResource.generateBox(width: width, height: height, depth: 0.05)
+        let material: Material
+        
+        if category == "door" {
+            var unlit = UnlitMaterial()
+            unlit.color = .init(tint: isSelected ? UIColor.systemBlue.withAlphaComponent(0.65) : (isPointed ? UIColor.systemGreen.withAlphaComponent(0.35) : (UIColor(hex: "#8B5A2B")?.withAlphaComponent(0.4) ?? .brown.withAlphaComponent(0.4))))
+            material = unlit
+        } else if category == "window" {
+            var unlit = UnlitMaterial()
+            unlit.color = .init(tint: isSelected ? UIColor.systemBlue.withAlphaComponent(0.65) : (isPointed ? UIColor.systemGreen.withAlphaComponent(0.35) : (UIColor(hex: "#ADD8E6")?.withAlphaComponent(0.3) ?? .blue.withAlphaComponent(0.3))))
+            material = unlit
+        } else if category == "opening" {
+            var unlit = UnlitMaterial()
+            unlit.color = .init(tint: isSelected ? UIColor.systemBlue.withAlphaComponent(0.65) : (isPointed ? UIColor.systemGreen.withAlphaComponent(0.35) : UIColor.lightGray.withAlphaComponent(0.15)))
+            material = unlit
         } else {
-            for (idx, overlay) in overlays.enumerated() {
-                let xMin = Float(overlay["x_min"] as? Double ?? 0.0)
-                let xMax = Float(overlay["x_max"] as? Double ?? 1.0)
-                let yMin = Float(overlay["y_min"] as? Double ?? 0.0)
-                let yMax = Float(overlay["y_max"] as? Double ?? 1.0)
+            // Wall category
+            if overlays.isEmpty {
+                let overlay = overlayForSurface(surfaceId)
+                if let overlay {
+                    material = materialForOverlay(overlay, texture: textureForOverlay(overlay), isSelected: isSelected, isPointed: isPointed)
+                } else {
+                    var unlit = UnlitMaterial()
+                    unlit.color = .init(tint: isSelected ? UIColor.systemBlue.withAlphaComponent(0.6) : (isPointed ? UIColor.systemGreen.withAlphaComponent(0.35) : UIColor.white.withAlphaComponent(0.2)))
+                    material = unlit
+                }
+            } else {
+                for (idx, overlay) in overlays.enumerated() {
+                    let xMin = Float(overlay["x_min"] as? Double ?? 0.0)
+                    let xMax = Float(overlay["x_max"] as? Double ?? 1.0)
+                    let yMin = Float(overlay["y_min"] as? Double ?? 0.0)
+                    let yMax = Float(overlay["y_max"] as? Double ?? 1.0)
+                    
+                    let w = width * (xMax - xMin)
+                    let h = height * (yMax - yMin)
+                    
+                    let segmentMesh = MeshResource.generateBox(width: w, height: h, depth: 0.05)
+                    let segmentMat = materialForOverlay(overlay, texture: textureForOverlay(overlay), isSelected: isSelected, isPointed: isPointed)
+                    
+                    let child = ModelEntity(mesh: segmentMesh, materials: [segmentMat])
+                    child.name = parent.name
+                    
+                    let localX = -width / 2.0 + xMin * width + w / 2.0
+                    let localY = -height / 2.0 + yMin * height + h / 2.0
+                    let localZ = Float(idx) * 0.005 + 0.001
+                    
+                    child.position = SIMD3<Float>(localX, localY, localZ)
+                    child.generateCollisionShapes(recursive: true)
+                    parent.addChild(child)
+                }
                 
-                let w = width * (xMax - xMin)
-                let h = height * (yMax - yMin)
-                
-                let mesh = MeshResource.generatePlane(width: w, height: h)
-                let material = materialForOverlay(overlay, texture: textureForOverlay(overlay), isSelected: isSelected)
-                
-                let child = ModelEntity(mesh: mesh, materials: [material])
-                child.name = parent.name
-                child.orientation = simd_quatf(angle: -Float.pi / 2, axis: SIMD3<Float>(1, 0, 0))
-                
-                let localX = -width / 2.0 + xMin * width + w / 2.0
-                let localY = -height / 2.0 + yMin * height + h / 2.0
-                let localZ = Float(idx) * 0.001
-                
-                child.position = SIMD3<Float>(localX, localY, localZ)
-                child.generateCollisionShapes(recursive: true)
-                parent.addChild(child)
+                if let matrixArray = surface["transform_matrix"] as? [Double],
+                   let matrix = transformMatrix(from: matrixArray) {
+                    parent.transform.matrix = matrix
+                } else {
+                    parent.position = SIMD3<Float>(Float(index) * 1.05 - 1.0, 0, -1.8)
+                }
+                return parent
             }
         }
+        
+        let child = ModelEntity(mesh: mesh, materials: [material])
+        child.name = parent.name
+        if category == "door" || category == "window" || category == "opening" {
+            child.position = SIMD3<Float>(0, 0, 0.005)
+        }
+        child.generateCollisionShapes(recursive: true)
+        parent.addChild(child)
         
         if let matrixArray = surface["transform_matrix"] as? [Double],
            let matrix = transformMatrix(from: matrixArray) {
@@ -641,6 +928,168 @@ final class RoomARPresenter: NSObject, UITableViewDelegate, UITableViewDataSourc
         matrix.columns.2 = SIMD4<Float>(Float(array[8]), Float(array[9]), Float(array[10]), Float(array[11]))
         matrix.columns.3 = SIMD4<Float>(Float(array[12]), Float(array[13]), Float(array[14]), Float(array[15]))
         return matrix
+    }
+
+    private func calculateCentroid() -> SIMD3<Float> {
+        var wallPositions: [SIMD3<Float>] = []
+        for surface in surfaces where (surface["category"] as? String) == "wall" {
+            if let matrixArray = surface["transform_matrix"] as? [Double],
+               let matrix = transformMatrix(from: matrixArray) {
+                let pos = SIMD3<Float>(matrix.columns.3.x, matrix.columns.3.y, matrix.columns.3.z)
+                print("[RoomAR] Wall \(surface["id"] as? String ?? "") position: \(pos)")
+                wallPositions.append(pos)
+            }
+        }
+        if !wallPositions.isEmpty {
+            let sum = wallPositions.reduce(SIMD3<Float>(0, 0, 0), +)
+            let centroid = sum / Float(wallPositions.count)
+            print("[RoomAR] Calculated centroid: \(centroid) for \(wallPositions.count) walls")
+            return centroid
+        }
+        print("[RoomAR] Warning: no wall positions found, centroid is zero")
+        return SIMD3<Float>(0, 0, 0)
+    }
+
+    @objc private func nudgeTapped(_ sender: UIButton) {
+        switch sender.tag {
+        case 0: updateOverlayValue(xShift: -0.02)
+        case 1: updateOverlayValue(xShift: 0.02)
+        case 2: updateOverlayValue(yShift: -0.02)
+        case 3: updateOverlayValue(yShift: 0.02)
+        case 4: updateOverlayValue(wScale: 0.95)
+        case 5: updateOverlayValue(wScale: 1.05)
+        case 6: updateOverlayValue(hScale: 0.95)
+        case 7: updateOverlayValue(hScale: 1.05)
+        case 8: updateOpacity(by: -0.1)
+        case 9: updateOpacity(by: 0.1)
+        default: break
+        }
+    }
+
+    private func updateOpacity(by delta: Float) {
+        overlayOpacity = max(0.0, min(1.0, overlayOpacity + delta))
+        
+        // Update 2D image alpha
+        overlayImageView?.alpha = CGFloat(overlayOpacity)
+        
+        // Update HUD text
+        hudLabel?.text = " Blended Opacity: \(Int(overlayOpacity * 100))%"
+        
+        // Refresh materials in-place
+        updateWallMaterials()
+    }
+
+    private func updateOverlayValue(xShift: Float = 0, yShift: Float = 0, wScale: Float = 1, hScale: Float = 1) {
+        guard let selectedId = selectedSurfaceId else { return }
+        
+        var overlays = activeOverlays()
+        
+        // If selected wall doesn't have an overlay, seed a green alignment paint overlay
+        if !overlays.contains(where: { ($0["surface_id"] as? String) == selectedId }) {
+            let newOverlay: [String: Any] = [
+                "surface_id": selectedId,
+                "type": "paint",
+                "color_hex": "#00FF00",
+                "x_min": 0.25,
+                "x_max": 0.75,
+                "y_min": 0.25,
+                "y_max": 0.75
+            ]
+            overlays.append(newOverlay)
+        }
+        
+        if let idx = overlays.firstIndex(where: { ($0["surface_id"] as? String) == selectedId }) {
+            var overlay = overlays[idx]
+            
+            var xMin = Float(overlay["x_min"] as? Double ?? 0.0)
+            var xMax = Float(overlay["x_max"] as? Double ?? 1.0)
+            var yMin = Float(overlay["y_min"] as? Double ?? 0.0)
+            var yMax = Float(overlay["y_max"] as? Double ?? 1.0)
+            
+            xMin += xShift
+            xMax += xShift
+            yMin += yShift
+            yMax += yShift
+            
+            let cx = (xMin + xMax) / 2.0
+            let cy = (yMin + yMax) / 2.0
+            let hw = (xMax - xMin) / 2.0 * wScale
+            let hh = (yMax - yMin) / 2.0 * hScale
+            
+            xMin = cx - hw
+            xMax = cx + hw
+            yMin = cy - hh
+            yMax = cy + hh
+            
+            xMin = max(0.0, min(1.0, xMin))
+            xMax = max(0.0, min(1.0, xMax))
+            yMin = max(0.0, min(1.0, yMin))
+            yMax = max(0.0, min(1.0, yMax))
+            
+            overlay["x_min"] = Double(xMin)
+            overlay["x_max"] = Double(xMax)
+            overlay["y_min"] = Double(yMin)
+            overlay["y_max"] = Double(yMax)
+            
+            // Force paint overlay so green alignment box is drawn
+            overlay["type"] = "paint"
+            overlay["color_hex"] = "#00FF00"
+            
+            overlays[idx] = overlay
+            
+            // Write back based on version
+            if let version = redesign["schema_version"] as? String, version == "2.0",
+               let activeId = redesign["active_revision_id"] as? String,
+               var revisions = redesign["revisions"] as? [[String: Any]] {
+                if let revIdx = revisions.firstIndex(where: { ($0["id"] as? String) == activeId }) {
+                    var rev = revisions[revIdx]
+                    rev["overlays"] = overlays
+                    revisions[revIdx] = rev
+                    redesign["revisions"] = revisions
+                    print("[RoomAR] Nudge: Updated overlay in active revision \(activeId) (v2.0)")
+                }
+            } else {
+                redesign["overlays"] = overlays
+                print("[RoomAR] Nudge: Updated overlay in root (v1.0)")
+            }
+            
+            hudLabel?.text = " Nudge HUD [Selected Wall: \(selectedId.suffix(8))]\n x_min: \(String(format: "%.2f", xMin)) | x_max: \(String(format: "%.2f", xMax))\n y_min: \(String(format: "%.2f", yMin)) | y_max: \(String(format: "%.2f", yMax))"
+            
+            if let arView = arView {
+                arView.scene.anchors.removeAll()
+                addWallAnchors(to: arView)
+            }
+        }
+    }
+
+    private func performCenterRaycast() {
+        guard let arView = arView, selectedSurfaceId == nil else { return }
+        
+        let center = CGPoint(x: arView.bounds.midX, y: arView.bounds.midY)
+        if let hitEntity = arView.entity(at: center) {
+            var current: Entity? = hitEntity
+            while let node = current {
+                if !node.name.isEmpty && surfaces.contains(where: { ($0["id"] as? String) == node.name }) {
+                    if pointedSurfaceId != node.name {
+                        pointedSurfaceId = node.name
+                        DispatchQueue.main.async { [weak self] in
+                            self?.updateWallMaterials()
+                            self?.updateDictateButtonTitle()
+                        }
+                    }
+                    return
+                }
+                current = node.parent
+            }
+        }
+        
+        if pointedSurfaceId != nil {
+            pointedSurfaceId = nil
+            DispatchQueue.main.async { [weak self] in
+                self?.updateWallMaterials()
+                self?.updateDictateButtonTitle()
+            }
+        }
     }
 }
 
