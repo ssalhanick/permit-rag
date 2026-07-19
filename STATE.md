@@ -25,6 +25,7 @@ _Updated: 2026-07-17 (AR full-screen image blending, HUD opacity, target-pointer
 - [x] Long press on walls → custom text generation dialog + presets list dropdown
 - [x] Fix double-image ghosting/flicker by performing in-place material updates instead of scene rebuilds on texture preloads
 - [x] Apply migration 018 to prod RDS (already applied)
+- [x] Landing page accessibility redesign (Outfit/Lexend fonts, Navy/Teal color system, tactile hero buttons hover/active/focus, logout icon)
 - [ ] Deploy backend with new routes to ECS
 - [ ] Optional: `OPENAI_API_KEY` in prod for live images (mock works)
 - [ ] Device smoke: Preview → Generate image → Save → AR → DXF

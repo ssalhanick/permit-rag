@@ -1,15 +1,17 @@
 @import "tw-animate-css";
 @import "shadcn/tailwind.css";
-@import "@fontsource-variable/figtree";
+@import "@fontsource/outfit";
+@import "@fontsource/lexend";
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
 
 :root {
-  font-family: Inter, Arial, sans-serif;
-  color: #1f2937;
-  background: #f3f4f6;
+  font-family: 'Lexend', Inter, Arial, sans-serif;
+  color: var(--foreground);
+  background: var(--background);
 }
+
 
 /* ── Site nav ────────────────────────────────────────────── */
 
@@ -19,7 +21,7 @@
   gap: 24px;
   background: #1e293b;
   padding: 0 20px;
-  height: 48px;
+  height: 56px;
   position: sticky;
   top: 0;
   z-index: 100;
@@ -52,8 +54,8 @@
 }
 
 .nav-link-active {
-  background: #2563eb;
-  color: #fff;
+  background: var(--accent);
+  color: var(--accent-foreground);
 }
 
 * {
@@ -125,17 +127,106 @@ input {
 }
 
 button {
+  cursor: pointer;
+  font-family: inherit;
+  border-radius: 5px;
+}
+
+.primary-button {
   width: fit-content;
-  background: #2563eb;
+  background: var(--accent);
   border: none;
-  color: white;
+  color: var(--accent-foreground);
   padding: 9px 14px;
   border-radius: 6px;
   cursor: pointer;
+  font-family: inherit;
+  transition: background 0.15s, box-shadow 0.15s;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  text-decoration: none;
+}
+
+.primary-button:hover {
+  background: var(--accent-hover);
+  box-shadow: 0 4px 12px rgba(0, 128, 128, 0.15);
+}
+
+.primary-button:focus-visible {
+  outline: 2px solid var(--ring);
+  outline-offset: 2px;
 }
 
 .secondary-button {
-  background: #475569;
+  width: fit-content;
+  background: var(--secondary);
+  color: var(--secondary-foreground);
+  border: 1px solid var(--border);
+  padding: 9px 14px;
+  border-radius: 6px;
+  cursor: pointer;
+  font-family: inherit;
+  transition: background 0.15s, border-color 0.15s;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  text-decoration: none;
+}
+
+.secondary-button:hover {
+  background: var(--secondary-hover);
+  border-color: var(--ring);
+}
+
+.secondary-button:focus-visible {
+  outline: 2px solid var(--ring);
+  outline-offset: 2px;
+}
+
+.landing-hero-primary {
+  background: var(--primary) !important;
+  color: var(--primary-foreground) !important;
+  transition: background-color 0.2s, box-shadow 0.2s, transform 0.2s !important;
+}
+
+.landing-hero-primary:hover {
+  background: var(--primary-hover) !important;
+  transform: translateY(-2px) scale(1.02) !important;
+  box-shadow: 0 10px 20px rgba(10, 31, 68, 0.2) !important;
+}
+
+.landing-hero-primary:active {
+  transform: translateY(1px) scale(0.98) !important;
+}
+
+.landing-hero-primary:focus,
+.landing-hero-primary:focus-visible {
+  outline: 3px solid var(--ring) !important;
+  outline-offset: 3px !important;
+}
+
+.landing-hero-outline {
+  border: 1px solid var(--primary) !important;
+  color: var(--primary) !important;
+  background: transparent !important;
+  transition: background-color 0.2s, color 0.2s, border-color 0.2s, transform 0.2s !important;
+}
+
+.landing-hero-outline:hover {
+  background: var(--primary) !important;
+  color: var(--primary-foreground) !important;
+  transform: translateY(-2px) scale(1.02) !important;
+}
+
+.landing-hero-outline:active {
+  transform: translateY(1px) scale(0.98) !important;
+}
+
+.landing-hero-outline:focus,
+.landing-hero-outline:focus-visible {
+  outline: 3px solid var(--ring) !important;
+  outline-offset: 3px !important;
 }
 
 button:disabled {
@@ -605,7 +696,7 @@ button:disabled {
   background: #fff;
   border: 1px solid #cbd5e1;
   border-radius: 8px;
-  box-shadow: 0 4px 16px rgba(0,0,0,0.12);
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.12);
   list-style: none;
   margin: 0;
   padding: 4px 0;
@@ -721,7 +812,8 @@ button:disabled {
   gap: 8px;
   align-items: center;
   margin-top: 16px;
-  button{
+
+  button {
     display: block;
     text-align: center;
   }
@@ -1114,7 +1206,8 @@ button:disabled {
   font-size: 0.8rem;
 }
 
-.mini-form input, .mini-form textarea {
+.mini-form input,
+.mini-form textarea {
   padding: 6px 8px;
 }
 
@@ -1123,9 +1216,9 @@ button:disabled {
    ========================================================================== */
 
 /* --- WCAG AAA Touch Target Optimizations (All devices) --- */
-.nav-link, 
-.quick-test-button, 
-.site-nav-links .nav-link, 
+.nav-link,
+.quick-test-button,
+.site-nav-links .nav-link,
 .autocomplete-option,
 .project-list-item-btn,
 .history-item,
@@ -1135,7 +1228,8 @@ button,
 input[type="submit"],
 input[type="button"],
 .site-nav-auth .nav-link {
-  min-height: 44px; /* WCAG AAA target height for interactive components */
+  min-height: 44px;
+  /* WCAG AAA target height for interactive components */
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -1180,6 +1274,7 @@ input[type="button"],
   display: flex;
   align-items: center;
   gap: 12px;
+  min-width: 90px;
 }
 
 .site-nav-user-info {
@@ -1196,7 +1291,8 @@ input[type="button"],
 .nav-signout-btn {
   padding: 8px 12px;
   font-size: 0.85rem;
-  background: #dc2626 !important; /* Force override */
+  background: #dc2626 !important;
+  /* Force override */
   border-radius: 6px;
   color: #fff;
   min-height: 44px;
@@ -1204,13 +1300,21 @@ input[type="button"],
 
 .nav-signin-link {
   font-size: 0.85rem;
-  padding: 8px 16px;
+  padding: 8px 18px;
+  border-width: 2px;
+  border-color: unset;
+
+  &:hover,
+  &:focus {
+    border-color: var(--accent);
+    color: var(--accent);
+  }
 }
 
 /* Native shell: clear iOS status bar / notch */
 body.native-app .site-nav {
   padding-top: env(safe-area-inset-top, 0px);
-  min-height: calc(48px + env(safe-area-inset-top, 0px));
+  min-height: calc(56px + env(safe-area-inset-top, 0px));
   height: auto;
 }
 
@@ -1226,6 +1330,7 @@ body.native-app .site-nav {
 
 /* --- Tablet Breakpoint (Up to 64rem / 1024px) --- */
 @media (max-width: 64rem) {
+
   /* Collapsible Navigation Bar */
   .site-nav {
     flex-direction: column;
@@ -1284,7 +1389,8 @@ body.native-app .site-nav {
     width: 100%;
   }
 
-  .nav-signout-btn, .nav-signin-link {
+  .nav-signout-btn,
+  .nav-signin-link {
     width: 100%;
     justify-content: center;
   }
@@ -1339,89 +1445,103 @@ body.native-app .site-nav {
   /* Table cell optimizations */
   .doc-table th,
   .doc-table td {
-    padding: 12px 10px; /* Touch friendly padding */
+    padding: 12px 10px;
+    /* Touch friendly padding */
   }
 }
 
 @layer base {
-  .theme {
-    --font-heading: var(--font-sans);
-    --font-sans: 'Figtree Variable', sans-serif;
+  :root {
+    --font-heading: 'Outfit', var(--font-sans);
+    --font-sans: 'Lexend', sans-serif;
   }
+
   :root {
     --background: oklch(1 0 0);
-    --foreground: oklch(0.145 0 0);
+    --foreground: oklch(0.198 0.076 258);
     --card: oklch(1 0 0);
-    --card-foreground: oklch(0.145 0 0);
+    --card-foreground: oklch(0.198 0.076 258);
     --popover: oklch(1 0 0);
-    --popover-foreground: oklch(0.145 0 0);
-    --primary: oklch(0.205 0 0);
-    --primary-foreground: oklch(0.985 0 0);
-    --secondary: oklch(0.97 0 0);
-    --secondary-foreground: oklch(0.205 0 0);
-    --muted: oklch(0.97 0 0);
-    --muted-foreground: oklch(0.556 0 0);
-    --accent: oklch(0.97 0 0);
-    --accent-foreground: oklch(0.205 0 0);
+    --popover-foreground: oklch(0.198 0.076 258);
+    --primary: oklch(0.198 0.076 258);
+    --primary-hover: oklch(0.28 0.08 258);
+    --primary-foreground: oklch(1 0 0);
+    --secondary: oklch(0.96 0.01 258);
+    --secondary-hover: oklch(0.92 0.02 258);
+    --secondary-foreground: oklch(0.198 0.076 258);
+    --muted: oklch(0.96 0.01 258);
+    --muted-foreground: oklch(0.45 0.04 258);
+    --accent: oklch(0.485 0.108 192);
+    --accent-hover: oklch(0.55 0.12 192);
+    --accent-foreground: oklch(1 0 0);
     --destructive: oklch(0.577 0.245 27.325);
-    --border: oklch(0.922 0 0);
-    --input: oklch(0.922 0 0);
-    --ring: oklch(0.708 0 0);
-    --chart-1: oklch(0.87 0 0);
-    --chart-2: oklch(0.556 0 0);
+    --border: oklch(0.9 0.02 258);
+    --input: oklch(0.9 0.02 258);
+    --ring: oklch(0.485 0.108 192);
+    --chart-1: oklch(0.485 0.108 192);
+    --chart-2: oklch(0.198 0.076 258);
     --chart-3: oklch(0.439 0 0);
     --chart-4: oklch(0.371 0 0);
     --chart-5: oklch(0.269 0 0);
     --radius: 0.625rem;
     --sidebar: oklch(0.985 0 0);
-    --sidebar-foreground: oklch(0.145 0 0);
-    --sidebar-primary: oklch(0.205 0 0);
-    --sidebar-primary-foreground: oklch(0.985 0 0);
-    --sidebar-accent: oklch(0.97 0 0);
-    --sidebar-accent-foreground: oklch(0.205 0 0);
-    --sidebar-border: oklch(0.922 0 0);
-    --sidebar-ring: oklch(0.708 0 0);
+    --sidebar-foreground: oklch(0.198 0.076 258);
+    --sidebar-primary: oklch(0.198 0.076 258);
+    --sidebar-primary-foreground: oklch(1 0 0);
+    --sidebar-accent: oklch(0.96 0.01 258);
+    --sidebar-accent-foreground: oklch(0.198 0.076 258);
+    --sidebar-border: oklch(0.9 0.02 258);
+    --sidebar-ring: oklch(0.485 0.108 192);
   }
-  .dark {
-    --background: oklch(0.145 0 0);
-    --foreground: oklch(0.985 0 0);
-    --card: oklch(0.205 0 0);
-    --card-foreground: oklch(0.985 0 0);
-    --popover: oklch(0.205 0 0);
-    --popover-foreground: oklch(0.985 0 0);
-    --primary: oklch(0.922 0 0);
-    --primary-foreground: oklch(0.205 0 0);
-    --secondary: oklch(0.269 0 0);
-    --secondary-foreground: oklch(0.985 0 0);
-    --muted: oklch(0.269 0 0);
-    --muted-foreground: oklch(0.708 0 0);
-    --accent: oklch(0.269 0 0);
-    --accent-foreground: oklch(0.985 0 0);
-    --destructive: oklch(0.704 0.191 22.216);
-    --border: oklch(1 0 0 / 10%);
-    --input: oklch(1 0 0 / 15%);
-    --ring: oklch(0.556 0 0);
-    --chart-1: oklch(0.87 0 0);
-    --chart-2: oklch(0.556 0 0);
-    --chart-3: oklch(0.439 0 0);
-    --chart-4: oklch(0.371 0 0);
-    --chart-5: oklch(0.269 0 0);
-    --sidebar: oklch(0.205 0 0);
-    --sidebar-foreground: oklch(0.985 0 0);
-    --sidebar-primary: oklch(0.488 0.243 264.376);
-    --sidebar-primary-foreground: oklch(0.985 0 0);
-    --sidebar-accent: oklch(0.269 0 0);
-    --sidebar-accent-foreground: oklch(0.985 0 0);
-    --sidebar-border: oklch(1 0 0 / 10%);
-    --sidebar-ring: oklch(0.556 0 0);
+
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --background: oklch(0.19 0.02 258);
+      --foreground: oklch(0.85 0.04 258);
+      --card: oklch(0.24 0.02 258);
+      --card-foreground: oklch(0.85 0.04 258);
+      --popover: oklch(0.24 0.02 258);
+      --popover-foreground: oklch(0.85 0.04 258);
+      --primary: oklch(0.85 0.04 258);
+      --primary-hover: oklch(0.9 0.03 258);
+      --primary-foreground: oklch(0.19 0.02 258);
+      --secondary: oklch(0.3 0.02 258);
+      --secondary-hover: oklch(0.35 0.02 258);
+      --secondary-foreground: oklch(0.85 0.04 258);
+      --muted: oklch(0.3 0.02 258);
+      --muted-foreground: oklch(0.65 0.03 258);
+      --accent: oklch(0.82 0.16 195);
+      --accent-hover: oklch(0.87 0.18 195);
+      --accent-foreground: oklch(0.19 0.02 258);
+      --destructive: oklch(0.704 0.191 22.216);
+      --border: oklch(0.3 0.02 258);
+      --input: oklch(0.3 0.02 258);
+      --ring: oklch(0.82 0.16 195);
+      --chart-1: oklch(0.82 0.16 195);
+      --chart-2: oklch(0.85 0.04 258);
+      --chart-3: oklch(0.439 0 0);
+      --chart-4: oklch(0.371 0 0);
+      --chart-5: oklch(0.269 0 0);
+      --sidebar: oklch(0.24 0.02 258);
+      --sidebar-foreground: oklch(0.85 0.04 258);
+      --sidebar-primary: oklch(0.82 0.16 195);
+      --sidebar-primary-foreground: oklch(0.19 0.02 258);
+      --sidebar-accent: oklch(0.3 0.02 258);
+      --sidebar-accent-foreground: oklch(0.85 0.04 258);
+      --sidebar-border: oklch(0.3 0.02 258);
+      --sidebar-ring: oklch(0.82 0.16 195);
+    }
   }
+
   * {
     @apply border-border;
     outline-color: var(--ring);
   }
+
   body {
     @apply bg-background text-foreground;
   }
+
   html {
     @apply font-sans;
   }

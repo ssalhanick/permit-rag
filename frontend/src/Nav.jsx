@@ -1,6 +1,7 @@
 import React, { useState } from "react";
 import { NavLink } from "react-router-dom";
 import { useAuth } from "./context/AuthContext.jsx";
+import { LogOut } from "lucide-react";
 
 export default function Nav() {
   const { user, logout } = useAuth();
@@ -26,16 +27,16 @@ export default function Nav() {
 
       <div className={`site-nav-collapse ${isOpen ? "show" : ""}`}>
         <div className="site-nav-links">
-          <NavLink
-            to="/"
-            className={({ isActive }) => "nav-link" + (isActive ? " nav-link-active" : "")}
-            onClick={closeMenu}
-            end
-          >
-            Query
-          </NavLink>
           {user && (
             <>
+              <NavLink
+                to="/query"
+                className={({ isActive }) => "nav-link" + (isActive ? " nav-link-active" : "")}
+                onClick={closeMenu}
+                end
+              >
+                Query
+              </NavLink>
               <NavLink
                 to="/upload"
                 className={({ isActive }) => "nav-link" + (isActive ? " nav-link-active" : "")}
@@ -73,8 +74,9 @@ export default function Nav() {
                   logout();
                   closeMenu();
                 }}
-                className="secondary-button nav-signout-btn"
+                className="secondary-button nav-signout-btn flex items-center gap-1.5"
               >
+                <LogOut className="h-4 w-4" />
                 Sign Out
               </button>
             </>
