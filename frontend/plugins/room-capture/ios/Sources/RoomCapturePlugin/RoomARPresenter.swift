@@ -328,8 +328,7 @@ final class RoomARPresenter: NSObject, UITableViewDelegate, UITableViewDataSourc
             loadTexture(from: url) { [weak self] _ in
                 guard let self, let arView = self.arView else { return }
                 DispatchQueue.main.async {
-                    arView.scene.anchors.removeAll()
-                    self.addWallAnchorsWithoutPreload(to: arView)
+                    self.updateWallMaterials()
                 }
             }
         }

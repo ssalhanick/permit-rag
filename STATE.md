@@ -23,6 +23,7 @@ _Updated: 2026-07-17 (AR full-screen image blending, HUD opacity, target-pointer
 - [x] Full-screen redesign image blend projection + opacity controller buttons
 - [x] Pointer selection (camera center-raycast target-locks) and translucent green highlights
 - [x] Long press on walls → custom text generation dialog + presets list dropdown
+- [x] Fix double-image ghosting/flicker by performing in-place material updates instead of scene rebuilds on texture preloads
 - [x] Apply migration 018 to prod RDS (already applied)
 - [ ] Deploy backend with new routes to ECS
 - [ ] Optional: `OPENAI_API_KEY` in prod for live images (mock works)
@@ -57,7 +58,7 @@ cd frontend && npm run test && npm run build:mobile && npx cap sync ios
 | commerce | `room_image.py` OpenAI + mock PNG |
 | api | `/commerce/room-preview-image` |
 | frontend | Generate image button; device PNG + asset_url |
-| iOS | Blend opacity, pointer selectors, long-press generative dropdown |
+| iOS | Blend opacity, pointer selectors, long-press generative dropdown, single-anchor mapping |
 
 ## Decisions log
 
