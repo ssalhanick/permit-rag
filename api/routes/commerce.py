@@ -38,6 +38,7 @@ def room_preview_image(
         overlays=body.overlays,
         room_label=body.room_label,
         source_image_b64=body.source_image_b64,
+        tiling=body.tiling,
     )
 
 

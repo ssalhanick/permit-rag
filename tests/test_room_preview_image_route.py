@@ -6,8 +6,9 @@ from fastapi.testclient import TestClient
 
 
 def test_room_preview_image_returns_mock_without_openai(monkeypatch) -> None:
-    """Route should return mock PNG payload when OpenAI key is absent."""
+    """Route should return mock PNG payload when keys are absent."""
     monkeypatch.delenv("OPENAI_API_KEY", raising=False)
+    monkeypatch.delenv("LEONARDO_API_KEY", raising=False)
     monkeypatch.setenv("API_JWT_SECRET", "x" * 32)
     monkeypatch.setenv("API_ADMIN_AUTH_REQUIRED", "false")
 

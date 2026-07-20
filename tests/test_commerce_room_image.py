@@ -42,8 +42,9 @@ def test_build_prompt_includes_utterance_and_product() -> None:
 
 
 def test_generate_falls_back_to_mock_without_api_key(monkeypatch) -> None:
-    """Without OPENAI_API_KEY, generator returns mock PNG base64."""
+    """Without API keys, generator returns mock PNG base64."""
     monkeypatch.delenv("OPENAI_API_KEY", raising=False)
+    monkeypatch.delenv("LEONARDO_API_KEY", raising=False)
     result = generate_room_preview_image(
         utterance="paint walls white",
         overlays=[{"color_hex": "#EEEEEE", "type": "paint"}],

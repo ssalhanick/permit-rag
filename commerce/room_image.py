@@ -12,6 +12,7 @@ import json
 import logging
 import os
 import struct
+import time
 import urllib.error
 import urllib.request
 import zlib
@@ -23,6 +24,78 @@ OPENAI_IMAGES_URL = "https://api.openai.com/v1/images/generations"
 OPENAI_EDITS_URL = "https://api.openai.com/v1/images/edits"
 DEFAULT_MODEL = "gpt-image-1"
 MOCK_SIZE = 256
+
+LEONARDO_GENERATIONS_URL = "https://cloud.leonardo.ai/api/rest/v1/generations"
+LEONARDO_DEFAULT_MODEL = "de7d3faf-762f-48e0-b3b7-9d0ac3a3fcf3"  # Phoenix
+
+
+def _leonardo_generate(prompt: str, model: str, tiling: bool) -> str:
+    """Call Leonardo.ai REST API (v1); poll for asynchronous completion, return base64."""
+    api_key = os.environ.get("LEONARDO_API_KEY", "").strip()
+    if not api_key:
+        raise RuntimeError("LEONARDO_API_KEY not set")
+
+    body = {
+        "prompt": prompt,
+        "modelId": model,
+        "width": 1024,
+        "height": 768,
+        "num_images": 1,
+        "tiling": tiling,
+    }
+
+    req = urllib.request.Request(
+        LEONARDO_GENERATIONS_URL,
+        data=json.dumps(body).encode("utf-8"),
+        headers={
+            "Authorization": f"Bearer {api_key}",
+            "Content-Type": "application/json",
+            "accept": "application/json",
+        },
+        method="POST",
+    )
+    with urllib.request.urlopen(req, timeout=60) as resp:
+        payload = json.loads(resp.read().decode("utf-8"))
+
+    job = payload.get("sdGenerationJob") or {}
+    generation_id = job.get("generationId")
+    if not generation_id:
+        raise RuntimeError("Leonardo generation failed to start (no generationId returned)")
+
+    # Poll status
+    poll_url = f"{LEONARDO_GENERATIONS_URL}/{generation_id}"
+    headers = {
+        "Authorization": f"Bearer {api_key}",
+        "accept": "application/json",
+    }
+
+    # Poll up to 30 times (60 seconds max)
+    for _ in range(30):
+        time.sleep(2)
+        poll_req = urllib.request.Request(poll_url, headers=headers, method="GET")
+        try:
+            with urllib.request.urlopen(poll_req, timeout=30) as poll_resp:
+                poll_payload = json.loads(poll_resp.read().decode("utf-8"))
+            
+            gen_pk = poll_payload.get("generations_by_pk") or {}
+            status = gen_pk.get("status")
+            if status == "COMPLETE":
+                images = gen_pk.get("generated_images") or []
+                if not images:
+                    raise RuntimeError("Leonardo generation complete but no images found")
+                url = images[0].get("url")
+                if not url:
+                    raise RuntimeError("Leonardo image record missing URL")
+                
+                # Fetch the image bytes and base64-encode them
+                with urllib.request.urlopen(url, timeout=45) as img_resp:
+                    return base64.b64encode(img_resp.read()).decode("ascii")
+            elif status == "FAILED":
+                raise RuntimeError("Leonardo generation job failed")
+        except (urllib.error.URLError, urllib.error.HTTPError) as e:
+            log.warning("Leonardo polling encountered error: %s", e)
+
+    raise RuntimeError("Leonardo generation timed out after 60 seconds")
 
 
 def _parse_hex_color(color_hex: str | None) -> tuple[int, int, int]:
@@ -139,12 +212,14 @@ def generate_room_preview_image(
     overlays: list[dict[str, Any]] | None = None,
     room_label: str | None = None,
     source_image_b64: str | None = None,
+    tiling: bool | None = None,
 ) -> dict[str, Any]:
     """
     Generate a room redesign preview image.
 
-    Prefers OpenAI when OPENAI_API_KEY is set. Optional source_image_b64 is
-    reserved for future img2img edits; currently folded into the text prompt.
+    Prefers Leonardo when LEONARDO_API_KEY is set, then OpenAI when OPENAI_API_KEY is set.
+    Optional source_image_b64 is reserved for future img2img edits; currently folded
+    into the text prompt.
 
     Returns:
         Dict with image_base64, mime_type, provider, prompt, model.
@@ -160,10 +235,26 @@ def generate_room_preview_image(
             f"{prompt} Match the camera angle and layout of the provided room photo."
         )
 
-    model = os.environ.get("OPENAI_IMAGE_MODEL", DEFAULT_MODEL).strip() or DEFAULT_MODEL
-    api_key = os.environ.get("OPENAI_API_KEY", "").strip()
+    leonardo_key = os.environ.get("LEONARDO_API_KEY", "").strip()
+    if leonardo_key:
+        model = os.environ.get("LEONARDO_IMAGE_MODEL", LEONARDO_DEFAULT_MODEL).strip() or LEONARDO_DEFAULT_MODEL
+        try:
+            b64 = _leonardo_generate(prompt, model, tiling=bool(tiling))
+            return {
+                "image_base64": b64,
+                "mime_type": "image/png",
+                "provider": "leonardo",
+                "model": model,
+                "prompt": prompt,
+                "mock": False,
+            }
+        except Exception as exc:
+            log.warning("Leonardo room image failed (%s); falling back", exc)
 
-    if api_key:
+    model = os.environ.get("OPENAI_IMAGE_MODEL", DEFAULT_MODEL).strip() or DEFAULT_MODEL
+    openai_key = os.environ.get("OPENAI_API_KEY", "").strip()
+
+    if openai_key:
         try:
             b64 = _openai_generate(prompt, model)
             return {

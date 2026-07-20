@@ -594,6 +594,10 @@ class RoomPreviewImageRequest(BaseModel):
         description="Optional room photo (base64, no data: prefix) for layout hints.",
         max_length=8_000_000,
     )
+    tiling: bool | None = Field(
+        default=None,
+        description="Optional flag to enable seamless tileable textures (Leonardo.ai only).",
+    )
 
 
 class RoomPreviewImageResponse(BaseModel):

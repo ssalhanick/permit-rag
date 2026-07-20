@@ -372,6 +372,10 @@ resource "aws_ecs_task_definition" "backend" {
           valueFrom = "arn:aws:ssm:${data.aws_region.current.name}:${data.aws_caller_identity.current.account_id}:parameter/permit_rag/prod/openai_api_key"
         },
         {
+          name      = "LEONARDO_API_KEY"
+          valueFrom = "arn:aws:ssm:${data.aws_region.current.name}:${data.aws_caller_identity.current.account_id}:parameter/permit_rag/prod/leonardo_api_key"
+        },
+        {
           name      = "API_JWT_SECRET"
           valueFrom = "arn:aws:ssm:${data.aws_region.current.name}:${data.aws_caller_identity.current.account_id}:parameter/permit_rag/prod/jwt_secret"
         },
