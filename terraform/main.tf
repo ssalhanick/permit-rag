@@ -355,9 +355,9 @@ resource "aws_ecs_task_definition" "backend" {
         { name = "LOG_LEVEL", value = "INFO" },
         { name = "API_CORS_ALLOW_LOCALHOST", value = "false" },
         { name = "API_CORS_ALLOW_ORIGINS", value = "https://permits.scottsalhanick.com,capacitor://localhost,https://localhost,com.scottsalhanick.permitrag://" },
-        { name = "DATABASE_URL", value = "postgresql://postgres:${random_password.db_password.result}@${aws_db_instance.postgres.endpoint}/permit_rag" },
-        { name = "CORPUS_WRITER_URL", value = "postgresql://postgres:${random_password.db_password.result}@${aws_db_instance.postgres.endpoint}/permit_rag" },
-        { name = "APP_READER_URL", value = "postgresql://postgres:${random_password.db_password.result}@${aws_db_instance.postgres.endpoint}/permit_rag" },
+        { name = "DATABASE_URL", value = "postgresql://postgres:${random_password.db_password.result}@${aws_db_instance.postgres.endpoint}/permit_rag?sslmode=require" },
+        { name = "CORPUS_WRITER_URL", value = "postgresql://postgres:${random_password.db_password.result}@${aws_db_instance.postgres.endpoint}/permit_rag?sslmode=require" },
+        { name = "APP_READER_URL", value = "postgresql://postgres:${random_password.db_password.result}@${aws_db_instance.postgres.endpoint}/permit_rag?sslmode=require" },
         { name = "LLM_MODEL", value = "claude-haiku-4-5-20251001" },
         { name = "LLM_PROVIDER", value = "anthropic" },
         { name = "OPENAI_IMAGE_MODEL", value = "gpt-image-1" }
