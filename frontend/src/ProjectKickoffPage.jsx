@@ -44,6 +44,7 @@ const BLANK_WIZARD = {
   budget: "",
   persona: "",
   customSystemPrompt: "",
+  doRoomScan: false,
 };
 
 // ── Sub-components ────────────────────────────────────────────
@@ -138,6 +139,47 @@ export default function ProjectKickoffPage() {
   const [wizardStep, setWizardStep] = useState(1);
   const [wizard, setWizard] = useState(BLANK_WIZARD);
   const [editingProjectId, setEditingProjectId] = useState(editProjectId || null);
+  const [hasLidar, setHasLidar] = useState(false);
+
+  // Dynamic steps based on device LiDAR availability
+  const steps = useMemo(() => {
+    const list = [
+      { key: "address", question: "Where is the project located?" },
+      { key: "name", question: "What would you like to call this project?" },
+      { key: "spaces", question: "Which spaces will be involved?" },
+      { key: "workTypes", question: "What type of work are you planning to do?" },
+    ];
+    if (hasLidar) {
+      list.push({ key: "roomScan", question: "Would you like to perform a 3D room scan?" });
+    }
+    list.push(
+      { key: "chat", question: "Let's align on some details to customize your compliance guide." },
+      { key: "confirm", question: "Here's what we found — does this look right?" }
+    );
+    return list;
+  }, [hasLidar]);
+
+  // Check LiDAR capability on mount
+  useEffect(() => {
+    let active = true;
+    (async () => {
+      try {
+        const { isRoomCaptureAvailable } = await import("./services/roomCapture.js");
+        const available = await isRoomCaptureAvailable();
+        if (active) {
+          setHasLidar(available);
+          if (available) {
+            setWizard((w) => ({ ...w, doRoomScan: true }));
+          }
+        }
+      } catch {
+        if (active) setHasLidar(false);
+      }
+    })();
+    return () => {
+      active = false;
+    };
+  }, []);
 
   // Kickoff Chat State
   const [chatHistory, setChatHistory] = useState([]);
@@ -204,7 +246,8 @@ export default function ProjectKickoffPage() {
 
   // Initialize chatbot dialog at step 5
   useEffect(() => {
-    if (wizardStep === 5 && chatHistory.length === 0) {
+    const currentStep = steps[wizardStep - 1];
+    if (currentStep?.key === "chat" && chatHistory.length === 0) {
       const city = wizard.municipality || "DFW";
       setChatHistory([
         {
@@ -213,7 +256,7 @@ export default function ProjectKickoffPage() {
         },
       ]);
     }
-  }, [wizardStep, chatHistory.length, wizard.municipality]);
+  }, [wizardStep, chatHistory.length, wizard.municipality, steps]);
 
   const handleChatSend = async (e) => {
     e?.preventDefault();
@@ -249,8 +292,11 @@ export default function ProjectKickoffPage() {
             content: "Perfect, I have synthesized custom compliance guidelines for your project profile! Let's check them on the next screen.",
           },
         ]);
+        const confirmIdx = steps.findIndex((s) => s.key === "confirm");
         setTimeout(() => {
-          setWizardStep(6);
+          if (confirmIdx !== -1) {
+            setWizardStep(confirmIdx + 1);
+          }
         }, 1500);
       } else {
         setChatHistory((h) => [
@@ -299,15 +345,16 @@ export default function ProjectKickoffPage() {
 
   const wizardNext = () => {
     setError("");
-    if (wizardStep === 1 && !wizard.address.trim()) {
+    const currentStep = steps[wizardStep - 1];
+    if (currentStep?.key === "address" && !wizard.address.trim()) {
       setError("Please enter a project address.");
       return;
     }
-    if (wizardStep === 2 && !wizard.name.trim()) {
+    if (currentStep?.key === "name" && !wizard.name.trim()) {
       setError("Please enter a project name.");
       return;
     }
-    if (wizardStep < WIZARD_STEPS.length) {
+    if (wizardStep < steps.length) {
       setWizardStep((s) => s + 1);
     }
   };
@@ -571,20 +618,20 @@ export default function ProjectKickoffPage() {
 
   // ── Guided wizard ──────────────────────────────────────────
 
-  const step = WIZARD_STEPS[wizardStep - 1];
-  const isLastStep = wizardStep === WIZARD_STEPS.length;
+  const step = steps[wizardStep - 1];
+  const isLastStep = wizardStep === steps.length;
 
   return (
     <main className="page kickoff-page">
       <section className="panel kickoff-panel">
-        <WizardProgress current={wizardStep} total={WIZARD_STEPS.length} />
+        <WizardProgress current={wizardStep} total={steps.length} />
 
-        <ChatBubble text={step.question} />
+        <ChatBubble text={step?.question || ""} />
 
         {error && <div className="error-box">{error}</div>}
 
         {/* Step 1 — Address */}
-        {wizardStep === 1 && (
+        {step?.key === "address" && (
           <div className="kickoff-step-body">
             <AddressAutocomplete
               id="wizard-address"
@@ -607,7 +654,7 @@ export default function ProjectKickoffPage() {
         )}
 
         {/* Step 2 — Project name */}
-        {wizardStep === 2 && (
+        {step?.key === "name" && (
           <div className="kickoff-step-body">
             <div className="kickoff-form-group">
               <label htmlFor="wizard-name" className="kickoff-sr-label">Project name</label>
@@ -625,7 +672,7 @@ export default function ProjectKickoffPage() {
         )}
 
         {/* Step 3 — Spaces */}
-        {wizardStep === 3 && (
+        {step?.key === "spaces" && (
           <div className="kickoff-step-body">
             <p className="kickoff-section-label">Indoor</p>
             <CheckboxGrid
@@ -646,7 +693,7 @@ export default function ProjectKickoffPage() {
         )}
 
         {/* Step 4 — Work types */}
-        {wizardStep === 4 && (
+        {step?.key === "workTypes" && (
           <div className="kickoff-step-body">
             <CheckboxGrid
               options={WORK_TYPE_OPTIONS}
@@ -659,8 +706,49 @@ export default function ProjectKickoffPage() {
           </div>
         )}
 
-        {/* Step 5 — Conversational Kickoff Chat */}
-        {wizardStep === 5 && (
+        {/* Optional Room Scan Step */}
+        {step?.key === "roomScan" && (
+          <div className="kickoff-step-body">
+            <div className="kickoff-room-scan-options">
+              <label className={`kickoff-radio-item ${wizard.doRoomScan ? "active" : ""}`}>
+                <input
+                  type="radio"
+                  name="doRoomScan"
+                  checked={wizard.doRoomScan === true}
+                  onChange={() => setWizard((w) => ({ ...w, doRoomScan: true }))}
+                  style={{ display: "none" }}
+                />
+                <div className="kickoff-radio-content">
+                  <span className="kickoff-radio-icon">📸</span>
+                  <div className="kickoff-radio-text">
+                    <strong>Yes, I want to perform a 3D scan</strong>
+                    <p>Use device LiDAR camera to scan walls, openings, and objects. Highly recommended for accurate rules.</p>
+                  </div>
+                </div>
+              </label>
+
+              <label className={`kickoff-radio-item ${!wizard.doRoomScan ? "active" : ""}`}>
+                <input
+                  type="radio"
+                  name="doRoomScan"
+                  checked={wizard.doRoomScan === false}
+                  onChange={() => setWizard((w) => ({ ...w, doRoomScan: false }))}
+                  style={{ display: "none" }}
+                />
+                <div className="kickoff-radio-content">
+                  <span className="kickoff-radio-icon">⏩</span>
+                  <div className="kickoff-radio-text">
+                    <strong>No, skip 3D scan for now</strong>
+                    <p>You can still record measurements or scan from the project dashboard later.</p>
+                  </div>
+                </div>
+              </label>
+            </div>
+          </div>
+        )}
+
+        {/* Conversational Kickoff Chat */}
+        {step?.key === "chat" && (
           <div className="kickoff-step-body kickoff-chat-container">
             <div className="kickoff-chat-history">
               {chatHistory.map((msg, idx) => (
@@ -698,8 +786,8 @@ export default function ProjectKickoffPage() {
           </div>
         )}
 
-        {/* Step 6 — Permit preview + confirm */}
-        {wizardStep === 6 && (
+        {/* Permit preview + confirm */}
+        {step?.key === "confirm" && (
           <div className="kickoff-step-body">
             <dl className="kickoff-summary">
               <div className="kickoff-summary-row">
@@ -726,6 +814,12 @@ export default function ProjectKickoffPage() {
                 <div className="kickoff-summary-row">
                   <dt>Estimated Budget</dt>
                   <dd>{wizard.budget}</dd>
+                </div>
+              )}
+              {hasLidar && (
+                <div className="kickoff-summary-row">
+                  <dt>LiDAR Scan Opt-in</dt>
+                  <dd>{wizard.doRoomScan ? "Yes, requested" : "No, skipped"}</dd>
                 </div>
               )}
             </dl>
@@ -784,7 +878,7 @@ export default function ProjectKickoffPage() {
                 ? (editingProjectId ? "Saving…" : "Creating…")
                 : (editingProjectId ? "Save Setup" : "Create Project")}
             </button>
-          ) : wizardStep === 5 ? null : (
+          ) : step?.key === "chat" ? null : (
             <button
               type="button"
               onClick={wizardNext}
