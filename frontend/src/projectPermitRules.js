@@ -90,3 +90,17 @@ export const SPACE_OPTIONS = {
     "Fence",
   ],
 };
+
+/** Common materials or scopes for the wizard checkboxes. */
+export const MATERIAL_OPTIONS = [
+  "Lumber / Framing",
+  "Drywall",
+  "Insulation",
+  "Concrete / Cement",
+  "PEX / Copper Piping",
+  "Electrical Wiring / Romex",
+  "Roofing Shingles / Tiles",
+  "Siding / Brick",
+  "Cabinets / Countertops",
+  "Fixtures (Plumbing / Light)",
+];

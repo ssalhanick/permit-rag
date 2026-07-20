@@ -16,6 +16,7 @@ import { projectToWizardState } from "./projectKickoffRoutes.js";
 import {
   SPACE_OPTIONS,
   WORK_TYPE_OPTIONS,
+  MATERIAL_OPTIONS,
   isCosmeticOnly,
   recommendPermits,
 } from "./projectPermitRules.js";
@@ -41,6 +42,8 @@ const BLANK_WIZARD = {
   otherSpaces: "",
   workTypes: [],
   otherWorkTypes: "",
+  materials: [],
+  otherMaterials: "",
   budget: "",
   persona: "",
   customSystemPrompt: "",
@@ -156,7 +159,7 @@ export default function ProjectKickoffPage() {
       list.push({ key: "roomScan", question: "Would you like to perform a 3D room scan?" });
     }
     list.push(
-      { key: "chat", question: "Let's align on some details to customize your compliance guide." },
+      { key: "materials", question: "What specific materials or scopes are you planning?" },
       { key: "name", question: "What would you like to call this project?" },
       { key: "confirm", question: "Here's what we found — does this look right?" }
     );
@@ -463,6 +466,9 @@ export default function ProjectKickoffPage() {
       return;
     }
 
+    const allMaterials = [...wizard.materials];
+    if (wizard.otherMaterials.trim()) allMaterials.push(wizard.otherMaterials.trim());
+
     const payload = {
       name: resolvedName,
       address: wizard.address.trim(),
@@ -471,6 +477,7 @@ export default function ProjectKickoffPage() {
       longitude: wizard.longitude || undefined,
       spaces: allSpaces.length ? allSpaces : undefined,
       work_types: allWorkTypes.length ? allWorkTypes : undefined,
+      materials: allMaterials.length ? allMaterials : undefined,
       recommended_permits: recommendedPermits.length ? recommendedPermits : undefined,
       budget: wizard.budget || undefined,
       persona: wizard.persona || undefined,
@@ -888,52 +895,17 @@ export default function ProjectKickoffPage() {
           </div>
         )}
 
-        {/* Conversational Kickoff Chat */}
-        {step?.key === "chat" && (
-          <div className="kickoff-step-body kickoff-chat-container">
-            <div className="kickoff-chat-history">
-              {chatHistory.map((msg, idx) => (
-                <div key={idx} className={`kickoff-chat-row ${msg.role}`}>
-                  <div className="kickoff-chat-bubble">
-                    {msg.role === "assistant" && <span className="kickoff-chat-avatar">🏗</span>}
-                    <p>{msg.content}</p>
-                  </div>
-                </div>
-              ))}
-              {chatLoading && (
-                <div className="kickoff-chat-row assistant">
-                  <div className="kickoff-chat-bubble loading">
-                    <span className="kickoff-chat-avatar">🏗</span>
-                    <p>Thinking...</p>
-                  </div>
-                </div>
-              )}
-            </div>
-
-            <form onSubmit={handleChatSend} className="kickoff-chat-input-form">
-              <input
-                type="text"
-                value={chatInput}
-                onChange={(e) => setChatInput(e.target.value)}
-                placeholder="Type your response here..."
-                disabled={chatLoading}
-                aria-label="Chat response"
-                required
-              />
-              <button
-                type="button"
-                className="kickoff-voice-button"
-                onClick={handleVoiceInput}
-                title="Speak response"
-                aria-label="Speak response"
-                disabled={chatLoading}
-              >
-                🎙
-              </button>
-              <button type="submit" disabled={chatLoading || !chatInput.trim()}>
-                Send
-              </button>
-            </form>
+        {/* Specific Materials Step */}
+        {step?.key === "materials" && (
+          <div className="kickoff-step-body">
+            <CheckboxGrid
+              options={MATERIAL_OPTIONS}
+              selected={wizard.materials}
+              onChange={(materials) => setWizard((w) => ({ ...w, materials }))}
+              otherValue={wizard.otherMaterials}
+              onOtherChange={(otherMaterials) => setWizard((w) => ({ ...w, otherMaterials }))}
+              otherLabel="Other material / scope"
+            />
           </div>
         )}
 
@@ -953,6 +925,18 @@ export default function ProjectKickoffPage() {
                 <div className="kickoff-summary-row">
                   <dt>Spaces</dt>
                   <dd>{wizard.spaces.join(", ")}{wizard.otherSpaces ? `, ${wizard.otherSpaces}` : ""}</dd>
+                </div>
+              )}
+              {wizard.workTypes.length > 0 && (
+                <div className="kickoff-summary-row">
+                  <dt>Work Types</dt>
+                  <dd>{wizard.workTypes.join(", ")}{wizard.otherWorkTypes ? `, ${wizard.otherWorkTypes}` : ""}</dd>
+                </div>
+              )}
+              {wizard.materials.length > 0 && (
+                <div className="kickoff-summary-row">
+                  <dt>Materials</dt>
+                  <dd>{wizard.materials.join(", ")}{wizard.otherMaterials ? `, ${wizard.otherMaterials}` : ""}</dd>
                 </div>
               )}
               {allWorkTypes.length > 0 && (

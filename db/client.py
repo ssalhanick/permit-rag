@@ -1008,6 +1008,7 @@ def create_project(
     conservation_district: str | None = None,
     spaces: list[str] | None = None,
     work_types: list[str] | None = None,
+    materials: list[str] | None = None,
     recommended_permits: list[str] | None = None,
     budget: str | None = None,
     persona: str | None = None,
@@ -1020,12 +1021,12 @@ def create_project(
         INSERT INTO projects (
             name, owner_user_id, description, municipality,
             address, latitude, longitude, historic_district, conservation_district,
-            spaces, work_types, recommended_permits, budget, persona, custom_system_prompt
+            spaces, work_types, materials, recommended_permits, budget, persona, custom_system_prompt
         )
         VALUES (
             %(name)s, %(owner_user_id)s, %(description)s, %(municipality)s,
             %(address)s, %(latitude)s, %(longitude)s, %(historic_district)s, %(conservation_district)s,
-            %(spaces)s, %(work_types)s, %(recommended_permits)s, %(budget)s, %(persona)s, %(custom_system_prompt)s
+            %(spaces)s, %(work_types)s, %(materials)s, %(recommended_permits)s, %(budget)s, %(persona)s, %(custom_system_prompt)s
         )
         RETURNING *;
     """
@@ -1046,6 +1047,7 @@ def create_project(
             "conservation_district": conservation_district,
             "spaces": _json.dumps(spaces) if spaces is not None else None,
             "work_types": _json.dumps(work_types) if work_types is not None else None,
+            "materials": _json.dumps(materials) if materials is not None else None,
             "recommended_permits": _json.dumps(recommended_permits) if recommended_permits is not None else None,
             "budget": budget,
             "persona": persona,
@@ -1090,6 +1092,7 @@ def update_project(
     conservation_district: str | None | UnsetType = UNSET,
     spaces: list[str] | None = None,
     work_types: list[str] | None = None,
+    materials: list[str] | None = None,
     recommended_permits: list[str] | None = None,
     room_summary: dict[str, Any] | None = None,
     budget: str | None = None,
@@ -1131,6 +1134,9 @@ def update_project(
     if work_types is not None:
         assignments.append("work_types = %(work_types)s::jsonb")
         params["work_types"] = _json.dumps(work_types)
+    if materials is not None:
+        assignments.append("materials = %(materials)s::jsonb")
+        params["materials"] = _json.dumps(materials)
     if recommended_permits is not None:
         assignments.append("recommended_permits = %(recommended_permits)s::jsonb")
         params["recommended_permits"] = _json.dumps(recommended_permits)

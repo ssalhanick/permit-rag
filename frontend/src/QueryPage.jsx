@@ -114,7 +114,7 @@ export default function QueryPage() {
     <div className="query-page-layout px-4 max-w-7xl mx-auto py-8">
       <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
         <aside className="lg:col-span-1 space-y-6">
-          <Card className="shadow-sm">
+          <Card className="shadow-sm p-4">
             <CardHeader className="pb-3">
               <CardTitle className="text-lg">Project Context</CardTitle>
               <CardDescription>Select workspace context for location</CardDescription>
@@ -143,7 +143,7 @@ export default function QueryPage() {
             </CardContent>
           </Card>
 
-          <Card className="shadow-sm">
+          <Card className="shadow-sm p-4">
             <CardHeader className="pb-3">
               <CardTitle className="text-lg">Query History</CardTitle>
               <CardDescription>Previous questions</CardDescription>
@@ -187,7 +187,7 @@ export default function QueryPage() {
         <div className="lg:col-span-3 space-y-6">
           <RoomScansHomePromo />
 
-          <Card className="shadow-md">
+          <Card className="shadow-md p-4">
             <CardHeader>
               <CardTitle className="text-2xl font-bold">Municipality Ordinance Searching</CardTitle>
               <CardDescription>
@@ -237,7 +237,7 @@ export default function QueryPage() {
           </Card>
 
           {activeAnswer && (
-            <Card>
+            <Card className="p-4">
               <CardHeader>
                 <CardTitle className="text-xl">Generated Compliance Answer</CardTitle>
                 {activeAnswer.resolved_municipality && (

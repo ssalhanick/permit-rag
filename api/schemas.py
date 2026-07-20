@@ -405,6 +405,7 @@ class CreateProjectRequest(BaseModel):
     longitude: float | None = Field(default=None, description="Longitude coordinate of the project")
     spaces: list[str] | None = Field(default=None, description="Selected space labels from kickoff wizard")
     work_types: list[str] | None = Field(default=None, description="Selected work-type labels from kickoff wizard")
+    materials: list[str] | None = Field(default=None, description="Selected material/scope labels from kickoff wizard")
     recommended_permits: list[str] | None = Field(default=None, description="Permit categories recommended at creation time")
     budget: str | None = Field(default=None, description="Project budget context")
     persona: str | None = Field(default=None, description="User role persona (diy, hiring_contractor, contractor)")
@@ -421,6 +422,7 @@ class UpdateProjectRequest(BaseModel):
     longitude: float | None = Field(default=None, description="Longitude coordinate of the project")
     spaces: list[str] | None = Field(default=None, description="Selected space labels from kickoff wizard")
     work_types: list[str] | None = Field(default=None, description="Selected work-type labels from kickoff wizard")
+    materials: list[str] | None = Field(default=None, description="Selected material/scope labels from kickoff wizard")
     recommended_permits: list[str] | None = Field(default=None, description="Permit categories recommended at creation time")
     budget: str | None = Field(default=None, description="Project budget context")
     persona: str | None = Field(default=None, description="User role persona (diy, hiring_contractor, contractor)")
@@ -444,6 +446,7 @@ class ProjectResponse(BaseModel):
     conservation_district: str | None = None
     spaces: list[str] | None = None
     work_types: list[str] | None = None
+    materials: list[str] | None = None
     recommended_permits: list[str] | None = None
     room_summary: dict | None = None
     budget: str | None = None
