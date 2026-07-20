@@ -415,8 +415,28 @@ export default function ProjectKickoffPage() {
     setSubmitting(true);
     const allSpaces = [...wizard.spaces];
     if (wizard.otherSpaces.trim()) allSpaces.push(wizard.otherSpaces.trim());
+
+    // Derive a name if the chat flow skipped the name step and left it blank
+    let resolvedName = wizard.name.trim();
+    if (!resolvedName) {
+      const streetWord = wizard._streetWord || "";
+      const spaceSuffix = allSpaces.length > 1
+        ? "Home Renovation"
+        : allSpaces[0] || "";
+      resolvedName = [streetWord, spaceSuffix].filter(Boolean).join(" ");
+    }
+    if (!resolvedName) {
+      // Last resort: use the street portion of the address
+      resolvedName = (wizard.address.split(",")[0] || "").trim();
+    }
+    if (!resolvedName) {
+      setError("Please enter a project name.");
+      setSubmitting(false);
+      return;
+    }
+
     const payload = {
-      name: wizard.name.trim(),
+      name: resolvedName,
       address: wizard.address.trim(),
       municipality: wizard.municipality || undefined,
       latitude: wizard.latitude || undefined,
