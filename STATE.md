@@ -31,6 +31,7 @@ _Updated: 2026-07-20 (Leonardo.ai Integration + Deterministic Kickoff)_
 - [x] Optional: `LEONARDO_API_KEY` (and `OPENAI_API_KEY`) in prod SSM for live images
 - [x] Kickoff wizard step reordering (rooms -> work -> material -> scan -> summary) and redirect to scans tab on LiDAR choice
 - [x] Sticky and automatic active project context on `/query` page via localStorage
+- [x] Fix layout squeezing on `/query` and `/debug-query` pages for desktop views
 
 ## Verification
 

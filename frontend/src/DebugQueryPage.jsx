@@ -293,8 +293,7 @@ export default function DebugQueryPage() {
 
   return (
     <div className="query-page-layout px-4 max-w-7xl mx-auto py-8">
-      <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
-        <aside className="lg:col-span-1 space-y-6">
+      <aside className="query-page-sidebar space-y-6">
           <Card className="shadow-sm">
             <CardHeader className="pb-3">
               <CardTitle className="text-lg">Project Context</CardTitle>
@@ -369,7 +368,7 @@ export default function DebugQueryPage() {
           </Card>
         </aside>
 
-        <div className="lg:col-span-3 space-y-6">
+        <main className="query-page-main space-y-6">
           <RoomScansHomePromo />
 
           <Card className="shadow-md">
@@ -764,8 +763,7 @@ export default function DebugQueryPage() {
               </TabsContent>
             </Tabs>
           )}
-        </div>
-      </div>
+        </main>
     </div>
   );
 }
