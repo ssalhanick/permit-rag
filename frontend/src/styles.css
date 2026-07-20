@@ -2,6 +2,9 @@
 @import "shadcn/tailwind.css";
 @import "@fontsource/outfit";
 @import "@fontsource/lexend";
+/* Logo keyframes — add new animations to this file */
+@import "./styles/logo-animations.css";
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
@@ -27,12 +30,61 @@
   z-index: 100;
 }
 
-.site-nav-brand {
-  font-weight: 700;
-  font-size: 1rem;
-  color: #f1f5f9;
-  letter-spacing: 0.02em;
+/* Logo link — resets anchor styles */
+.site-nav-brand-link {
+  display: flex;
+  align-items: center;
+  text-decoration: none;
+  flex-shrink: 0;
 }
+
+/* SVG logo sizing — adjust height to taste */
+.nav-brand-logo {
+  height: 40px;   /* controls logo height; width scales automatically */
+  width: auto;
+  display: block;
+}
+
+/* Nav logo: theme-aware — paths inherit from the nav background context.
+   Override the hardcoded fills with light tones that work on the dark nav. */
+.nav-logo-themed .st0,
+.nav-logo-themed .st5,
+.nav-logo-themed .st6,
+.nav-logo-themed .st7,
+.nav-logo-themed .st12,
+.nav-logo-themed .st13,
+.nav-logo-themed .st14 { fill: #f1f5f9; }   /* dark shapes → light */
+
+.nav-logo-themed .st1,
+.nav-logo-themed .st8,
+.nav-logo-themed .st10 { fill: #1e293b; }   /* light fills → dark (match nav bg) */
+
+.nav-logo-themed .st2,
+.nav-logo-themed .st4,
+.nav-logo-themed .st9  { fill: #94a3b8; }   /* mid grays */
+
+.nav-logo-themed .st3,
+.nav-logo-themed .st11 { fill: #cbd5e1; }   /* lighter grays */
+
+/* Light mode override */
+@media (prefers-color-scheme: light) {
+  .nav-logo-themed .st0,
+  .nav-logo-themed .st5,
+  .nav-logo-themed .st6,
+  .nav-logo-themed .st7,
+  .nav-logo-themed .st12,
+  .nav-logo-themed .st13,
+  .nav-logo-themed .st14 { fill: #f8fafc; }
+}
+
+/* Hero logo: larger, centered, natural SVG colors */
+.hero-logo {
+  height: 160px;
+  width: auto;
+  display: block;
+  filter: drop-shadow(0 8px 24px rgba(0,0,0,0.12));
+}
+
 
 .site-nav-links {
   display: flex;
@@ -1276,6 +1328,7 @@ input[type="button"],
   align-items: center;
   justify-content: space-between;
   width: 100%;
+  min-height: 56px; /* taller to accommodate logo */
 }
 
 .site-nav-collapse {

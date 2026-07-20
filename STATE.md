@@ -1,6 +1,6 @@
 # permit_rag — State
 
-_Updated: 2026-07-19 (Conversational project kickoff, persona extraction, custom system prompts, and migration 020)_
+_Updated: 2026-07-20 (Animated SVG logo — nav static themed + hero animated entrance)_
 
 ## Phase
 
@@ -27,6 +27,7 @@ _Updated: 2026-07-19 (Conversational project kickoff, persona extraction, custom
 - [x] Apply migration 018 to prod RDS (already applied)
 - [x] Landing page accessibility redesign (Outfit/Lexend fonts, Navy/Teal color system, tactile hero buttons hover/active/focus, logout icon)
 - [x] Conversational project kickoff (Persona, budget context, custom compliance guide rules, migration 020)
+- [x] Animated SVG logo — `LogoSVG.jsx` React component, `useLogoAnimation` hook, hero entrance on landing page, static themed version in nav
 - [ ] Deploy backend with new routes to ECS
 - [ ] Optional: `OPENAI_API_KEY` in prod for live images (mock works)
 - [ ] Device smoke: Preview → Generate image → Save → AR → DXF
@@ -59,7 +60,7 @@ cd frontend && npm run test && npm run build:mobile && npx cap sync ios
 |--------|---------------|
 | commerce | `room_image.py` OpenAI + mock PNG |
 | api | `/commerce/room-preview-image` |
-| frontend | Generate image button; device PNG + asset_url |
+| frontend | Animated SVG logo (hero + nav); Generate image button; device PNG + asset_url |
 | iOS | Blend opacity, pointer selectors, long-press generative dropdown, single-anchor mapping |
 
 ## Decisions log

@@ -1,0 +1,58 @@
+/* ============================================================
+   logo-animations.css
+   All logo keyframes and initial hidden states.
+   Imported by styles.css.
+   ============================================================ */
+
+/* ----------------------------------------------------------
+   Initial hidden states (JS assigns timed animations on mount)
+   ---------------------------------------------------------- */
+#row1, #row2, #row3,
+#tool-brush, #tool-hammer, #tool-ruler {
+  opacity: 0;
+}
+
+#check1, #check2, #check3 {
+  clip-path: inset(0 100% 0 0);
+}
+
+/* ----------------------------------------------------------
+   Keyframes
+   ---------------------------------------------------------- */
+
+/* Rows drop in from above */
+@keyframes rowIn {
+  from { opacity: 0; transform: translateY(-18px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+/* Tools slide in from the left */
+@keyframes toolIn {
+  from { opacity: 0; transform: translateX(-19.5px); }
+  to   { opacity: 1; transform: translateX(0); }
+}
+
+/* Checkmarks draw left-to-right via clip-path */
+@keyframes checkDraw {
+  from { clip-path: inset(0 100% 0 0); }
+  to   { clip-path: inset(0 0% 0 0); }
+}
+
+/* Idle bob for tools after entrance */
+@keyframes bob {
+  0%, 100% { transform: translateY(0); }
+  50%       { transform: translateY(-4.5px); }
+}
+
+/* ----------------------------------------------------------
+   App-load intro: outer wrapper fade (logo-intro class)
+   Applied via Nav.jsx className — fires once on mount
+   ---------------------------------------------------------- */
+.logo-intro {
+  animation: logo-fade-in 0.4s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+@keyframes logo-fade-in {
+  from { opacity: 0; transform: translateY(-6px) scale(0.96); }
+  to   { opacity: 1; transform: translateY(0) scale(1); }
+}

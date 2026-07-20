@@ -2,6 +2,8 @@ import React, { useState } from "react";
 import { NavLink } from "react-router-dom";
 import { useAuth } from "./context/AuthContext.jsx";
 import { LogOut } from "lucide-react";
+import LogoSVG from "./components/LogoSVG.jsx";
+
 
 export default function Nav() {
   const { user, logout } = useAuth();
@@ -13,7 +15,10 @@ export default function Nav() {
   return (
     <nav className={`site-nav ${isOpen ? "site-nav-open" : ""}`}>
       <div className="site-nav-header">
-        <span className="site-nav-brand">permit_rag</span>
+        <NavLink to="/" className="site-nav-brand-link" aria-label="permit_rag home">
+          <LogoSVG className="nav-brand-logo nav-logo-themed" aria-hidden="true" />
+        </NavLink>
+
         <button
           type="button"
           className="nav-mobile-toggle"

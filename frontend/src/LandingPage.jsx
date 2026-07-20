@@ -1,9 +1,18 @@
-import React from "react";
+import React, { useEffect } from "react";
 import { Link } from "react-router-dom";
 import { Search, ShieldCheck, Scale, FolderKanban, Sparkles, Smartphone, ArrowRight, CheckCircle2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import LogoSVG from "./components/LogoSVG.jsx";
+import { useLogoAnimation } from "./hooks/useLogoAnimation.js";
 
 export default function LandingPage() {
+  const { play } = useLogoAnimation();
+
+  // Fire the logo entrance animation once on page load
+  useEffect(() => {
+    play('moderate');
+  }, [play]);
+
   const municipalities = [
     { name: "Dallas", desc: "Residential & Commercial Codes" },
     { name: "Plano", desc: "Building & Zoning Ordinances" },
@@ -50,6 +59,11 @@ export default function LandingPage() {
       {/* Hero Section */}
       <section className="relative overflow-hidden pt-20 pb-16 md:pt-32 md:pb-24 border-b border-border bg-gradient-to-b from-background via-background/50 to-secondary/10">
         <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 text-center space-y-8">
+          {/* Animated hero logo */}
+          <div className="flex justify-center mb-2">
+            <LogoSVG animated className="hero-logo" aria-label="permit_rag logo" />
+          </div>
+
           <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full border border-accent/20 bg-accent/5 text-accent text-xs font-semibold tracking-wide uppercase font-heading animate-fade-in">
             <Sparkles className="h-3.5 w-3.5" />
             RAG-Powered DFW Permit Compliance
