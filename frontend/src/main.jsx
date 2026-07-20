@@ -3,6 +3,7 @@ import ReactDOM from "react-dom/client";
 import { BrowserRouter, Navigate, Route, Routes } from "react-router-dom";
 import App from "./App.jsx";
 import QueryPage from "./QueryPage.jsx";
+import DebugQueryPage from "./DebugQueryPage.jsx";
 import UploadPage from "./UploadPage.jsx";
 import DocumentBrowserPage from "./DocumentBrowserPage.jsx";
 import ProjectsPage from "./ProjectsPage.jsx";
@@ -62,6 +63,14 @@ ReactDOM.createRoot(document.getElementById("root")).render(
             element={
               <ProtectedRoute>
                 <QueryPage />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/debug-query"
+            element={
+              <ProtectedRoute>
+                <DebugQueryPage />
               </ProtectedRoute>
             }
           />
