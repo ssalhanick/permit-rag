@@ -401,6 +401,8 @@ class CreateProjectRequest(BaseModel):
     description: str | None = Field(default=None, max_length=500)
     municipality: str | None = Field(default=None, description="Default city scope")
     address: str | None = Field(default=None, max_length=500, description="Full civic address")
+    latitude: float | None = Field(default=None, description="Latitude coordinate of the project")
+    longitude: float | None = Field(default=None, description="Longitude coordinate of the project")
     spaces: list[str] | None = Field(default=None, description="Selected space labels from kickoff wizard")
     work_types: list[str] | None = Field(default=None, description="Selected work-type labels from kickoff wizard")
     recommended_permits: list[str] | None = Field(default=None, description="Permit categories recommended at creation time")
@@ -412,6 +414,8 @@ class UpdateProjectRequest(BaseModel):
     description: str | None = Field(default=None, max_length=500)
     municipality: str | None = Field(default=None, description="Default city scope")
     address: str | None = Field(default=None, max_length=500, description="Full civic address")
+    latitude: float | None = Field(default=None, description="Latitude coordinate of the project")
+    longitude: float | None = Field(default=None, description="Longitude coordinate of the project")
     spaces: list[str] | None = Field(default=None, description="Selected space labels from kickoff wizard")
     work_types: list[str] | None = Field(default=None, description="Selected work-type labels from kickoff wizard")
     recommended_permits: list[str] | None = Field(default=None, description="Permit categories recommended at creation time")
@@ -428,6 +432,10 @@ class ProjectResponse(BaseModel):
     created_at: datetime
     updated_at: datetime
     address: str | None = None
+    latitude: float | None = None
+    longitude: float | None = None
+    historic_district: str | None = None
+    conservation_district: str | None = None
     spaces: list[str] | None = None
     work_types: list[str] | None = None
     recommended_permits: list[str] | None = None

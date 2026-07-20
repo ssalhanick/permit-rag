@@ -1,0 +1,23 @@
+{
+  "type": "FeatureCollection",
+  "features": [
+    {
+      "type": "Feature",
+      "properties": {
+        "name": "M-Streets Conservation District"
+      },
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [
+          [
+            [-96.77, 32.82],
+            [-96.75, 32.82],
+            [-96.75, 32.83],
+            [-96.77, 32.83],
+            [-96.77, 32.82]
+          ]
+        ]
+      }
+    }
+  ]
+}

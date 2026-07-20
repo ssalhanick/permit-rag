@@ -90,6 +90,7 @@ async function retrieveSuggestion(mapboxId, sessionToken) {
     return {
       address: feat.properties?.full_address || feat.properties?.name || "",
       municipality: place.toLowerCase().replace(/\s+/g, "-") || null,
+      coordinates: feat.geometry?.coordinates || null,
     };
   } catch {
     return null;
@@ -146,6 +147,7 @@ export default function AddressAutocomplete({
       onSelect({
         address: detail?.address || label,
         municipality: detail?.municipality || null,
+        coordinates: detail?.coordinates || null,
       });
     }
   };

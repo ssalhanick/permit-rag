@@ -1,0 +1,23 @@
+{
+  "type": "FeatureCollection",
+  "features": [
+    {
+      "type": "Feature",
+      "properties": {
+        "name": "Swiss Avenue Historic District"
+      },
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [
+          [
+            [-96.78, 32.80],
+            [-96.76, 32.80],
+            [-96.76, 32.81],
+            [-96.78, 32.81],
+            [-96.78, 32.80]
+          ]
+        ]
+      }
+    }
+  ]
+}

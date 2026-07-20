@@ -47,12 +47,23 @@ def _require_role(project_id: UUID, user_id: UUID, allowed: set[str]) -> None:
 @router.post("/", response_model=ProjectResponse, status_code=201)
 def create_project(body: CreateProjectRequest, current_user: CurrentUser) -> dict:
     """Create a new project owned by the caller."""
+    historic, conservation = None, None
+    if body.latitude is not None and body.longitude is not None:
+        from rag.gis import lookup_jurisdiction_overlays
+        historic, conservation = lookup_jurisdiction_overlays(
+            body.municipality, body.latitude, body.longitude
+        )
+
     project = db_client.create_project(
         name=body.name,
         owner_user_id=current_user["user_id"],
         description=body.description,
         municipality=body.municipality,
         address=body.address,
+        latitude=body.latitude,
+        longitude=body.longitude,
+        historic_district=historic,
+        conservation_district=conservation,
         spaces=body.spaces,
         work_types=body.work_types,
         recommended_permits=body.recommended_permits,
@@ -85,16 +96,35 @@ def update_project(
 ) -> dict:
     """Update mutable project settings and kickoff wizard fields."""
     _require_role(project_id, current_user["user_id"], {"owner", "editor"})
-    updated = db_client.update_project(
-        project_id,
-        name=body.name,
-        description=body.description,
-        municipality=body.municipality,
-        address=body.address,
-        spaces=body.spaces,
-        work_types=body.work_types,
-        recommended_permits=body.recommended_permits,
-    )
+
+    update_fields = body.model_dump(exclude_unset=True)
+
+    db_params = {}
+    for field in ["name", "description", "municipality", "address", "spaces", "work_types", "recommended_permits"]:
+        if field in update_fields:
+            db_params[field] = update_fields[field]
+
+    if "latitude" in update_fields or "longitude" in update_fields:
+        lat = update_fields.get("latitude")
+        lng = update_fields.get("longitude")
+        db_params["latitude"] = lat
+        db_params["longitude"] = lng
+
+        if lat is not None and lng is not None:
+            from rag.gis import lookup_jurisdiction_overlays
+            munic = update_fields.get("municipality")
+            if munic is None:
+                current_project = db_client.get_project(project_id)
+                munic = current_project.get("municipality") if current_project else None
+
+            historic, conservation = lookup_jurisdiction_overlays(munic, lat, lng)
+            db_params["historic_district"] = historic
+            db_params["conservation_district"] = conservation
+        else:
+            db_params["historic_district"] = None
+            db_params["conservation_district"] = None
+
+    updated = db_client.update_project(project_id, **db_params)
     if not updated:
         raise HTTPException(status_code=404, detail="Project not found.")
     return dict(updated)

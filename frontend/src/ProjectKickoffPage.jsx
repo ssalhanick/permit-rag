@@ -33,6 +33,8 @@ const WIZARD_STEPS = [
 const BLANK_WIZARD = {
   address: "",
   municipality: null,
+  latitude: null,
+  longitude: null,
   name: "",
   spaces: [],
   otherSpaces: "",
@@ -137,6 +139,8 @@ export default function ProjectKickoffPage() {
   const [basicName, setBasicName] = useState("");
   const [basicAddress, setBasicAddress] = useState("");
   const [basicMunicipality, setBasicMunicipality] = useState(null);
+  const [basicLatitude, setBasicLatitude] = useState(null);
+  const [basicLongitude, setBasicLongitude] = useState(null);
 
   // Existing projects
   const [projects, setProjects] = useState([]);
@@ -244,6 +248,8 @@ export default function ProjectKickoffPage() {
       name: wizard.name.trim(),
       address: wizard.address.trim(),
       municipality: wizard.municipality || undefined,
+      latitude: wizard.latitude || undefined,
+      longitude: wizard.longitude || undefined,
       spaces: allSpaces.length ? allSpaces : undefined,
       work_types: allWorkTypes.length ? allWorkTypes : undefined,
       recommended_permits: recommendedPermits.length ? recommendedPermits : undefined,
@@ -280,6 +286,8 @@ export default function ProjectKickoffPage() {
         name: basicName.trim(),
         address: basicAddress.trim(),
         municipality: basicMunicipality || undefined,
+        latitude: basicLatitude || undefined,
+        longitude: basicLongitude || undefined,
       });
       finishNavigation(res.data?.id);
     } catch (err) {
@@ -449,9 +457,16 @@ export default function ProjectKickoffPage() {
                 id="basic-address"
                 value={basicAddress}
                 onChange={setBasicAddress}
-                onSelect={({ address, municipality }) => {
+                onSelect={({ address, municipality, coordinates }) => {
                   setBasicAddress(address);
                   setBasicMunicipality(municipality);
+                  if (coordinates) {
+                    setBasicLongitude(coordinates[0]);
+                    setBasicLatitude(coordinates[1]);
+                  } else {
+                    setBasicLongitude(null);
+                    setBasicLatitude(null);
+                  }
                 }}
                 placeholder="1234 Main St, Dallas, TX 75201"
               />
@@ -497,11 +512,13 @@ export default function ProjectKickoffPage() {
               id="wizard-address"
               value={wizard.address}
               onChange={(val) => setWizard((w) => ({ ...w, address: val }))}
-              onSelect={({ address, municipality }) => {
+              onSelect={({ address, municipality, coordinates }) => {
                 setWizard((w) => ({
                   ...w,
                   address,
                   municipality,
+                  latitude: coordinates ? coordinates[1] : null,
+                  longitude: coordinates ? coordinates[0] : null,
                   // Pre-fill name from address if not yet set
                   name: w.name || address.split(",")[0] || "",
                 }));

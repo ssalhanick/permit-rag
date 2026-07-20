@@ -33,7 +33,7 @@ _Updated: 2026-07-17 (AR full-screen image blending, HUD opacity, target-pointer
 ## Verification
 
 ```bash
-.venv/bin/python -m pytest tests/test_commerce_room_image.py tests/test_room_preview_image_route.py tests/test_room_design_intent.py -v
+.venv/bin/python -m pytest tests/test_commerce_room_image.py tests/test_room_preview_image_route.py tests/test_room_design_intent.py tests/test_gis.py -v
 cd frontend && npm run test && npm run build:mobile && npx cap sync ios
 ```
 
@@ -75,7 +75,7 @@ cd frontend && npm run test && npm run build:mobile && npx cap sync ios
 ## Canonical validation
 
 ```bash
-.venv/bin/python -m pytest tests/test_commerce_room_image.py tests/test_room_preview_image_route.py -v
+.venv/bin/python -m pytest tests/test_commerce_room_image.py tests/test_room_preview_image_route.py tests/test_gis.py -v
 cd frontend && npm run test
 npm run build:mobile && npx cap sync ios
 ```

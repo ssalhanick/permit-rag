@@ -988,6 +988,13 @@ def deactivate_user(user_id: UUID) -> dict[str, Any] | None:
 #  PROJECTS (Sprint 9)
 # ════════════════════════════════════════════════
 
+class UnsetType:
+    """Sentinel type for unset values in updates."""
+    pass
+
+UNSET = UnsetType()
+
+
 def create_project(
     *,
     name: str,
@@ -995,6 +1002,10 @@ def create_project(
     description: str | None = None,
     municipality: str | None = None,
     address: str | None = None,
+    latitude: float | None = None,
+    longitude: float | None = None,
+    historic_district: str | None = None,
+    conservation_district: str | None = None,
     spaces: list[str] | None = None,
     work_types: list[str] | None = None,
     recommended_permits: list[str] | None = None,
@@ -1005,11 +1016,13 @@ def create_project(
     sql_project = """
         INSERT INTO projects (
             name, owner_user_id, description, municipality,
-            address, spaces, work_types, recommended_permits
+            address, latitude, longitude, historic_district, conservation_district,
+            spaces, work_types, recommended_permits
         )
         VALUES (
             %(name)s, %(owner_user_id)s, %(description)s, %(municipality)s,
-            %(address)s, %(spaces)s, %(work_types)s, %(recommended_permits)s
+            %(address)s, %(latitude)s, %(longitude)s, %(historic_district)s, %(conservation_district)s,
+            %(spaces)s, %(work_types)s, %(recommended_permits)s
         )
         RETURNING *;
     """
@@ -1024,6 +1037,10 @@ def create_project(
             "description": description,
             "municipality": municipality,
             "address": address,
+            "latitude": latitude,
+            "longitude": longitude,
+            "historic_district": historic_district,
+            "conservation_district": conservation_district,
             "spaces": _json.dumps(spaces) if spaces is not None else None,
             "work_types": _json.dumps(work_types) if work_types is not None else None,
             "recommended_permits": _json.dumps(recommended_permits) if recommended_permits is not None else None,
@@ -1061,6 +1078,10 @@ def update_project(
     description: str | None = None,
     municipality: str | None = None,
     address: str | None = None,
+    latitude: float | None | UnsetType = UNSET,
+    longitude: float | None | UnsetType = UNSET,
+    historic_district: str | None | UnsetType = UNSET,
+    conservation_district: str | None | UnsetType = UNSET,
     spaces: list[str] | None = None,
     work_types: list[str] | None = None,
     recommended_permits: list[str] | None = None,
@@ -1083,6 +1104,18 @@ def update_project(
     if address is not None:
         assignments.append("address = %(address)s")
         params["address"] = address
+    if latitude is not UNSET:
+        assignments.append("latitude = %(latitude)s")
+        params["latitude"] = latitude
+    if longitude is not UNSET:
+        assignments.append("longitude = %(longitude)s")
+        params["longitude"] = longitude
+    if historic_district is not UNSET:
+        assignments.append("historic_district = %(historic_district)s")
+        params["historic_district"] = historic_district
+    if conservation_district is not UNSET:
+        assignments.append("conservation_district = %(conservation_district)s")
+        params["conservation_district"] = conservation_district
     if spaces is not None:
         assignments.append("spaces = %(spaces)s::jsonb")
         params["spaces"] = _json.dumps(spaces)
