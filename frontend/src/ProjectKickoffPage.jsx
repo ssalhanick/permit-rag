@@ -147,7 +147,6 @@ export default function ProjectKickoffPage() {
   const steps = useMemo(() => {
     const list = [
       { key: "address", question: "Where is the project located?" },
-      { key: "name", question: "What would you like to call this project?" },
       { key: "persona", question: "What is your role on this project?" },
       { key: "budget", question: "What is your estimated project budget?" },
       { key: "spaces", question: "Which spaces will be involved?" },
@@ -158,6 +157,7 @@ export default function ProjectKickoffPage() {
     }
     list.push(
       { key: "chat", question: "Let's align on some details to customize your compliance guide." },
+      { key: "name", question: "What would you like to call this project?" },
       { key: "confirm", question: "Here's what we found — does this look right?" }
     );
     return list;
@@ -270,6 +270,19 @@ export default function ProjectKickoffPage() {
     }
   }, [wizardStep, chatHistory.length, wizard.municipality, wizard.persona, wizard.budget, steps]);
 
+  // Auto-populate project name from street + first selected space when reaching the name step
+  useEffect(() => {
+    const currentStep = steps[wizardStep - 1];
+    if (currentStep?.key !== "name") return;
+    // Only auto-populate if the user hasn't manually typed something
+    const streetWord = wizard._streetWord || "";
+    const firstSpace = wizard.spaces?.[0] || wizard.otherSpaces?.trim() || "";
+    if (streetWord || firstSpace) {
+      const suggested = [streetWord, firstSpace].filter(Boolean).join(" ");
+      setWizard((w) => ({ ...w, name: w.name || suggested }));
+    }
+  }, [wizardStep, steps]);
+
   const handleVoiceInput = async () => {
     try {
       const { startSpeechRecognition } = await import("./services/roomCapture.js");
@@ -376,9 +389,11 @@ export default function ProjectKickoffPage() {
       setError("Please enter a project address.");
       return;
     }
-    if (currentStep?.key === "name" && !wizard.name.trim()) {
-      setError("Please enter a project name.");
-      return;
+    if (currentStep?.key === "name") {
+      if (!wizard.name.trim()) {
+        setError("Please enter a project name.");
+        return;
+      }
     }
     if (currentStep?.key === "persona" && !wizard.persona) {
       setError("Please select your role on this project.");
@@ -672,14 +687,16 @@ export default function ProjectKickoffPage() {
               value={wizard.address}
               onChange={(val) => setWizard((w) => ({ ...w, address: val }))}
               onSelect={({ address, municipality, coordinates }) => {
+                // Extract street name portion (e.g. "Holliday" from "123 Holliday Ln, ...")
+                const street = address.split(",")[0] || "";
+                const streetWord = street.trim().split(" ").slice(1).join(" ") || street.trim();
                 setWizard((w) => ({
                   ...w,
                   address,
                   municipality,
                   latitude: coordinates ? coordinates[1] : null,
                   longitude: coordinates ? coordinates[0] : null,
-                  // Pre-fill name from address if not yet set
-                  name: w.name || address.split(",")[0] || "",
+                  _streetWord: streetWord,
                 }));
               }}
               placeholder="1234 Main St, Dallas, TX 75201"
@@ -687,7 +704,7 @@ export default function ProjectKickoffPage() {
           </div>
         )}
 
-        {/* Step 2 — Project name */}
+        {/* Name step — last question, auto-filled from street + first space */}
         {step?.key === "name" && (
           <div className="kickoff-step-body">
             <div className="kickoff-form-group">
@@ -697,7 +714,7 @@ export default function ProjectKickoffPage() {
                 type="text"
                 value={wizard.name}
                 onChange={(e) => setWizard((w) => ({ ...w, name: e.target.value }))}
-                placeholder="e.g. Main St Kitchen Remodel"
+                placeholder="e.g. Holliday Kitchen"
                 maxLength={120}
                 autoFocus
               />
