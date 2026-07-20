@@ -50,24 +50,42 @@ def _require_role(project_id: UUID, user_id: UUID, allowed: set[str]) -> None:
 def create_project(body: CreateProjectRequest, current_user: CurrentUser) -> dict:
     """Create a new project owned by the caller."""
     historic, conservation = None, None
-    if body.latitude is not None and body.longitude is not None:
+    municipality = body.municipality
+    latitude = body.latitude
+    longitude = body.longitude
+
+    if (latitude is None or longitude is None or municipality is None) and body.address:
+        from rag.jurisdiction_resolver import resolve_jurisdiction
+        try:
+            res = resolve_jurisdiction(body.address)
+            if res.municipality:
+                municipality = res.municipality
+            if res.geocode:
+                latitude = res.geocode.lat
+                longitude = res.geocode.lng
+        except Exception as e:
+            import logging
+            logging.getLogger(__name__).warning("create_project: Failed to auto-resolve jurisdiction for %r: %s", body.address, e)
+
+    if latitude is not None and longitude is not None:
         from rag.gis import lookup_jurisdiction_overlays
         historic, conservation = lookup_jurisdiction_overlays(
-            body.municipality, body.latitude, body.longitude
+            municipality, latitude, longitude
         )
 
     project = db_client.create_project(
         name=body.name,
         owner_user_id=current_user["user_id"],
         description=body.description,
-        municipality=body.municipality,
+        municipality=municipality,
         address=body.address,
-        latitude=body.latitude,
-        longitude=body.longitude,
+        latitude=latitude,
+        longitude=longitude,
         historic_district=historic,
         conservation_district=conservation,
         spaces=body.spaces,
         work_types=body.work_types,
+        materials=body.materials,
         recommended_permits=body.recommended_permits,
         budget=body.budget,
         persona=body.persona,

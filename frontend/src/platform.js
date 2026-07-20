@@ -30,7 +30,7 @@ export function getPlatformName() {
 
 /** Mobile builds should not load Mapbox (deferred on mobile v1). */
 export function isMapboxEnabled() {
-  return !isNativePlatform();
+  return true;
 }
 
 /** OAuth / deep-link redirect URI for Cognito callbacks. */
