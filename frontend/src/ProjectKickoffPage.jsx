@@ -154,12 +154,12 @@ export default function ProjectKickoffPage() {
       { key: "budget", question: "What is your estimated project budget?" },
       { key: "spaces", question: "Which spaces will be involved?" },
       { key: "workTypes", question: "What type of work are you planning to do?" },
+      { key: "materials", question: "What specific materials or scopes are you planning?" },
     ];
     if (hasLidar) {
       list.push({ key: "roomScan", question: "Would you like to perform a 3D room scan?" });
     }
     list.push(
-      { key: "materials", question: "What specific materials or scopes are you planning?" },
       { key: "name", question: "What would you like to call this project?" },
       { key: "confirm", question: "Here's what we found — does this look right?" }
     );
@@ -210,6 +210,10 @@ export default function ProjectKickoffPage() {
   const [prefillLoading, setPrefillLoading] = useState(Boolean(editProjectId));
 
   const finishNavigation = (projectId) => {
+    if (wizard.doRoomScan && projectId) {
+      navigate(`/projects/${projectId}/scans`, { replace: true });
+      return;
+    }
     if (returnTo === "/projects" && projectId) {
       navigate(`/projects?projectId=${projectId}`, { replace: true });
       return;
@@ -487,11 +491,15 @@ export default function ProjectKickoffPage() {
     try {
       if (editingProjectId) {
         const res = await updateProject(editingProjectId, payload);
-        finishNavigation(res.data?.id || editingProjectId);
+        const pid = res.data?.id || editingProjectId;
+        if (pid) localStorage.setItem("activeProjectId", pid);
+        finishNavigation(pid);
         return;
       }
       const res = await createProject(payload);
-      finishNavigation(res.data?.id);
+      const pid = res.data?.id;
+      if (pid) localStorage.setItem("activeProjectId", pid);
+      finishNavigation(pid);
     } catch (err) {
       setError(err?.message || (editingProjectId ? "Failed to update project." : "Failed to create project."));
       setSubmitting(false);
@@ -518,7 +526,9 @@ export default function ProjectKickoffPage() {
         latitude: basicLatitude || undefined,
         longitude: basicLongitude || undefined,
       });
-      finishNavigation(res.data?.id);
+      const pid = res.data?.id;
+      if (pid) localStorage.setItem("activeProjectId", pid);
+      finishNavigation(pid);
     } catch (err) {
       setError(err?.message || "Failed to create project.");
       setSubmitting(false);

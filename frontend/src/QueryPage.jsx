@@ -18,7 +18,10 @@ export default function QueryPage() {
   const [activeAnswerId, setActiveAnswerId] = useState(null);
   
   const [projects, setProjects] = useState([]);
-  const [activeProjectId, setActiveProjectId] = useState("");
+  const [activeProjectId, setActiveProjectId] = useState(() => {
+    const params = new URLSearchParams(window.location.search);
+    return params.get("p") || localStorage.getItem("activeProjectId") || "";
+  });
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
@@ -29,9 +32,23 @@ export default function QueryPage() {
   }, []);
 
   useEffect(() => {
+    if (activeProjectId) {
+      localStorage.setItem("activeProjectId", activeProjectId);
+    } else {
+      localStorage.removeItem("activeProjectId");
+    }
+  }, [activeProjectId]);
+
+  useEffect(() => {
     if (user) {
       fetchProjects()
-        .then((res) => setProjects(res.data || []))
+        .then((res) => {
+          const list = res.data || [];
+          setProjects(list);
+          if (activeProjectId && !list.some((p) => p.id === activeProjectId)) {
+            setActiveProjectId("");
+          }
+        })
         .catch(() => {});
     } else {
       setProjects([]);
