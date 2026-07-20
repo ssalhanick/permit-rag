@@ -283,6 +283,24 @@ export default function ProjectKickoffPage() {
     }
   }, [wizardStep, steps]);
 
+  // Backfill name when chat flow skips name step and lands on confirm
+  useEffect(() => {
+    const currentStep = steps[wizardStep - 1];
+    if (currentStep?.key !== "confirm") return;
+    if (wizard.name.trim()) return; // already set
+    const streetWord = wizard._streetWord || "";
+    const spaces = [
+      ...wizard.spaces,
+      ...(wizard.otherSpaces?.trim() ? [wizard.otherSpaces.trim()] : []),
+    ];
+    const spaceSuffix = spaces.length > 1 ? "Home Renovation" : spaces[0] || "";
+    const derived = [streetWord, spaceSuffix].filter(Boolean).join(" ")
+      || (wizard.address.split(",")[0] || "").trim();
+    if (derived) {
+      setWizard((w) => ({ ...w, name: w.name || derived }));
+    }
+  }, [wizardStep, steps]);
+
   const handleVoiceInput = async () => {
     try {
       const { startSpeechRecognition } = await import("./services/roomCapture.js");
