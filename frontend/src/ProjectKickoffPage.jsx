@@ -871,6 +871,7 @@ export default function ProjectKickoffPage() {
           {isLastStep ? (
             <button
               type="button"
+              className="primary-button"
               onClick={submitWizard}
               disabled={submitting}
             >
@@ -881,6 +882,7 @@ export default function ProjectKickoffPage() {
           ) : step?.key === "chat" ? null : (
             <button
               type="button"
+              className="primary-button"
               onClick={wizardNext}
               disabled={submitting}
             >
