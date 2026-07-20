@@ -191,9 +191,8 @@ resource "aws_security_group" "rds" {
 #  RDS PostgreSQL Database Instance
 # ==========================================
 
-resource "random_password" "db_password" {
-  length  = 32
-  special = false
+data "aws_ssm_parameter" "db_password" {
+  name = "/permit_rag/prod/db_password"
 }
 
 resource "aws_db_subnet_group" "rds" {
@@ -215,7 +214,7 @@ resource "aws_db_instance" "postgres" {
   instance_class         = "db.t4g.micro" # Cost-effective / Free Tier eligible
   db_name                = "permit_rag"
   username               = "postgres"
-  password               = random_password.db_password.result
+  password               = data.aws_ssm_parameter.db_password.value
   db_subnet_group_name   = aws_db_subnet_group.rds.name
   vpc_security_group_ids = [aws_security_group.rds.id]
   publicly_accessible    = true
@@ -356,9 +355,9 @@ resource "aws_ecs_task_definition" "backend" {
         { name = "LOG_LEVEL", value = "INFO" },
         { name = "API_CORS_ALLOW_LOCALHOST", value = "false" },
         { name = "API_CORS_ALLOW_ORIGINS", value = "https://permits.scottsalhanick.com,capacitor://localhost,https://localhost,com.scottsalhanick.permitrag://" },
-        { name = "DATABASE_URL", value = "postgresql://postgres:${random_password.db_password.result}@${aws_db_instance.postgres.endpoint}/permit_rag?sslmode=require" },
-        { name = "CORPUS_WRITER_URL", value = "postgresql://postgres:${random_password.db_password.result}@${aws_db_instance.postgres.endpoint}/permit_rag?sslmode=require" },
-        { name = "APP_READER_URL", value = "postgresql://postgres:${random_password.db_password.result}@${aws_db_instance.postgres.endpoint}/permit_rag?sslmode=require" },
+        { name = "DATABASE_URL", value = "postgresql://postgres:${data.aws_ssm_parameter.db_password.value}@${aws_db_instance.postgres.endpoint}/permit_rag?sslmode=require" },
+        { name = "CORPUS_WRITER_URL", value = "postgresql://postgres:${data.aws_ssm_parameter.db_password.value}@${aws_db_instance.postgres.endpoint}/permit_rag?sslmode=require" },
+        { name = "APP_READER_URL", value = "postgresql://postgres:${data.aws_ssm_parameter.db_password.value}@${aws_db_instance.postgres.endpoint}/permit_rag?sslmode=require" },
         { name = "LLM_MODEL", value = "claude-haiku-4-5-20251001" },
         { name = "LLM_PROVIDER", value = "anthropic" },
         { name = "OPENAI_IMAGE_MODEL", value = "gpt-image-1" }
