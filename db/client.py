@@ -1009,6 +1009,9 @@ def create_project(
     spaces: list[str] | None = None,
     work_types: list[str] | None = None,
     recommended_permits: list[str] | None = None,
+    budget: str | None = None,
+    persona: str | None = None,
+    custom_system_prompt: str | None = None,
 ) -> dict[str, Any]:
     """Create a project and auto-enroll the owner in one transaction."""
     import json as _json
@@ -1017,12 +1020,12 @@ def create_project(
         INSERT INTO projects (
             name, owner_user_id, description, municipality,
             address, latitude, longitude, historic_district, conservation_district,
-            spaces, work_types, recommended_permits
+            spaces, work_types, recommended_permits, budget, persona, custom_system_prompt
         )
         VALUES (
             %(name)s, %(owner_user_id)s, %(description)s, %(municipality)s,
             %(address)s, %(latitude)s, %(longitude)s, %(historic_district)s, %(conservation_district)s,
-            %(spaces)s, %(work_types)s, %(recommended_permits)s
+            %(spaces)s, %(work_types)s, %(recommended_permits)s, %(budget)s, %(persona)s, %(custom_system_prompt)s
         )
         RETURNING *;
     """
@@ -1044,6 +1047,9 @@ def create_project(
             "spaces": _json.dumps(spaces) if spaces is not None else None,
             "work_types": _json.dumps(work_types) if work_types is not None else None,
             "recommended_permits": _json.dumps(recommended_permits) if recommended_permits is not None else None,
+            "budget": budget,
+            "persona": persona,
+            "custom_system_prompt": custom_system_prompt,
         }).fetchone()
         conn.execute(sql_member, {"project_id": row["id"], "user_id": owner_user_id})
         conn.commit()
@@ -1086,6 +1092,9 @@ def update_project(
     work_types: list[str] | None = None,
     recommended_permits: list[str] | None = None,
     room_summary: dict[str, Any] | None = None,
+    budget: str | None = None,
+    persona: str | None = None,
+    custom_system_prompt: str | None = None,
 ) -> dict[str, Any] | None:
     """Update mutable project fields."""
     import json as _json
@@ -1128,6 +1137,15 @@ def update_project(
     if room_summary is not None:
         assignments.append("room_summary = %(room_summary)s::jsonb")
         params["room_summary"] = _json.dumps(room_summary)
+    if budget is not None:
+        assignments.append("budget = %(budget)s")
+        params["budget"] = budget
+    if persona is not None:
+        assignments.append("persona = %(persona)s")
+        params["persona"] = persona
+    if custom_system_prompt is not None:
+        assignments.append("custom_system_prompt = %(custom_system_prompt)s")
+        params["custom_system_prompt"] = custom_system_prompt
     if not assignments:
         return get_project(project_id)
     sql = f"UPDATE projects SET {', '.join(assignments)} WHERE id = %(id)s RETURNING *;"

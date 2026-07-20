@@ -30,6 +30,8 @@ from api.schemas import (
     UpdateProjectRequest,
     UpsertRoomScansRequest,
     UserRoomScanResponse,
+    KickoffChatRequest,
+    KickoffChatResponse,
 )
 from db import client as db_client
 
@@ -67,8 +69,30 @@ def create_project(body: CreateProjectRequest, current_user: CurrentUser) -> dic
         spaces=body.spaces,
         work_types=body.work_types,
         recommended_permits=body.recommended_permits,
+        budget=body.budget,
+        persona=body.persona,
+        custom_system_prompt=body.custom_system_prompt,
     )
     return dict(project)
+
+
+@router.post("/kickoff/chat", response_model=KickoffChatResponse)
+def kickoff_chat(body: KickoffChatRequest, current_user: CurrentUser) -> dict:
+    """Drive the project kickoff dialog via Claude/Ollama."""
+    from rag.generator import generate_kickoff_chat_response
+
+    history_dicts = [{"role": msg.role, "content": msg.content} for msg in body.history]
+    try:
+        res = generate_kickoff_chat_response(
+            history_dicts,
+            address=body.address,
+            municipality=body.municipality,
+            spaces=body.spaces,
+            work_types=body.work_types,
+        )
+        return res
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=f"LLM Chat Error: {exc}") from exc
 
 
 @router.get("/", response_model=list[ProjectResponse])
@@ -100,7 +124,10 @@ def update_project(
     update_fields = body.model_dump(exclude_unset=True)
 
     db_params = {}
-    for field in ["name", "description", "municipality", "address", "spaces", "work_types", "recommended_permits"]:
+    for field in [
+        "name", "description", "municipality", "address", "spaces",
+        "work_types", "recommended_permits", "budget", "persona", "custom_system_prompt"
+    ]:
         if field in update_fields:
             db_params[field] = update_fields[field]
 

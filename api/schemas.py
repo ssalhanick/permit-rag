@@ -406,6 +406,9 @@ class CreateProjectRequest(BaseModel):
     spaces: list[str] | None = Field(default=None, description="Selected space labels from kickoff wizard")
     work_types: list[str] | None = Field(default=None, description="Selected work-type labels from kickoff wizard")
     recommended_permits: list[str] | None = Field(default=None, description="Permit categories recommended at creation time")
+    budget: str | None = Field(default=None, description="Project budget context")
+    persona: str | None = Field(default=None, description="User role persona (diy, hiring_contractor, contractor)")
+    custom_system_prompt: str | None = Field(default=None, description="Generated system prompt instructions")
 
 
 class UpdateProjectRequest(BaseModel):
@@ -419,6 +422,9 @@ class UpdateProjectRequest(BaseModel):
     spaces: list[str] | None = Field(default=None, description="Selected space labels from kickoff wizard")
     work_types: list[str] | None = Field(default=None, description="Selected work-type labels from kickoff wizard")
     recommended_permits: list[str] | None = Field(default=None, description="Permit categories recommended at creation time")
+    budget: str | None = Field(default=None, description="Project budget context")
+    persona: str | None = Field(default=None, description="User role persona (diy, hiring_contractor, contractor)")
+    custom_system_prompt: str | None = Field(default=None, description="Generated system prompt instructions")
 
 
 class ProjectResponse(BaseModel):
@@ -440,6 +446,34 @@ class ProjectResponse(BaseModel):
     work_types: list[str] | None = None
     recommended_permits: list[str] | None = None
     room_summary: dict | None = None
+    budget: str | None = None
+    persona: str | None = None
+    custom_system_prompt: str | None = None
+
+
+class KickoffChatMessage(BaseModel):
+    """A message in the project kickoff chat history."""
+    role: str = Field(..., description="Role of the sender, assistant or user")
+    content: str = Field(..., description="Content of the message")
+
+
+class KickoffChatRequest(BaseModel):
+    """Payload to drive project kickoff chat progression."""
+    history: list[KickoffChatMessage] = Field(..., description="Chat message history so far")
+    address: str | None = Field(default=None, description="Project address context")
+    municipality: str | None = Field(default=None, description="Project city context")
+    spaces: list[str] | None = Field(default=None, description="Project spaces selected")
+    work_types: list[str] | None = Field(default=None, description="Project work types selected")
+
+
+class KickoffChatResponse(BaseModel):
+    """Kickoff chat response showing next question or final prompt synthesis."""
+    next_question: str | None = Field(default=None, description="Next prompt question from LLM")
+    is_complete: bool = Field(..., description="True if LLM has gathered enough context to construct project profile")
+    budget: str | None = Field(default=None, description="Extracted budget string if complete")
+    persona: str | None = Field(default=None, description="Extracted persona string if complete")
+    custom_system_prompt: str | None = Field(default=None, description="Synthesized system prompt if complete")
+
 
 
 class AssetSyncAckRequest(BaseModel):

@@ -302,6 +302,13 @@ export async function createProject(payload) {
   });
 }
 
+export async function postKickoffChat(payload) {
+  return await requestJson("/projects/kickoff/chat", {
+    method: "POST",
+    body: payload,
+  });
+}
+
 export async function updateProject(projectId, payload) {
   return await requestJson(`/projects/${projectId}`, {
     method: "PATCH",

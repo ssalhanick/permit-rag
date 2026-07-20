@@ -2202,6 +2202,116 @@ body.native-app .site-nav {
   color: #1e293b;
 }
 
+/* Kickoff Interactive Chat */
+.kickoff-chat-container {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+  background: rgba(15, 76, 58, 0.2);
+  border-radius: 12px;
+  padding: 1rem;
+  border: 1px solid rgba(199, 239, 207, 0.2);
+}
+
+.kickoff-chat-history {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  max-height: 350px;
+  overflow-y: auto;
+  padding-right: 0.5rem;
+}
+
+.kickoff-chat-row {
+  display: flex;
+  width: 100%;
+}
+
+.kickoff-chat-row.assistant {
+  justify-content: flex-start;
+}
+
+.kickoff-chat-row.user {
+  justify-content: flex-end;
+}
+
+.kickoff-chat-row.user .kickoff-chat-bubble {
+  background: #2d8a7a;
+  border-radius: 12px 12px 3px 12px;
+}
+
+.kickoff-chat-row.user .kickoff-chat-bubble p {
+  color: #f7faf8;
+}
+
+.kickoff-chat-bubble.loading p {
+  font-style: italic;
+  opacity: 0.8;
+}
+
+.kickoff-chat-input-form {
+  display: flex;
+  gap: 0.5rem;
+  margin-top: 0.5rem;
+}
+
+.kickoff-chat-input-form input {
+  flex-grow: 1;
+  background: rgba(14, 42, 71, 0.6);
+  border: 1px solid rgba(199, 239, 207, 0.3);
+  border-radius: 6px;
+  padding: 0.5rem 0.75rem;
+  color: #f7faf8;
+  font-family: inherit;
+}
+
+.kickoff-chat-input-form input:focus {
+  outline: 2px solid #c7efcf;
+}
+
+.kickoff-chat-input-form button {
+  background: #c7efcf;
+  color: #0e2a47;
+  border: none;
+  border-radius: 6px;
+  padding: 0.5rem 1rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.kickoff-chat-input-form button:hover:not(:disabled) {
+  background: #2d8a7a;
+  color: #f7faf8;
+  transform: scale(1.02);
+}
+
+.kickoff-chat-input-form button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* Custom Prompt Guideline Box */
+.kickoff-custom-prompt-section {
+  margin-top: 1.5rem;
+}
+
+.kickoff-custom-prompt-box {
+  background: rgba(15, 76, 58, 0.3);
+  border: 1px dashed rgba(199, 239, 207, 0.4);
+  border-radius: 8px;
+  padding: 0.75rem 1rem;
+  margin-top: 0.5rem;
+}
+
+.kickoff-custom-prompt-box p {
+  margin: 0;
+  font-size: 0.9rem;
+  line-height: 1.4;
+  color: #f7faf8;
+  white-space: pre-line;
+}
+
 /* Step body */
 .kickoff-step-body {
   margin-bottom: 1.25rem;

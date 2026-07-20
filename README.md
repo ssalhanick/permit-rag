@@ -59,6 +59,7 @@ py -m pytest tests/test_commerce_takeoff.py tests/test_commerce_product_resolver
 - [ ] 3D Map Integration — CesiumJS city boundaries + site overlay
 
 ### Completed
+- [x] Sprint 17: Conversational Project Kickoff — Interactive LLM-driven dialog to extract user persona, budget, and materials. Automatically synthesizes a project-specific custom system prompt (migration 020) which is injected into all future compliance queries.
 - [x] Sprint 17: Room generative preview — `POST /commerce/room-preview-image`, OpenAI/mock images, device `asset_url`, AR prefers generated asset over product photo ([docs/room_generative_preview.md](docs/room_generative_preview.md))
 - [x] Sprint 17: Room design Preview/Save — scan_id design-intent API, token usage (migration 018), `redesign.json` v2 revisions on device, `RoomDesignPage`, DXF export, demoted Scan House
 - [x] Sprint 16: Commerce overlays — `commerce/` module, SerpApi HD resolver + mock fallback, `product_ref` / qty takeoff on design intent, product cards + materials estimate UI, AR product textures

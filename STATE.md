@@ -1,6 +1,6 @@
 # permit_rag — State
 
-_Updated: 2026-07-17 (AR full-screen image blending, HUD opacity, target-pointer selection, and long-press dropdown dialog)_
+_Updated: 2026-07-19 (Conversational project kickoff, persona extraction, custom system prompts, and migration 020)_
 
 ## Phase
 
@@ -26,6 +26,7 @@ _Updated: 2026-07-17 (AR full-screen image blending, HUD opacity, target-pointer
 - [x] Fix double-image ghosting/flicker by performing in-place material updates instead of scene rebuilds on texture preloads
 - [x] Apply migration 018 to prod RDS (already applied)
 - [x] Landing page accessibility redesign (Outfit/Lexend fonts, Navy/Teal color system, tactile hero buttons hover/active/focus, logout icon)
+- [x] Conversational project kickoff (Persona, budget context, custom compliance guide rules, migration 020)
 - [ ] Deploy backend with new routes to ECS
 - [ ] Optional: `OPENAI_API_KEY` in prod for live images (mock works)
 - [ ] Device smoke: Preview → Generate image → Save → AR → DXF
@@ -33,7 +34,7 @@ _Updated: 2026-07-17 (AR full-screen image blending, HUD opacity, target-pointer
 ## Verification
 
 ```bash
-.venv/bin/python -m pytest tests/test_commerce_room_image.py tests/test_room_preview_image_route.py tests/test_room_design_intent.py tests/test_gis.py -v
+.venv/bin/python -m pytest tests/test_commerce_room_image.py tests/test_room_preview_image_route.py tests/test_room_design_intent.py tests/test_gis.py tests/test_kickoff_chat.py -v
 cd frontend && npm run test && npm run build:mobile && npx cap sync ios
 ```
 
@@ -75,7 +76,7 @@ cd frontend && npm run test && npm run build:mobile && npx cap sync ios
 ## Canonical validation
 
 ```bash
-.venv/bin/python -m pytest tests/test_commerce_room_image.py tests/test_room_preview_image_route.py tests/test_gis.py -v
+.venv/bin/python -m pytest tests/test_commerce_room_image.py tests/test_room_preview_image_route.py tests/test_gis.py tests/test_kickoff_chat.py -v
 cd frontend && npm run test
 npm run build:mobile && npx cap sync ios
 ```

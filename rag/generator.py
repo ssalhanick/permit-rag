@@ -66,6 +66,46 @@ Output style:
 """
 
 
+def _build_system_prompt(project_context: dict[str, Any] | None = None) -> str:
+    """Build system prompt with project specific guidelines."""
+    if project_context and project_context.get("custom_system_prompt"):
+        return f"{SYSTEM_PROMPT}\n\nProject Specific Guidelines:\n{project_context['custom_system_prompt']}"
+    return SYSTEM_PROMPT
+
+
+KICKOFF_SYSTEM_PROMPT = """\
+You are an expert construction permit assistant. You are guiding a user through setting up a new project.
+We already know:
+- Address: {address}
+- Municipality: {municipality}
+- Spaces involved: {spaces}
+- Work types: {work_types}
+
+Your goal is to converse with the user and determine:
+1. Persona: Are they a DIYer (diy), hiring a contractor (hiring_contractor), or a contractor themselves (contractor)?
+2. Budget: What is their estimated budget?
+3. Materials and Scope: Are there specific materials or structural scope details?
+
+Ask exactly one brief question at a time to gather missing details. Keep questions friendly, helpful, and under 2 sentences.
+
+If and only if you have enough information about all three aspects (persona, budget, and scope), do NOT ask another question. Instead, output a JSON block with:
+{{
+  "is_complete": true,
+  "persona": "diy" | "hiring_contractor" | "contractor",
+  "budget": "extracted budget description",
+  "custom_system_prompt": "A detailed system prompt containing 3-4 bullet guidelines for future RAG queries based on the project profile. E.g. 'DIYer compliance path', 'Include Texas code exceptions for homeowners', 'Budget constraints', 'Dallas kitchen clearances info'."
+}}
+Otherwise, output:
+{{
+  "is_complete": false,
+  "next_question": "Your next follow-up question here"
+}}
+
+You must return ONLY a JSON object. Do not include markdown formatting or extra text outside the JSON.
+"""
+
+
+
 def _env_bool(name: str, default: bool) -> bool:
     """Parse boolean environment variable values."""
     raw = os.environ.get(name)
@@ -133,7 +173,7 @@ def _generate_with_ollama(
     payload = {
         "model": model,
         "messages": [
-            {"role": "system", "content": SYSTEM_PROMPT},
+            {"role": "system", "content": _build_system_prompt(project_context)},
             {"role": "user", "content": user_message},
         ],
         "stream": False,
@@ -343,16 +383,17 @@ def generate_answer(
     client = anthropic.Anthropic(api_key=api_key)
     cache_control = _prompt_cache_control()
     system_payload: Any
+    system_prompt_str = _build_system_prompt(project_context)
     if cache_enabled:
         system_payload = [
             {
                 "type": "text",
-                "text": SYSTEM_PROMPT,
+                "text": system_prompt_str,
                 "cache_control": cache_control,
             }
         ]
     else:
-        system_payload = SYSTEM_PROMPT
+        system_payload = system_prompt_str
     response = client.messages.create(
         model=model,
         max_tokens=max_tokens,
@@ -390,3 +431,98 @@ def generate_answer(
     )
 
     return result
+
+
+def _parse_json_response(content: str) -> dict[str, Any]:
+    """Parse JSON response from LLM, stripping markdown wrappers if present."""
+    import json
+    import re
+    cleaned = content.strip()
+    match = re.search(r"```(?:json)?\s*(.*?)\s*```", cleaned, re.DOTALL)
+    if match:
+        cleaned = match.group(1).strip()
+    try:
+        return json.loads(cleaned)
+    except json.JSONDecodeError:
+        log.warning("Failed to parse LLM JSON: %r", content)
+        return {
+            "is_complete": False,
+            "next_question": "Could you please tell me more details about your project persona and budget?",
+        }
+
+
+def generate_kickoff_chat_response(
+    history: list[dict[str, str]],
+    *,
+    address: str | None = None,
+    municipality: str | None = None,
+    spaces: list[str] | None = None,
+    work_types: list[str] | None = None,
+) -> dict[str, Any]:
+    """
+    Drive the project kickoff chat.
+    Uses LLM to decide if info is complete, ask the next question,
+    or extract profile details + synthesize system prompt.
+    """
+    capabilities = get_provider_capabilities()
+
+    spaces_str = ", ".join(spaces) if spaces else "None"
+    work_types_str = ", ".join(work_types) if work_types else "None"
+    sys_prompt = KICKOFF_SYSTEM_PROMPT.format(
+        address=address or "Unknown",
+        municipality=municipality or "Unknown",
+        spaces=spaces_str,
+        work_types=work_types_str,
+    )
+
+    if capabilities.supports_local_runtime:
+        import requests
+
+        base_url = os.environ.get("OLLAMA_BASE_URL", "http://localhost:11434").rstrip("/")
+        timeout_s = int(os.environ.get("OLLAMA_TIMEOUT_SECONDS", "180"))
+        model = os.environ.get("OLLAMA_MODEL", "qwen2.5:14b-instruct-q4_K_M")
+
+        ollama_messages = [{"role": "system", "content": sys_prompt}]
+        for msg in history:
+            ollama_messages.append({"role": msg["role"], "content": msg["content"]})
+
+        payload = {
+            "model": model,
+            "messages": ollama_messages,
+            "stream": False,
+            "format": "json",
+            "options": {
+                "temperature": 0.0,
+            },
+        }
+        response = requests.post(
+            f"{base_url}/api/chat",
+            json=payload,
+            timeout=timeout_s,
+        )
+        response.raise_for_status()
+        content = response.json().get("message", {}).get("content", "")
+        return _parse_json_response(content)
+
+    import anthropic
+
+    api_key = os.environ.get("ANTHROPIC_API_KEY")
+    if not api_key:
+        raise RuntimeError("ANTHROPIC_API_KEY is not set.")
+
+    model = os.environ.get("LLM_MODEL", "claude-haiku-4-5-20251001")
+    client = anthropic.Anthropic(api_key=api_key)
+
+    anthropic_messages = []
+    for msg in history:
+        anthropic_messages.append({"role": msg["role"], "content": msg["content"]})
+
+    response = client.messages.create(
+        model=model,
+        max_tokens=1024,
+        temperature=0.0,
+        system=sys_prompt,
+        messages=anthropic_messages,
+    )
+    content = response.content[0].text
+    return _parse_json_response(content)

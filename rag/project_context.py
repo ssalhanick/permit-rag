@@ -29,6 +29,9 @@ def load_project_context(project_id: UUID | str) -> dict[str, Any] | None:
         "spaces": project.get("spaces") or [],
         "work_types": project.get("work_types") or [],
         "recommended_permits": project.get("recommended_permits") or [],
+        "budget": project.get("budget"),
+        "persona": project.get("persona"),
+        "custom_system_prompt": project.get("custom_system_prompt"),
     }
     if active_room:
         context["active_room"] = {

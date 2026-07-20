@@ -11,7 +11,7 @@ import React, { useEffect, useMemo, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import AddressAutocomplete from "./components/AddressAutocomplete.jsx";
 import PermitTags from "./components/PermitTags.jsx";
-import { createProject, fetchProjects, getProject, updateProject } from "./api.js";
+import { createProject, fetchProjects, getProject, updateProject, postKickoffChat } from "./api.js";
 import { projectToWizardState } from "./projectKickoffRoutes.js";
 import {
   SPACE_OPTIONS,
@@ -27,7 +27,8 @@ const WIZARD_STEPS = [
   { id: 2, question: "What would you like to call this project?" },
   { id: 3, question: "Which spaces will be involved?" },
   { id: 4, question: "What type of work are you planning to do?" },
-  { id: 5, question: "Here's what we found — does this look right?" },
+  { id: 5, question: "Let's align on some details to customize your compliance guide." },
+  { id: 6, question: "Here's what we found — does this look right?" },
 ];
 
 const BLANK_WIZARD = {
@@ -40,6 +41,9 @@ const BLANK_WIZARD = {
   otherSpaces: "",
   workTypes: [],
   otherWorkTypes: "",
+  budget: "",
+  persona: "",
+  customSystemPrompt: "",
 };
 
 // ── Sub-components ────────────────────────────────────────────
@@ -135,6 +139,11 @@ export default function ProjectKickoffPage() {
   const [wizard, setWizard] = useState(BLANK_WIZARD);
   const [editingProjectId, setEditingProjectId] = useState(editProjectId || null);
 
+  // Kickoff Chat State
+  const [chatHistory, setChatHistory] = useState([]);
+  const [chatInput, setChatInput] = useState("");
+  const [chatLoading, setChatLoading] = useState(false);
+
   // Basic form state
   const [basicName, setBasicName] = useState("");
   const [basicAddress, setBasicAddress] = useState("");
@@ -192,6 +201,72 @@ export default function ProjectKickoffPage() {
       })
       .finally(() => setPrefillLoading(false));
   }, [editProjectId]);
+
+  // Initialize chatbot dialog at step 5
+  useEffect(() => {
+    if (wizardStep === 5 && chatHistory.length === 0) {
+      const city = wizard.municipality || "DFW";
+      setChatHistory([
+        {
+          role: "assistant",
+          content: `Thanks! I see you are planning a project in ${city}. To customize your compliance guide: Are you doing this yourself (DIY), hiring a contractor, or are you a contractor yourself?`,
+        },
+      ]);
+    }
+  }, [wizardStep, chatHistory.length, wizard.municipality]);
+
+  const handleChatSend = async (e) => {
+    e?.preventDefault();
+    if (!chatInput.trim() || chatLoading) return;
+
+    const userMessage = { role: "user", content: chatInput.trim() };
+    const updatedHistory = [...chatHistory, userMessage];
+    setChatHistory(updatedHistory);
+    setChatInput("");
+    setChatLoading(true);
+    setError("");
+
+    try {
+      const res = await postKickoffChat({
+        history: updatedHistory,
+        address: wizard.address,
+        municipality: wizard.municipality,
+        spaces: wizard.spaces,
+        work_types: wizard.workTypes,
+      });
+
+      if (res.data.is_complete) {
+        setWizard((w) => ({
+          ...w,
+          budget: res.data.budget || "",
+          persona: res.data.persona || "",
+          customSystemPrompt: res.data.custom_system_prompt || "",
+        }));
+        setChatHistory((h) => [
+          ...h,
+          {
+            role: "assistant",
+            content: "Perfect, I have synthesized custom compliance guidelines for your project profile! Let's check them on the next screen.",
+          },
+        ]);
+        setTimeout(() => {
+          setWizardStep(6);
+        }, 1500);
+      } else {
+        setChatHistory((h) => [
+          ...h,
+          {
+            role: "assistant",
+            content: res.data.next_question || "Could you tell me a bit more about that?",
+          },
+        ]);
+      }
+    } catch (err) {
+      setError(err?.message || "Failed to progress kickoff conversation.");
+    } finally {
+      setChatLoading(false);
+    }
+  };
 
   // Derived permit recommendations for wizard step 5
   const allWorkTypes = useMemo(() => {
@@ -253,6 +328,9 @@ export default function ProjectKickoffPage() {
       spaces: allSpaces.length ? allSpaces : undefined,
       work_types: allWorkTypes.length ? allWorkTypes : undefined,
       recommended_permits: recommendedPermits.length ? recommendedPermits : undefined,
+      budget: wizard.budget || undefined,
+      persona: wizard.persona || undefined,
+      custom_system_prompt: wizard.customSystemPrompt || undefined,
     };
 
     try {
@@ -581,8 +659,47 @@ export default function ProjectKickoffPage() {
           </div>
         )}
 
-        {/* Step 5 — Permit preview + confirm */}
+        {/* Step 5 — Conversational Kickoff Chat */}
         {wizardStep === 5 && (
+          <div className="kickoff-step-body kickoff-chat-container">
+            <div className="kickoff-chat-history">
+              {chatHistory.map((msg, idx) => (
+                <div key={idx} className={`kickoff-chat-row ${msg.role}`}>
+                  <div className="kickoff-chat-bubble">
+                    {msg.role === "assistant" && <span className="kickoff-chat-avatar">🏗</span>}
+                    <p>{msg.content}</p>
+                  </div>
+                </div>
+              ))}
+              {chatLoading && (
+                <div className="kickoff-chat-row assistant">
+                  <div className="kickoff-chat-bubble loading">
+                    <span className="kickoff-chat-avatar">🏗</span>
+                    <p>Thinking...</p>
+                  </div>
+                </div>
+              )}
+            </div>
+
+            <form onSubmit={handleChatSend} className="kickoff-chat-input-form">
+              <input
+                type="text"
+                value={chatInput}
+                onChange={(e) => setChatInput(e.target.value)}
+                placeholder="Type your response here..."
+                disabled={chatLoading}
+                aria-label="Chat response"
+                required
+              />
+              <button type="submit" disabled={chatLoading || !chatInput.trim()}>
+                Send
+              </button>
+            </form>
+          </div>
+        )}
+
+        {/* Step 6 — Permit preview + confirm */}
+        {wizardStep === 6 && (
           <div className="kickoff-step-body">
             <dl className="kickoff-summary">
               <div className="kickoff-summary-row">
@@ -605,9 +722,24 @@ export default function ProjectKickoffPage() {
                   <dd>{allWorkTypes.join(", ")}</dd>
                 </div>
               )}
+              {wizard.budget && (
+                <div className="kickoff-summary-row">
+                  <dt>Estimated Budget</dt>
+                  <dd>{wizard.budget}</dd>
+                </div>
+              )}
             </dl>
 
-            <div className="kickoff-permit-section">
+            {wizard.customSystemPrompt && (
+              <div className="kickoff-custom-prompt-section">
+                <p className="kickoff-section-label">Custom Compliance Guidelines</p>
+                <div className="kickoff-custom-prompt-box">
+                  <p>{wizard.customSystemPrompt}</p>
+                </div>
+              </div>
+            )}
+
+            <div className="kickoff-permit-section" style={{ marginTop: "1rem" }}>
               <p className="kickoff-section-label">Likely permits needed</p>
               {cosmeticOnly ? (
                 <p className="kickoff-no-permits">
@@ -652,7 +784,7 @@ export default function ProjectKickoffPage() {
                 ? (editingProjectId ? "Saving…" : "Creating…")
                 : (editingProjectId ? "Save Setup" : "Create Project")}
             </button>
-          ) : (
+          ) : wizardStep === 5 ? null : (
             <button
               type="button"
               onClick={wizardNext}
