@@ -34,7 +34,7 @@ _Updated: 2026-07-19 (Conversational project kickoff, persona extraction, custom
 ## Verification
 
 ```bash
-.venv/bin/python -m pytest tests/test_commerce_room_image.py tests/test_room_preview_image_route.py tests/test_room_design_intent.py tests/test_gis.py tests/test_kickoff_chat.py -v
+.venv/bin/python -m pytest tests/test_commerce_room_image.py tests/test_room_preview_image_route.py tests/test_room_design_intent.py tests/test_gis.py tests/test_kickoff_chat.py tests/test_project_context.py -v
 cd frontend && npm run test && npm run build:mobile && npx cap sync ios
 ```
 
@@ -76,7 +76,7 @@ cd frontend && npm run test && npm run build:mobile && npx cap sync ios
 ## Canonical validation
 
 ```bash
-.venv/bin/python -m pytest tests/test_commerce_room_image.py tests/test_room_preview_image_route.py tests/test_gis.py tests/test_kickoff_chat.py -v
+.venv/bin/python -m pytest tests/test_commerce_room_image.py tests/test_room_preview_image_route.py tests/test_gis.py tests/test_kickoff_chat.py tests/test_project_context.py -v
 cd frontend && npm run test
 npm run build:mobile && npx cap sync ios
 ```

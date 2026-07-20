@@ -61,6 +61,10 @@ def format_project_context_block(context: dict[str, Any] | None) -> str:
         lines.append(f"- Work types: {', '.join(context['work_types'])}")
     if context.get("recommended_permits"):
         lines.append(f"- Recommended permits: {', '.join(context['recommended_permits'])}")
+    if context.get("persona"):
+        lines.append(f"- Persona: {context['persona']}")
+    if context.get("budget"):
+        lines.append(f"- Budget: {context['budget']}")
 
     room = context.get("active_room")
     if room:
@@ -73,7 +77,7 @@ def format_project_context_block(context: dict[str, Any] | None) -> str:
         if derived.get("max_ceiling_height_m") is not None:
             lines.append(f"- Max ceiling height (m): {derived['max_ceiling_height_m']}")
         if derived.get("floor_area_sqm") is not None:
-            lines.append(f"- Wall surface area est. (m²): {derived['floor_area_sqm']}")
+            lines.append(f"- Floor area (m²): {derived['floor_area_sqm']}")
         lengths = derived.get("wall_lengths_m") or []
         if lengths:
             lines.append(f"- Wall lengths (m): {', '.join(str(v) for v in lengths)}")
