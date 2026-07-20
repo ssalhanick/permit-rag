@@ -31,7 +31,28 @@ export class RoomCaptureWeb {
   }
 
   async startSpeechRecognition() {
-    return { transcript: "", error: "Speech requires native iOS build." };
+    const SpeechClass = window.SpeechRecognition || window.webkitSpeechRecognition;
+    if (!SpeechClass) {
+      return { transcript: "", error: "Speech requires native build or a browser supporting Web Speech API." };
+    }
+    return new Promise((resolve) => {
+      const recognition = new SpeechClass();
+      recognition.lang = "en-US";
+      recognition.interimResults = false;
+      recognition.maxAlternatives = 1;
+      recognition.onresult = (event) => {
+        const text = event.results[0][0].transcript;
+        resolve({ transcript: text });
+      };
+      recognition.onerror = (err) => {
+        resolve({ transcript: "", error: err.error || "Speech error" });
+      };
+      recognition.onend = () => {
+        // Fallback if no result fired
+        setTimeout(() => resolve({ transcript: "", error: "No speech detected" }), 100);
+      };
+      recognition.start();
+    });
   }
 
   async isAvailable() {

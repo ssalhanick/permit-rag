@@ -2308,6 +2308,25 @@ body.native-app .site-nav {
   cursor: not-allowed;
 }
 
+.kickoff-voice-button {
+  background: rgba(14, 42, 71, 0.4);
+  border: 1px solid rgba(199, 239, 207, 0.3);
+  border-radius: 6px;
+  color: #f7faf8;
+  font-size: 1.25rem;
+  padding: 0.5rem;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.2s ease;
+}
+
+.kickoff-voice-button:hover {
+  background: rgba(15, 76, 58, 0.4);
+  border-color: #c7efcf;
+}
+
 /* Kickoff Large Numeric Budget Input */
 .kickoff-budget-wrapper {
   position: relative;

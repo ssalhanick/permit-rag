@@ -162,6 +162,20 @@ export default function QueryPage() {
     }));
   };
 
+  const handleVoiceInput = async () => {
+    try {
+      const { startSpeechRecognition } = await import("./services/roomCapture.js");
+      const res = await startSpeechRecognition();
+      if (res.transcript) {
+        setForm((prev) => ({ ...prev, query: res.transcript }));
+      } else if (res.error && res.error !== "No speech detected") {
+        setError(`Voice input failed: ${res.error}`);
+      }
+    } catch (err) {
+      setError(`Voice input not supported: ${err.message}`);
+    }
+  };
+
   const handleSubmit = async (event) => {
     event.preventDefault();
     setLoading(true);
@@ -383,16 +397,27 @@ export default function QueryPage() {
               <form onSubmit={handleSubmit} className="space-y-4">
                 <div className="space-y-2">
                   <Label htmlFor="query">Your Compliance Question</Label>
-                  <Textarea
-                    id="query"
-                    name="query"
-                    rows={3}
-                    value={form.query}
-                    onChange={handleChange}
-                    placeholder="E.g., What are the setback requirements for a residential fence in Dallas?"
-                    className="resize-none"
-                    required
-                  />
+                  <div className="relative">
+                    <Textarea
+                      id="query"
+                      name="query"
+                      rows={3}
+                      value={form.query}
+                      onChange={handleChange}
+                      placeholder="E.g., What are the setback requirements for a residential fence in Dallas?"
+                      className="resize-none pr-12"
+                      required
+                    />
+                    <button
+                      type="button"
+                      onClick={handleVoiceInput}
+                      className="absolute right-3 bottom-3 p-2 bg-emerald-950 hover:bg-emerald-900 border border-emerald-800 text-emerald-100 rounded-full text-lg leading-none transition-colors"
+                      title="Speak your question"
+                      aria-label="Speak your question"
+                    >
+                      🎙
+                    </button>
+                  </div>
                 </div>
 
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-4">

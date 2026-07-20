@@ -270,6 +270,20 @@ export default function ProjectKickoffPage() {
     }
   }, [wizardStep, chatHistory.length, wizard.municipality, wizard.persona, wizard.budget, steps]);
 
+  const handleVoiceInput = async () => {
+    try {
+      const { startSpeechRecognition } = await import("./services/roomCapture.js");
+      const res = await startSpeechRecognition();
+      if (res.transcript) {
+        setChatInput(res.transcript);
+      } else if (res.error && res.error !== "No speech detected") {
+        setError(`Voice input failed: ${res.error}`);
+      }
+    } catch (err) {
+      setError(`Voice input not supported: ${err.message}`);
+    }
+  };
+
   const handleChatSend = async (e) => {
     e?.preventDefault();
     if (!chatInput.trim() || chatLoading) return;
@@ -841,6 +855,16 @@ export default function ProjectKickoffPage() {
                 aria-label="Chat response"
                 required
               />
+              <button
+                type="button"
+                className="kickoff-voice-button"
+                onClick={handleVoiceInput}
+                title="Speak response"
+                aria-label="Speak response"
+                disabled={chatLoading}
+              >
+                🎙
+              </button>
               <button type="submit" disabled={chatLoading || !chatInput.trim()}>
                 Send
               </button>
