@@ -140,6 +140,8 @@ Production (AWS/ECS) uses Terraform task env + SSM — no dotenv files in the co
 | `SERPAPI_API_KEY` | *(optional)* SerpApi key for live Home Depot product search — see [Commerce / SerpApi](#commerce--serpapi) |
 | `OPENAI_API_KEY` | *(optional)* OpenAI key for generative room preview images — mock PNG when unset ([docs/room_generative_preview.md](docs/room_generative_preview.md)) |
 | `OPENAI_IMAGE_MODEL` | *(optional)* default `gpt-image-1` |
+| `LEONARDO_API_KEY` | *(optional)* Leonardo.ai API key for generative room preview images and textures — fallback to OpenAI then mock when unset |
+| `LEONARDO_IMAGE_MODEL` | *(optional)* default `de7d3faf-762f-48e0-b3b7-9d0ac3a3fcf3` (Leonardo Phoenix 1.0) |
 
 Database URLs are in `.env.local` (already point at Docker on port 5433).
 

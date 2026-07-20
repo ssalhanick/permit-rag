@@ -1,6 +1,6 @@
 # permit_rag — State
 
-_Updated: 2026-07-20 (Animated SVG logo — nav static themed + hero animated entrance)_
+_Updated: 2026-07-20 (Leonardo.ai Integration + Deterministic Kickoff)_
 
 ## Phase
 
@@ -9,8 +9,6 @@ _Updated: 2026-07-20 (Animated SVG logo — nav static themed + hero animated en
 ## Blocked on
 
 1. **Mobile OAuth deep links (deferred)** — M0-6/M0-7 device Google/Apple roundtrip
-2. **Terraform ECS task def** — do **not** bare `terraform apply` until RDS `DATABASE_URL` drift fixed
-3. **Prod deploy gap** — deploy backend to ECS (design-intent + room-preview-image routes)
 
 ## Sprint 17 deliverables
 
@@ -28,9 +26,9 @@ _Updated: 2026-07-20 (Animated SVG logo — nav static themed + hero animated en
 - [x] Landing page accessibility redesign (Outfit/Lexend fonts, Navy/Teal color system, tactile hero buttons hover/active/focus, logout icon)
 - [x] Conversational project kickoff (Persona, budget context, custom compliance guide rules, migration 020)
 - [x] Animated SVG logo — `LogoSVG.jsx` React component, `useLogoAnimation` hook, hero entrance on landing page, static themed version in nav
-- [ ] Deploy backend with new routes to ECS
-- [ ] Optional: `OPENAI_API_KEY` in prod for live images (mock works)
-- [ ] Device smoke: Preview → Generate image → Save → AR → DXF
+- [x] Replace kickoff free-form chat wizard step with deterministic materials checkboxes (Migration 021)
+- [x] Deploy backend with new routes and Leonardo.ai key to ECS
+- [x] Optional: `LEONARDO_API_KEY` (and `OPENAI_API_KEY`) in prod SSM for live images
 
 ## Verification
 
@@ -50,24 +48,23 @@ cd frontend && npm run test && npm run build:mobile && npx cap sync ios
 
 ## Next tasks
 
-1. Deploy backend (018 + room-preview-image) to prod ECS
-2. Set `OPENAI_API_KEY` in SSM for live images
-3. iPhone smoke of complete flow
+1. iPhone smoke of complete flow
 
 ## Module status
 
 | Module | Current state |
 |--------|---------------|
-| commerce | `room_image.py` OpenAI + mock PNG |
-| api | `/commerce/room-preview-image` |
-| frontend | Animated SVG logo (hero + nav); Generate image button; device PNG + asset_url |
+| commerce | `room_image.py` Leonardo.ai + OpenAI + mock PNG |
+| api | `/commerce/room-preview-image` (now supports `tiling`) |
+| frontend | Kickoff materials selection step; Animated SVG logo (hero + nav); Generate image button; device PNG + asset_url |
 | iOS | Blend opacity, pointer selectors, long-press generative dropdown, single-anchor mapping |
 
 ## Decisions log
 
 | Decision | Choice |
 |----------|--------|
-| Gen image provider | OpenAI Images when keyed; mock PNG otherwise |
+| Gen image provider | Leonardo.ai when keyed; OpenAI fallback; mock PNG fallback otherwise |
+| Kickoff flow | Deterministic checkbox selections for spaces, work types, and materials |
 | Asset storage | Device-only relative path under `room_scans/.../generated_preview.png` |
 | AR texture order | `asset_url` first, then `product_ref.image_url` |
 | Photo input | Optional Capacitor Camera; folded into prompt |
