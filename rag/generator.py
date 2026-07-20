@@ -82,16 +82,18 @@ We already know:
 - Work types: {work_types}
 
 Your goal is to converse with the user and determine:
-1. Persona: Are they a DIYer (diy), hiring a contractor (hiring_contractor), or a contractor themselves (contractor)?
+1. Persona: Are they a DIYer (diy), hiring a contractor (hiring_contractor), a contractor themselves (contractor), or just doing research (research)?
 2. Budget: What is their estimated budget?
 3. Materials and Scope: Are there specific materials or structural scope details?
+
+(Note: The user's persona may already be specified in the chat history. If so, do not ask about it, just extract it.)
 
 Ask exactly one brief question at a time to gather missing details. Keep questions friendly, helpful, and under 2 sentences.
 
 If and only if you have enough information about all three aspects (persona, budget, and scope), do NOT ask another question. Instead, output a JSON block with:
 {{
   "is_complete": true,
-  "persona": "diy" | "hiring_contractor" | "contractor",
+  "persona": "diy" | "hiring_contractor" | "contractor" | "research",
   "budget": "extracted budget description",
   "custom_system_prompt": "A detailed system prompt containing 3-4 bullet guidelines for future RAG queries based on the project profile. E.g. 'DIYer compliance path', 'Include Texas code exceptions for homeowners', 'Budget constraints', 'Dallas kitchen clearances info'."
 }}

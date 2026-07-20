@@ -119,12 +119,27 @@ label {
   font-weight: 600;
 }
 
+select,
 textarea,
 input {
   width: 100%;
   padding: 8px 10px;
-  border: 1px solid #cbd5e1;
+  border: 1px solid var(--border);
+  background: rgba(14, 42, 71, 0.4);
+  color: var(--foreground);
   border-radius: 6px;
+}
+
+select option {
+  background: #0e2a47;
+  color: #f7faf8;
+}
+
+select:focus,
+textarea:focus,
+input:focus {
+  outline: 2px solid var(--ring);
+  outline-offset: 2px;
 }
 
 button {
@@ -2293,6 +2308,53 @@ body.native-app .site-nav {
   cursor: not-allowed;
 }
 
+/* Kickoff Large Numeric Budget Input */
+.kickoff-budget-wrapper {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  max-width: 320px;
+  margin: 1.5rem auto;
+  background: rgba(14, 42, 71, 0.4);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 0.5rem 1rem;
+}
+
+.kickoff-budget-prefix {
+  font-size: 2.25rem;
+  font-weight: 700;
+  color: #c7efcf;
+  margin-right: 0.5rem;
+  user-select: none;
+}
+
+.kickoff-budget-input {
+  border: none !important;
+  background: transparent !important;
+  font-size: 2.25rem !important;
+  font-weight: 700 !important;
+  color: #f7faf8 !important;
+  padding: 0 !important;
+  width: 100% !important;
+  max-width: 220px;
+}
+
+.kickoff-budget-input:focus {
+  outline: none !important;
+}
+
+.kickoff-budget-input::-webkit-outer-spin-button,
+.kickoff-budget-input::-webkit-inner-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+
+.kickoff-budget-input[type=number] {
+  -moz-appearance: textfield;
+}
+
 /* Custom Prompt Guideline Box */
 .kickoff-custom-prompt-section {
   margin-top: 1.5rem;
@@ -2423,12 +2485,14 @@ body.native-app .site-nav {
 
 .kickoff-other-label {
   font-size: 0.8rem;
-  color: #64748b;
+  color: var(--muted-foreground);
 }
 
 .kickoff-other-input {
   padding: 6px 10px;
-  border: 1px solid #cbd5e1;
+  border: 1px solid var(--border);
+  background: rgba(14, 42, 71, 0.4);
+  color: var(--foreground);
   border-radius: 6px;
   font-size: 0.9rem;
   width: 100%;
@@ -2436,13 +2500,13 @@ body.native-app .site-nav {
 
 .kickoff-sr-label {
   font-size: 0.85rem;
-  color: #475569;
+  color: var(--muted-foreground);
 }
 
 /* Summary (step 5) */
 .kickoff-summary {
-  background: #f8fafc;
-  border: 1px solid #e2e8f0;
+  background: rgba(14, 42, 71, 0.4);
+  border: 1px solid rgba(199, 239, 207, 0.2);
   border-radius: 8px;
   padding: 0.875rem 1rem;
   margin-bottom: 1.25rem;
@@ -2452,7 +2516,7 @@ body.native-app .site-nav {
   display: flex;
   gap: 0.75rem;
   padding: 0.3rem 0;
-  border-bottom: 1px solid #f1f5f9;
+  border-bottom: 1px solid rgba(199, 239, 207, 0.15);
 }
 
 .kickoff-summary-row:last-child {
@@ -2462,7 +2526,7 @@ body.native-app .site-nav {
 .kickoff-summary-row dt {
   font-weight: 600;
   font-size: 0.85rem;
-  color: #64748b;
+  color: var(--muted-foreground);
   min-width: 90px;
   flex-shrink: 0;
 }
@@ -2470,7 +2534,7 @@ body.native-app .site-nav {
 .kickoff-summary-row dd {
   margin: 0;
   font-size: 0.9rem;
-  color: #1e293b;
+  color: var(--foreground);
   word-break: break-word;
 }
 

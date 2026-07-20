@@ -91,6 +91,8 @@ function CheckboxGrid({ options, selected, onChange, otherValue, onOtherChange, 
     );
   };
 
+  const inputId = `${otherLabel.toLowerCase().replace(/\s+/g, "-")}-input`;
+
   return (
     <div className="kickoff-checkbox-grid">
       {options.map((opt) => (
@@ -105,11 +107,11 @@ function CheckboxGrid({ options, selected, onChange, otherValue, onOtherChange, 
       ))}
       {onOtherChange && (
         <div className="kickoff-other-field">
-          <label htmlFor="other-input" className="kickoff-other-label">
+          <label htmlFor={inputId} className="kickoff-other-label">
             {otherLabel}
           </label>
           <input
-            id="other-input"
+            id={inputId}
             type="text"
             className="kickoff-other-input"
             placeholder="Describe anything else…"
@@ -146,6 +148,8 @@ export default function ProjectKickoffPage() {
     const list = [
       { key: "address", question: "Where is the project located?" },
       { key: "name", question: "What would you like to call this project?" },
+      { key: "persona", question: "What is your role on this project?" },
+      { key: "budget", question: "What is your estimated project budget?" },
       { key: "spaces", question: "Which spaces will be involved?" },
       { key: "workTypes", question: "What type of work are you planning to do?" },
     ];
@@ -244,19 +248,27 @@ export default function ProjectKickoffPage() {
       .finally(() => setPrefillLoading(false));
   }, [editProjectId]);
 
-  // Initialize chatbot dialog at step 5
+  // Initialize chatbot dialog at chat step
   useEffect(() => {
     const currentStep = steps[wizardStep - 1];
     if (currentStep?.key === "chat" && chatHistory.length === 0) {
       const city = wizard.municipality || "DFW";
+      const roleMap = {
+        "diy": "doing it yourself (DIY)",
+        "hiring-contractor": "hiring a contractor",
+        "contractor": "working as the contractor",
+        "research": "doing general research",
+      };
+      const roleStr = roleMap[wizard.persona] || "user";
+      const formattedBudget = wizard.budget ? `$${parseInt(wizard.budget, 10).toLocaleString()}` : "not set";
       setChatHistory([
         {
           role: "assistant",
-          content: `Thanks! I see you are planning a project in ${city}. To customize your compliance guide: Are you doing this yourself (DIY), hiring a contractor, or are you a contractor yourself?`,
+          content: `Thanks! I see you are planning a project in ${city} with a budget of ${formattedBudget} and you are ${roleStr}. To customize your compliance guide: What specific materials/scopes are you planning?`,
         },
       ]);
     }
-  }, [wizardStep, chatHistory.length, wizard.municipality, steps]);
+  }, [wizardStep, chatHistory.length, wizard.municipality, wizard.persona, wizard.budget, steps]);
 
   const handleChatSend = async (e) => {
     e?.preventDefault();
@@ -352,6 +364,14 @@ export default function ProjectKickoffPage() {
     }
     if (currentStep?.key === "name" && !wizard.name.trim()) {
       setError("Please enter a project name.");
+      return;
+    }
+    if (currentStep?.key === "persona" && !wizard.persona) {
+      setError("Please select your role on this project.");
+      return;
+    }
+    if (currentStep?.key === "budget" && !wizard.budget) {
+      setError("Please enter your estimated project budget.");
       return;
     }
     if (wizardStep < steps.length) {
@@ -665,6 +685,48 @@ export default function ProjectKickoffPage() {
                 onChange={(e) => setWizard((w) => ({ ...w, name: e.target.value }))}
                 placeholder="e.g. Main St Kitchen Remodel"
                 maxLength={120}
+                autoFocus
+              />
+            </div>
+          </div>
+        )}
+
+        {/* Step: Persona / Role */}
+        {step?.key === "persona" && (
+          <div className="kickoff-step-body">
+            <div className="kickoff-form-group">
+              <label htmlFor="wizard-persona" className="kickoff-sr-label">Your Role</label>
+              <select
+                id="wizard-persona"
+                value={wizard.persona}
+                onChange={(e) => setWizard((w) => ({ ...w, persona: e.target.value }))}
+                required
+                autoFocus
+              >
+                <option value="" disabled>Select your role...</option>
+                <option value="diy">DIY (Doing it myself)</option>
+                <option value="hiring-contractor">Hiring a contractor</option>
+                <option value="contractor">Contractor myself</option>
+                <option value="research">Just doing research</option>
+              </select>
+            </div>
+          </div>
+        )}
+
+        {/* Step: Budget */}
+        {step?.key === "budget" && (
+          <div className="kickoff-step-body">
+            <div className="kickoff-budget-wrapper">
+              <span className="kickoff-budget-prefix">$</span>
+              <input
+                id="wizard-budget"
+                type="number"
+                inputMode="numeric"
+                pattern="[0-9]*"
+                value={wizard.budget}
+                onChange={(e) => setWizard((w) => ({ ...w, budget: e.target.value }))}
+                placeholder="0"
+                className="kickoff-budget-input"
                 autoFocus
               />
             </div>
