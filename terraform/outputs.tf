@@ -31,7 +31,7 @@ output "rds_endpoint" {
 
 
 output "db_password" {
-  description = "The dynamically generated master database password"
-  value       = random_password.db_password.result
+  description = "The master database password stored in SSM"
+  value       = data.aws_ssm_parameter.db_password.value
   sensitive   = true
 }
