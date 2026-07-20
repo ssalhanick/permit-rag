@@ -70,6 +70,7 @@ cd frontend && npm run test && npm run build:mobile && npx cap sync ios
 | AR texture order | `asset_url` first, then `product_ref.image_url` |
 | Photo input | Optional Capacitor Camera; folded into prompt |
 | Touch handling | Solid bottom container controlPanel to isolate button touch events |
+| Color Palette | Default Navy (#0E2A47) background with Sage/Teal color system |
 
 ## Canonical validation
 
