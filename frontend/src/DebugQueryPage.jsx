@@ -171,7 +171,7 @@ export default function DebugQueryPage() {
       } else if (res.error && res.error !== "No speech detected") {
         const friendlyError =
           res.error === "not-allowed" || res.error === "permission-denied"
-            ? "Microphone access was denied. Allow mic permissions in your browser settings and try again."
+            ? "Microphone access denied. Click the 🔒 lock icon in your address bar, set Microphone to 'Allow', and try again."
             : res.error === "network"
             ? "Voice input requires an internet connection."
             : res.error === "no-speech"
