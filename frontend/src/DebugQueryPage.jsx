@@ -169,7 +169,15 @@ export default function DebugQueryPage() {
       if (res.transcript) {
         setForm((prev) => ({ ...prev, query: res.transcript }));
       } else if (res.error && res.error !== "No speech detected") {
-        setError(`Voice input failed: ${res.error}`);
+        const friendlyError =
+          res.error === "not-allowed" || res.error === "permission-denied"
+            ? "Microphone access was denied. Allow mic permissions in your browser settings and try again."
+            : res.error === "network"
+            ? "Voice input requires an internet connection."
+            : res.error === "no-speech"
+            ? "No speech detected. Try speaking closer to your mic."
+            : `Voice input failed: ${res.error}`;
+        setError(friendlyError);
       }
     } catch (err) {
       setError(`Voice input not supported: ${err.message}`);
