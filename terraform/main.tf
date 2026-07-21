@@ -170,7 +170,10 @@ resource "aws_security_group" "rds" {
     from_port   = 5432
     to_port     = 5432
     protocol    = "tcp"
-    cidr_blocks = ["129.110.242.97/32"]
+    cidr_blocks = [
+      "129.110.242.97/32", # campus dev machine
+      "68.20.22.215/32",   # home dev machine
+    ]
     description = "Allow database client access from local developer machine"
   }
 
