@@ -35,8 +35,10 @@ def _identity_keys(source_url: str | None, local_path: str | None) -> tuple[str 
     """Compute (source_url_normalized, source_filename) for one document row."""
     url_norm: str | None = None
     if source_url and not source_url.startswith("file://"):
+        # Repair known data typo: leading slash(es) before the scheme
+        candidate = source_url.lstrip("/") if source_url.lstrip("/").startswith("http") else source_url
         try:
-            url_norm = normalize_source_url(source_url)
+            url_norm = normalize_source_url(candidate)
         except ValueError:
             log.warning("Cannot normalize source_url %r — leaving NULL", source_url)
 
