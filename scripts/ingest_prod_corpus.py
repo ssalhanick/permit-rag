@@ -49,11 +49,14 @@ def _verify_counts() -> None:
     from db.client import get_conn
 
     with get_conn() as conn:
-        doc_count = conn.execute("SELECT COUNT(*) FROM documents WHERE document_status = 'active'").fetchone()[0]
-        chunk_count = conn.execute("SELECT COUNT(*) FROM chunks").fetchone()[0]
+        # Pool uses dict_row — access by alias, not [0].
+        doc_count = conn.execute(
+            "SELECT COUNT(*) AS n FROM documents WHERE document_status = 'active'"
+        ).fetchone()["n"]
+        chunk_count = conn.execute("SELECT COUNT(*) AS n FROM chunks").fetchone()["n"]
         embedded = conn.execute(
-            "SELECT COUNT(*) FROM chunks WHERE embedding IS NOT NULL"
-        ).fetchone()[0]
+            "SELECT COUNT(*) AS n FROM chunks WHERE embedding IS NOT NULL"
+        ).fetchone()["n"]
     log.info("RDS corpus: %s active docs, %s chunks (%s embedded)", doc_count, chunk_count, embedded)
     if doc_count < 1:
         log.warning("No active documents in RDS — ingestion may have failed.")
