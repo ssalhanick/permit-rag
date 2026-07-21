@@ -1,6 +1,6 @@
 # On-Demand URL Pull — Admin Page Harvest
 
-**Status:** Planned
+**Status:** Implemented 2026-07-21 — end-to-end verification checklist below still pending
 **Depends on:** existing harvester, governance, upload pipeline, admin auth
 
 ## Goal

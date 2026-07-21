@@ -35,6 +35,7 @@ from api.routes import (
     corpus_router,
     documents_router,
     projects_router,
+    pull_router,
     query_router,
     upload_router,
 )
@@ -142,6 +143,7 @@ api_router.include_router(query_router)
 api_router.include_router(documents_router)
 api_router.include_router(admin_router)
 api_router.include_router(upload_router)
+api_router.include_router(pull_router)
 api_router.include_router(auth_router)
 api_router.include_router(projects_router)
 api_router.include_router(commerce_router)

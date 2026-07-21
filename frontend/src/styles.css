@@ -696,6 +696,33 @@ button:disabled {
   color: #334155;
 }
 
+.upload-mode-tabs {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 16px;
+}
+
+.pull-results-table {
+  width: 100%;
+  border-collapse: collapse;
+  margin: 12px 0;
+  font-size: 0.88rem;
+}
+
+.pull-results-table th,
+.pull-results-table td {
+  border: 1px solid #e2e8f0;
+  padding: 6px 8px;
+  text-align: left;
+  vertical-align: top;
+}
+
+.pull-results-table th {
+  background: #f8fafc;
+  font-weight: 600;
+  color: #475569;
+}
+
 .upload-status {
   border-radius: 8px;
   padding: 10px 12px;

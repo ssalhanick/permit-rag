@@ -358,6 +358,92 @@ def supersede_document(
 
 
 # ════════════════════════════════════════════════
+#  SOURCE IDENTITY (migration 022 — on-demand URL pull)
+# ════════════════════════════════════════════════
+
+def find_document_by_source_url_norm(url_normalized: str) -> dict[str, Any] | None:
+    """Fetch the current document matching a normalized source URL."""
+    sql = """
+        SELECT * FROM documents
+        WHERE source_url_normalized = %s AND is_current = true
+        ORDER BY ingested_at DESC
+        LIMIT 1;
+    """
+    with get_conn() as conn:
+        return conn.execute(sql, (url_normalized,)).fetchone()
+
+
+def find_document_by_fallback_identity(
+    municipality: str,
+    doc_type: str,
+    source_filename: str,
+) -> dict[str, Any] | None:
+    """Fetch the current document matching the fallback identity key."""
+    sql = """
+        SELECT * FROM documents
+        WHERE municipality = %s
+          AND doc_type = %s::doc_type
+          AND source_filename = %s
+          AND is_current = true
+        ORDER BY ingested_at DESC
+        LIMIT 1;
+    """
+    with get_conn() as conn:
+        return conn.execute(sql, (municipality, doc_type, source_filename)).fetchone()
+
+
+def find_document_by_checksum(checksum_sha256: str) -> dict[str, Any] | None:
+    """Fetch any current document whose bytes match *checksum_sha256*."""
+    sql = """
+        SELECT * FROM documents
+        WHERE checksum_sha256 = %s AND is_current = true
+        ORDER BY ingested_at DESC
+        LIMIT 1;
+    """
+    with get_conn() as conn:
+        return conn.execute(sql, (checksum_sha256,)).fetchone()
+
+
+def set_document_source_identity(
+    doc_id: str,
+    *,
+    source_url_normalized: str | None = None,
+    source_filename: str | None = None,
+    url_changed_flag: bool | None = None,
+    touch_last_pulled: bool = False,
+) -> dict[str, Any] | None:
+    """Update identity/audit columns (migration 022) for one document."""
+    assignments: list[str] = []
+    params: dict[str, Any] = {"doc_id": doc_id}
+
+    if source_url_normalized is not None:
+        assignments.append("source_url_normalized = %(source_url_normalized)s")
+        params["source_url_normalized"] = source_url_normalized
+    if source_filename is not None:
+        assignments.append("source_filename = %(source_filename)s")
+        params["source_filename"] = source_filename
+    if url_changed_flag is not None:
+        assignments.append("url_changed_flag = %(url_changed_flag)s")
+        params["url_changed_flag"] = url_changed_flag
+    if touch_last_pulled:
+        assignments.append("last_pulled_at = now()")
+
+    if not assignments:
+        return get_document_by_doc_id(doc_id)
+
+    sql = (
+        "UPDATE documents "
+        f"SET {', '.join(assignments)} "
+        "WHERE doc_id = %(doc_id)s "
+        "RETURNING *;"
+    )
+    with get_conn() as conn:
+        row = conn.execute(sql, params).fetchone()
+        conn.commit()
+    return row
+
+
+# ════════════════════════════════════════════════
 #  CHUNKS
 # ════════════════════════════════════════════════
 

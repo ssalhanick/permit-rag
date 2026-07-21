@@ -7,9 +7,11 @@ plus Texas state and federal regulations.
 
 ---
 
-## Current Status (2026-07-13)
+## Current Status (2026-07-21)
 
-- **Sprint 17 active** — Scan → Design → Preview → **Generate image** → Save; AR textures prefer `asset_url` then product photos. See [STATE.md](STATE.md) and [docs/room_generative_preview.md](docs/room_generative_preview.md).
+- **On-demand URL pull implemented** — admin Pull-from-URL on `/upload`: page crawl, checksum diff, ingest-new / supersede-changed, migration 022 identity keys. Verification checklist pending: [docs/on_demand_url_pull.md](docs/on_demand_url_pull.md).
+- **Prod corpus seeded** — RDS has 19 active docs / 17,159 embedded chunks.
+- **Sprint 17 wrapped** — Scan → Design → Preview → **Generate image** → Save; AR textures prefer `asset_url` then product photos. See [STATE.md](STATE.md) and [docs/room_generative_preview.md](docs/room_generative_preview.md).
 - **Sprint 16 closed** — Commerce overlays, SerpApi HD resolver, materials estimate panel.
 - **Sprint 13 closed** — Capacitor 7 mobile shell, mini-RAG, corpus sync, prod on ECS `:11`. See [docs/sprint_13capacitor-implementation-overview.md](docs/sprint_13capacitor-implementation-overview.md).
 - **Production** — `https://permits.scottsalhanick.com`; Cognito auth; mobile CORS live.
@@ -50,7 +52,6 @@ py -m pytest tests/test_commerce_takeoff.py tests/test_commerce_product_resolver
 - [ ] [Agent Implementation Plan](../..\.gemini\antigravity\brain\acda4bb1-53b2-4cf2-b710-5e93089c1fab/agent_implementation_plan.md) — Implement single-responsibility agents (Query Deconstructor, Semantic Conflict Analyzer, Citation Verification) with the `instructor` library and dynamic token truncation.
 - [ ] [Token Optimization & Cost-Effectiveness Plan](../..\.gemini\antigravity\brain\acda4bb1-53b2-4cf2-b710-5e93089c1fab\token_optimization_plan.md) - Analyze prompt caching, chunking strategies, and embedding model trade-offs to minimize Claude token usage.
 - [ ] [CMS Admin Dashboard](.gemini\antigravity\brain\acda4bb1-53b2-4cf2-b710-5e93089c1fab\cms_admin_dashboard_plan.md)
-- [ ] [On-Demand URL Pull](docs/on_demand_url_pull.md) — admin URL input + Pull button; discover linked PDFs/DOCX/PPTX from a page, checksum-diff, ingest new + supersede old on demand
 
 ### Upcoming
 - [ ] **SerpApi production key** — add `SERPAPI_API_KEY` to ECS task env / SSM after account signup (blocker for live HD prices; mocks work until then)
@@ -60,6 +61,7 @@ py -m pytest tests/test_commerce_takeoff.py tests/test_commerce_product_resolver
 - [ ] 3D Map Integration — CesiumJS city boundaries + site overlay
 
 ### Completed
+- [x] [On-Demand URL Pull](docs/on_demand_url_pull.md) — `ingestion/url_normalize.py`, `ingestion/page_crawler.py`, migration 022 identity keys + backfill script, `POST /admin/documents/pull-page` + job poll, Pull-from-URL tab on `/upload`. End-to-end verification checklist in the plan doc still pending.
 - [x] Sprint 17: Conversational Project Kickoff — Interactive LLM-driven dialog to extract user persona, budget, and materials. Automatically synthesizes a project-specific custom system prompt (migration 020) which is injected into all future compliance queries.
 - [x] Sprint 17: Room generative preview — `POST /commerce/room-preview-image`, OpenAI/mock images, device `asset_url`, AR prefers generated asset over product photo ([docs/room_generative_preview.md](docs/room_generative_preview.md))
 - [x] Sprint 17: Room design Preview/Save — scan_id design-intent API, token usage (migration 018), `redesign.json` v2 revisions on device, `RoomDesignPage`, DXF export, demoted Scan House
@@ -401,10 +403,12 @@ pip install -e ".[mcp]"
 permit_rag/
 ├── ingestion/          # Document harvesting, chunking, verification
 │   ├── harvester.py    # Download + tag municipal documents
-│   ├── chunker.py      # PDF/HTML extraction + text splitting
+│   ├── chunker.py      # PDF/HTML/DOCX/PPTX/TXT extraction + text splitting
 │   ├── verification.py # Stage-by-stage ingestion verification
 │   ├── embedder.py     # nomic-embed-text-v1.5 local embedding (768-dim)
-│   └── governance.py   # Document lifecycle management
+│   ├── governance.py   # Document lifecycle management
+│   ├── url_normalize.py # Shared URL/filename identity normalization
+│   └── page_crawler.py # On-demand page link discovery + SSRF guards
 ├── db/
 │   ├── schema.sql      # Postgres + pgvector schema (4 tables)
 │   └── client.py       # psycopg3 connection pool + CRUD helpers
@@ -550,6 +554,18 @@ curl -s -X POST http://localhost:8000/admin/documents/dallas-building-code-2024/
 curl -s -X POST http://localhost:8000/admin/documents/project-doc-1/purge-project-upload \
   -H "X-Admin-Token: ${API_ADMIN_TOKEN}" \
   -H "X-Admin-Role: owner"
+
+# On-demand URL pull (discovers linked files on the page, ingests only changes)
+curl -s -X POST http://localhost:8000/admin/documents/pull-page \
+  -H "Content-Type: application/json" \
+  -H "X-Admin-Token: ${API_ADMIN_TOKEN}" \
+  -H "X-Admin-Role: admin" \
+  -d "{\"url\":\"https://city.gov/building/forms\",\"municipality\":\"dallas\",\"authority_level\":\"municipal\",\"doc_type\":\"permit_checklist\",\"subject_tags\":[\"permits\"]}"
+
+# Poll pull job progress + per-file verdicts (new/updated/skipped/flagged/failed)
+curl -s http://localhost:8000/admin/documents/pull-jobs/<job_id> \
+  -H "X-Admin-Token: ${API_ADMIN_TOKEN}" \
+  -H "X-Admin-Role: admin"
 ```
 
 Admin runtime security/env flags:

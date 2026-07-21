@@ -396,6 +396,20 @@ export async function supersedeDocumentAdmin(docId, body, adminToken, adminRole 
   });
 }
 
+export async function pullPage(payload, adminToken, adminRole = "admin") {
+  return await requestJson("/admin/documents/pull-page", {
+    method: "POST",
+    body: payload,
+    headers: buildAdminHeaders(adminToken, adminRole),
+  });
+}
+
+export async function getPullJob(jobId, adminToken, adminRole = "admin") {
+  return await requestJson(`/admin/documents/pull-jobs/${encodeURIComponent(jobId)}`, {
+    headers: buildAdminHeaders(adminToken, adminRole),
+  });
+}
+
 export async function purgeDocumentAdmin(docId, adminToken, adminRole = "admin", adminUser = "") {
   const headers = buildAdminHeaders(adminToken, adminRole);
   if (adminUser.trim()) {

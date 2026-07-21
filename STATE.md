@@ -1,10 +1,10 @@
 # permit_rag — State
 
-_Updated: 2026-07-21 (Prod corpus ingest + URL pull plan)_
+_Updated: 2026-07-21 (On-demand URL pull implemented)_
 
 ## Phase
 
-**Sprint 17 wrap + ingestion tooling** — Prod RDS corpus seeded. Next: on-demand URL pull feature.
+**Ingestion tooling** — URL pull feature code-complete. Next: run migration 022 + tests + verification checklist.
 
 ## Blocked on
 
@@ -12,49 +12,58 @@ _Updated: 2026-07-21 (Prod corpus ingest + URL pull plan)_
 
 ## Deliverables checklist
 
-### Prod corpus (done this session)
+### On-demand URL pull (code done this session)
 
-- [x] RDS security group: home IP `68.20.22.215/32` + campus IP in terraform
-- [x] `terraform apply` for SG ingress (no DB recreate)
-- [x] Prod harvest → ingest → embed via `scripts/ingest_prod_corpus.py`
-- [x] Fix `_verify_counts` KeyError (`dict_row` → alias `AS n`)
-- [x] Verify RDS: **19 active docs, 17,159 chunks, 17,159 embedded**
-- [x] Plan doc: [docs/on_demand_url_pull.md](docs/on_demand_url_pull.md) + README Planned link
+- [x] Prereq fix: `governance._rechunk_and_embed` rewritten to upload pattern (chunk → delete → insert → embed)
+- [x] Prereq fix: `upload.py` `db_client.get_project` NameError (now imports `get_project`)
+- [x] Prereq fix: enum drift — `upload.py` + `UploadPage.jsx` lists now match `db/schema.sql` (`county` in, `regional` out; real doc_type list)
+- [x] `ingestion/url_normalize.py` + `tests/test_url_normalize.py`
+- [x] Migration `db/migrations/022_source_identity.sql` (4 columns + 2 indexes) + `scripts/backfill_source_identity.py`
+- [x] `ingestion/page_crawler.py` (discover links, SSRF guard, redirect-safe `fetch_asset`) + `tests/test_page_crawler.py`
+- [x] Chunker: PPTX extractor (`python-pptx` added to pyproject)
+- [x] `db/client.py`: identity lookups + `set_document_source_identity`
+- [x] `api/routes/pull.py` — `POST /admin/documents/pull-page` + `GET /pull-jobs/{id}`, strict admin auth, supersede-only-after-embed
+- [x] Frontend: Pull-from-URL tab on `/upload`, `pullPage`/`getPullJob` in `api.js`, results table
 
-### On-demand URL pull (next)
+### Verification (NOT run yet — do first next session)
 
-- [ ] Prerequisite fixes: governance rechunk helper, upload `db_client` import, enum drift
-- [ ] `ingestion/url_normalize.py` + tests
-- [ ] Migration `022_source_identity.sql` + backfill
-- [ ] `ingestion/page_crawler.py` + tests
-- [ ] `POST /admin/documents/pull-page` + job poll
-- [ ] UploadPage Pull-from-URL UI
-- [ ] Verification checklist in plan doc
+- [ ] `pip install -e ".[dev]"` (picks up python-pptx)
+- [ ] `py -m pytest tests/test_url_normalize.py tests/test_page_crawler.py -v`
+- [ ] `py -m pytest tests/test_governance.py tests/test_upload_route.py -v` (prereq regressions)
+- [ ] Apply migration 022 local: `py scripts/apply_migration.py db/migrations/022_source_identity.sql`
+- [ ] Backfill local: `py scripts/backfill_source_identity.py`
+- [ ] Full checklist in [docs/on_demand_url_pull.md](docs/on_demand_url_pull.md) (pull/re-pull/swap/move/SSRF/auth cases)
+- [ ] `cd frontend && npm run test`
+- [ ] Prod: migration 022 + backfill against RDS, then deploy
 
-## Verification
+## Verification commands
 
-**Prod corpus:**
 ```powershell
-$env:ENVIRONMENT="production"; & .\.venv\Scripts\python.exe scripts\ingest_prod_corpus.py
-# Expected log: RDS corpus: 19 active docs, 17159 chunks (17159 embedded)
-# Smoke: https://permits.scottsalhanick.com/api/documents  (not [])
+.\.venv\Scripts\Activate.ps1
+pip install -e ".[dev]"
+py -m pytest tests/test_url_normalize.py tests/test_page_crawler.py tests/test_governance.py tests/test_upload_route.py -v
+py scripts/apply_migration.py db/migrations/022_source_identity.sql
+py scripts/backfill_source_identity.py
+cd frontend; npm run test
 ```
-
-**URL pull (after implementation):** see checklist in `docs/on_demand_url_pull.md`
 
 ## Next tasks
 
-1. Start URL pull build order from plan (prereq fixes first)
-2. Optional: iPhone smoke of Sprint 17 flow (deferred)
+1. Run verification checklist above (tests + migration + backfill)
+2. Manual pull smoke on a real municipal page via `/upload` Pull tab
+3. Prod rollout: migration 022 on RDS + backfill + deploy backend/frontend
+4. Optional: iPhone smoke of Sprint 17 flow (deferred)
 
 ## Module status
 
 | Module | Current state |
 |--------|---------------|
-| prod RDS | 19 docs / 17,159 embedded chunks |
+| prod RDS | 19 docs / 17,159 embedded chunks (no migration 022 yet) |
+| ingestion | url_normalize + page_crawler new; chunker supports PPTX; governance rechunk fixed |
+| api | pull router registered under `/api/admin/documents`; upload enums schema-true |
+| db | migration 022 written (not applied); identity helpers in client.py |
+| frontend | UploadPage has Upload file / Pull from URL tabs |
 | terraform | RDS SG allows campus + home IPs |
-| ingest scripts | `_verify_counts` dict_row-safe |
-| docs | `on_demand_url_pull.md` planned |
 
 ## Decisions log
 
@@ -62,13 +71,17 @@ $env:ENVIRONMENT="production"; & .\.venv\Scripts\python.exe scripts\ingest_prod_
 |----------|--------|
 | Doc identity for pull | Normalized source URL first; fallback `municipality + doc_type + filename` with `url_changed` flag |
 | Version on content change | New version + supersede old **only after** chunk+embed success |
+| Moved URL, same bytes | Flag for review (`url_changed_flag`), never auto-supersede |
 | Pull UX | Admin URL + Pull on `/upload`; on-demand only (no watcher) |
+| Pull job state | In-memory dict for MVP; DB-backed table later |
+| Redirect SSRF | `fetch_asset` disables auto-redirects, re-validates every hop |
+| Enum source of truth | `db/schema.sql` enums; upload/pull/frontend lists copied from it |
 | Gen image provider | Leonardo.ai when keyed; OpenAI fallback; mock PNG fallback otherwise |
 | Kickoff flow | Deterministic checkbox selections for spaces, work types, and materials |
 
 ## Canonical validation
 
-```bash
-$env:ENVIRONMENT="production"; & .\.venv\Scripts\python.exe scripts\ingest_prod_corpus.py
-# API smoke: GET https://permits.scottsalhanick.com/api/documents
+```powershell
+py -m pytest tests/test_url_normalize.py tests/test_page_crawler.py -v
+# Prod corpus smoke: GET https://permits.scottsalhanick.com/api/documents  (not [])
 ```

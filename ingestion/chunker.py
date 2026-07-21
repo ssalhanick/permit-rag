@@ -186,6 +186,40 @@ def extract_text_from_docx(path: Path) -> str:
     return "\n".join(paragraphs)
 
 
+def extract_text_from_pptx(path: Path) -> str:
+    """
+    Extract slide text (shapes + tables) from a PPTX file.
+
+    Returns a single string with slides separated by \\n\\n.
+    Raises RuntimeError with install guidance if python-pptx is unavailable.
+    """
+    try:
+        from pptx import Presentation  # type: ignore[import-not-found]
+    except ImportError as exc:
+        raise RuntimeError(
+            "PPTX extraction requires python-pptx. "
+            "Install with: pip install python-pptx"
+        ) from exc
+
+    presentation = Presentation(path)
+    slides: list[str] = []
+    for slide in presentation.slides:
+        lines: list[str] = []
+        for shape in slide.shapes:
+            if shape.has_text_frame:
+                lines.extend(
+                    p.text.strip() for p in shape.text_frame.paragraphs if p.text.strip()
+                )
+            if shape.has_table:
+                for row in shape.table.rows:
+                    cells = [c.text.strip() for c in row.cells if c.text.strip()]
+                    if cells:
+                        lines.append(" | ".join(cells))
+        if lines:
+            slides.append("\n".join(lines))
+    return "\n\n".join(slides)
+
+
 def extract_text(path: Path) -> str:
     """
     Auto-detect file type and extract text.
@@ -203,6 +237,8 @@ def extract_text(path: Path) -> str:
         return extract_text_from_html(path)
     elif suffix == ".docx":
         return extract_text_from_docx(path)
+    elif suffix == ".pptx":
+        return extract_text_from_pptx(path)
     else:
         # Fall back to plain text
         return path.read_text(encoding="utf-8", errors="replace")
@@ -371,13 +407,13 @@ def chunk_document(
 
 def _find_raw_file(doc_id: str, raw_dir: Path) -> Path:
     """Locate the raw file for a doc_id, trying common extensions."""
-    for ext in (".pdf", ".docx", ".txt", ".md", ".markdown", ".html", ".htm"):
+    for ext in (".pdf", ".docx", ".pptx", ".txt", ".md", ".markdown", ".html", ".htm"):
         candidate = raw_dir / f"{doc_id}{ext}"
         if candidate.exists():
             return candidate
     raise FileNotFoundError(
         f"No raw file found for doc_id={doc_id!r} in {raw_dir}. "
-        f"Tried extensions: .pdf, .docx, .txt, .md, .markdown, .html, .htm"
+        f"Tried extensions: .pdf, .docx, .pptx, .txt, .md, .markdown, .html, .htm"
     )
 
 

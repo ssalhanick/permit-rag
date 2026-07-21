@@ -36,6 +36,7 @@ from pydantic import BaseModel
 from api.auth import get_optional_current_user
 from db.client import (
     delete_chunks_for_document,
+    get_project,
     insert_chunks,
     insert_document,
     share_document_to_project,
@@ -179,12 +180,13 @@ class UploadResponse(BaseModel):
 ALLOWED_EXTENSIONS = {".pdf", ".html", ".htm"}
 UPLOAD_DIR = Path("documents/raw")
 
-# Valid enum values (must match Postgres enums in schema)
-VALID_AUTHORITY_LEVELS = {"municipal", "state", "federal", "regional"}
+# Valid enum values — MUST match db/schema.sql `authority_level` / `doc_type`
+VALID_AUTHORITY_LEVELS = {"municipal", "county", "state", "federal"}
 VALID_DOC_TYPES = {
-    "building_code", "zoning_ordinance", "fire_code", "electrical_code",
-    "plumbing_code", "mechanical_code", "energy_code", "accessibility_standard",
-    "environmental_regulation", "licensing_requirement", "permit_guide", "other",
+    "building_code", "zoning_ordinance", "permit_checklist", "fire_code",
+    "plumbing_code", "electrical_code", "mechanical_code", "energy_code",
+    "accessibility_code", "osha_standard", "administrative_rule", "amendment",
+    "state_statute", "federal_regulation", "other",
 }
 
 
@@ -204,7 +206,7 @@ async def upload_document(
     file: UploadFile = File(..., description="PDF or HTML file to upload."),
     doc_id: str = Form(..., description="Unique document identifier (e.g. 'plano-pool-ordinance-2024')."),
     municipality: str = Form(..., description="Municipality string matching documents table (e.g. 'plano')."),
-    authority_level: str = Form(..., description="Authority level: municipal | state | federal | regional."),
+    authority_level: str = Form(..., description="Authority level: municipal | county | state | federal."),
     doc_type: str = Form(..., description="Document type (e.g. 'zoning_ordinance')."),
     subject_tags: str = Form(default="", description="Comma-separated subject tags (e.g. 'pools,setbacks')."),
     source_tier: int = Form(default=2, description="Source tier: 1=corpus, 2=user ordinance, 3=project doc."),
@@ -235,7 +237,7 @@ async def upload_document(
         )
     if source_tier not in (1, 2, 3):
         raise HTTPException(status_code=400, detail="source_tier must be 1, 2, or 3.")
-    if project_id and not db_client.get_project(project_id):
+    if project_id and not get_project(project_id):
         raise HTTPException(
             status_code=404,
             detail=f"Project {project_id} not found.",

@@ -183,28 +183,35 @@ def run_supersession_flow(
 
 def _rechunk_and_embed(document_id: UUID, raw_path: Path, doc_id: str) -> int:
     """
-    Delete existing chunks for *document_id* and re-ingest from *raw_path*.
+    Re-chunk + re-embed *doc_id* using the proven upload pipeline order:
+    chunk_document(doc_id) → delete old chunks → insert_chunks → embed_document.
+
+    Chunking happens BEFORE the delete so a chunking failure leaves the
+    existing chunks untouched.
 
     Returns the number of new chunks written.
     """
-    from db.client import delete_chunks_for_document
-
-    log.info("re-embed: deleting existing chunks for %s (%s)", doc_id, document_id)
-    deleted = delete_chunks_for_document(document_id)
-    log.info("re-embed: deleted %d chunks for %s", deleted, doc_id)
-
-    # Lazy import to avoid circular imports at module load time
+    # Lazy imports to avoid circular imports at module load time
+    from db.client import delete_chunks_for_document, insert_chunks
     from ingestion.chunker import chunk_document
-    from ingestion.embedder import embed_and_store
+    from ingestion.embedder import embed_document
 
-    chunks = chunk_document(raw_path)
+    chunk_result = chunk_document(doc_id, raw_dir=raw_path.parent)
+    chunks = chunk_result["chunks"]
     if not chunks:
         log.warning("re-embed: no chunks produced for %s (empty or unreadable?)", doc_id)
         return 0
 
-    written = embed_and_store(document_id, chunks)
-    log.info("re-embed: wrote %d chunks for %s", written, doc_id)
-    return written
+    deleted = delete_chunks_for_document(document_id)
+    log.info("re-embed: deleted %d old chunks for %s (%s)", deleted, doc_id, document_id)
+
+    inserted = insert_chunks(document_id, chunks)
+    embed_result = embed_document(doc_id, force=True)
+    log.info(
+        "re-embed: wrote %d chunks for %s (embedded_new=%s)",
+        inserted, doc_id, embed_result.get("num_new"),
+    )
+    return inserted
 
 
 # ════════════════════════════════════════════════

@@ -1,25 +1,29 @@
 import React, { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
-import { API_BASE_URL, API_PREFIX, fetchProjects } from "./api.js";
+import { API_BASE_URL, API_PREFIX, fetchProjects, getPullJob, pullPage } from "./api.js";
 import { useAuth } from "./context/AuthContext.jsx";
 import { formatUploadError, getUploadBlockers, suggestDocIdFromFilename } from "./uploadUtils.js";
 import { getStoredAdminToken, setStoredAdminToken } from "./documentAdminUtils.js";
 import { isNativePlatform } from "./platform.js";
 import { capturePhotoForUpload, pickImageForUpload } from "./services/mobileUpload.js";
 
-const AUTHORITY_LEVELS = ["municipal", "state", "federal", "regional"];
+// Must match db/schema.sql enums (authority_level, doc_type)
+const AUTHORITY_LEVELS = ["municipal", "county", "state", "federal"];
 const DOC_TYPES = [
   "building_code",
   "zoning_ordinance",
+  "permit_checklist",
   "fire_code",
-  "electrical_code",
   "plumbing_code",
+  "electrical_code",
   "mechanical_code",
   "energy_code",
-  "accessibility_standard",
-  "environmental_regulation",
-  "licensing_requirement",
-  "permit_guide",
+  "accessibility_code",
+  "osha_standard",
+  "administrative_rule",
+  "amendment",
+  "state_statute",
+  "federal_regulation",
   "other",
 ];
 const SOURCE_TIERS = [
@@ -48,6 +52,11 @@ export default function UploadPage() {
   const [status, setStatus] = useState(null); // null | 'loading' | 'success' | 'error'
   const [result, setResult] = useState(null);
   const [error, setError] = useState("");
+  const [mode, setMode] = useState("file"); // 'file' | 'url'
+  const [pullUrl, setPullUrl] = useState("");
+  const [pullJob, setPullJob] = useState(null);
+  const [pullStatus, setPullStatus] = useState(null); // null | 'loading' | 'polling' | 'success' | 'error'
+  const [pullError, setPullError] = useState("");
 
   useEffect(() => {
     if (user) {
@@ -163,6 +172,66 @@ export default function UploadPage() {
     setError("");
   };
 
+  // ── Pull from URL ──
+  useEffect(() => {
+    if (pullStatus !== "polling" || !pullJob?.job_id) {
+      return undefined;
+    }
+    const timer = setInterval(async () => {
+      try {
+        const res = await getPullJob(pullJob.job_id, adminToken.trim());
+        setPullJob(res.data);
+        if (res.data.status === "complete") {
+          setPullStatus("success");
+        } else if (res.data.status === "failed") {
+          setPullStatus("error");
+          setPullError(res.data.error || "Pull job failed.");
+        }
+      } catch (err) {
+        setPullStatus("error");
+        setPullError(err.message);
+      }
+    }, 2500);
+    return () => clearInterval(timer);
+  }, [pullStatus, pullJob?.job_id, adminToken]);
+
+  const canPull =
+    pullUrl.trim().startsWith("https://") &&
+    form.municipality.trim() &&
+    adminToken.trim() &&
+    pullStatus !== "loading" &&
+    pullStatus !== "polling";
+
+  const handlePullSubmit = async (e) => {
+    e.preventDefault();
+    setPullStatus("loading");
+    setPullError("");
+    setPullJob(null);
+    try {
+      const payload = {
+        url: pullUrl.trim(),
+        municipality: form.municipality.trim().toLowerCase(),
+        authority_level: form.authority_level,
+        doc_type: form.doc_type,
+        subject_tags: form.subject_tags.split(",").map((t) => t.trim()).filter(Boolean),
+        source_tier: form.source_tier,
+      };
+      const res = await pullPage(payload, adminToken.trim());
+      setPullJob(res.data);
+      setPullStatus("polling");
+    } catch (err) {
+      setPullError(formatUploadError(err.message));
+      setPullStatus("error");
+    }
+  };
+
+  const handlePullReset = () => {
+    setPullUrl("");
+    setPullJob(null);
+    setPullStatus(null);
+    setPullError("");
+  };
+
   return (
     <main className="page">
       <section className="panel">
@@ -173,17 +242,197 @@ export default function UploadPage() {
           All fields are required for proper metadata tagging.
         </p>
 
-        {status === "loading" ? (
+        <div className="upload-mode-tabs" role="tablist">
+          <button
+            type="button"
+            role="tab"
+            aria-selected={mode === "file"}
+            className={mode === "file" ? "" : "secondary-button"}
+            onClick={() => setMode("file")}
+          >
+            Upload file
+          </button>
+          <button
+            type="button"
+            role="tab"
+            aria-selected={mode === "url"}
+            className={mode === "url" ? "" : "secondary-button"}
+            onClick={() => setMode("url")}
+          >
+            Pull from URL
+          </button>
+        </div>
+
+        {mode === "url" ? (
+          <form onSubmit={handlePullSubmit} className="form upload-form">
+            <fieldset className="upload-fieldset">
+              <legend>Page URL</legend>
+              <label htmlFor="pull-url">HTTPS page to scan for documents *</label>
+              <input
+                id="pull-url"
+                type="url"
+                value={pullUrl}
+                onChange={(e) => setPullUrl(e.target.value)}
+                placeholder="https://www.dallascityhall.com/departments/sustainabledevelopment/buildinginspection"
+                required
+              />
+              <p className="field-hint">
+                Linked PDF / DOCX / PPTX / HTML / TXT / MD files are discovered and
+                ingested only if new or changed. Unchanged files are skipped;
+                changed files supersede the old version.
+              </p>
+            </fieldset>
+
+            <fieldset className="upload-fieldset">
+              <legend>Metadata for discovered files</legend>
+              <div className="row">
+                <div>
+                  <label htmlFor="pull-municipality">Municipality *</label>
+                  <input
+                    id="pull-municipality"
+                    name="municipality"
+                    value={form.municipality}
+                    onChange={handleChange}
+                    placeholder="dallas"
+                    required
+                  />
+                </div>
+                <div>
+                  <label htmlFor="pull-authority">Authority Level *</label>
+                  <select
+                    id="pull-authority"
+                    name="authority_level"
+                    value={form.authority_level}
+                    onChange={handleChange}
+                  >
+                    {AUTHORITY_LEVELS.map((v) => (
+                      <option key={v} value={v}>{v}</option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+              <div className="row">
+                <div>
+                  <label htmlFor="pull-doc-type">Document Type *</label>
+                  <select
+                    id="pull-doc-type"
+                    name="doc_type"
+                    value={form.doc_type}
+                    onChange={handleChange}
+                  >
+                    {DOC_TYPES.map((v) => (
+                      <option key={v} value={v}>{v.replace(/_/g, " ")}</option>
+                    ))}
+                  </select>
+                </div>
+                <div>
+                  <label htmlFor="pull-source-tier">Source Tier *</label>
+                  <select
+                    id="pull-source-tier"
+                    name="source_tier"
+                    value={form.source_tier}
+                    onChange={handleChange}
+                  >
+                    {SOURCE_TIERS.map((t) => (
+                      <option key={t.value} value={t.value}>{t.label}</option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+              <label htmlFor="pull-subject-tags">
+                Subject Tags{" "}
+                <span className="field-hint">(comma-separated)</span>
+              </label>
+              <input
+                id="pull-subject-tags"
+                name="subject_tags"
+                value={form.subject_tags}
+                onChange={handleChange}
+                placeholder="permits, checklists"
+              />
+            </fieldset>
+
+            <fieldset className="upload-fieldset">
+              <legend>Admin Auth</legend>
+              <label htmlFor="pull-admin-token">X-Admin-Token *</label>
+              <input
+                id="pull-admin-token"
+                type="password"
+                value={adminToken}
+                onChange={handleAdminTokenChange}
+                placeholder="Your API_ADMIN_TOKEN value"
+                required
+              />
+            </fieldset>
+
+            {pullStatus === "loading" || pullStatus === "polling" ? (
+              <div className="upload-status upload-status-loading">
+                {pullStatus === "loading"
+                  ? "Starting pull…"
+                  : `Pulling… ${pullJob?.processed_files ?? 0}/${pullJob?.total_files ?? "?"} files processed.`}
+              </div>
+            ) : null}
+
+            {pullStatus === "error" && pullError ? (
+              <div className="upload-status upload-status-error">{pullError}</div>
+            ) : null}
+
+            {pullJob?.files?.length ? (
+              <table className="pull-results-table">
+                <thead>
+                  <tr>
+                    <th>File</th>
+                    <th>Verdict</th>
+                    <th>doc_id</th>
+                    <th>Detail</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {pullJob.files.map((f) => (
+                    <tr key={f.url}>
+                      <td title={f.url}>{f.filename}</td>
+                      <td>
+                        {f.verdict}
+                        {f.url_changed ? " ⚠ url changed" : ""}
+                      </td>
+                      <td>{f.doc_id ? <code>{f.doc_id}</code> : "—"}</td>
+                      <td>{f.detail || ""}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            ) : null}
+
+            {pullStatus === "success" ? (
+              <div className="upload-success">
+                <h2>✅ Pull complete</h2>
+                <p className="muted">
+                  {pullJob?.total_files ?? 0} file(s) discovered on the page.
+                  Rows marked <strong>flagged</strong> need human review.
+                </p>
+                <button type="button" onClick={handlePullReset}>Pull another page</button>
+              </div>
+            ) : (
+              <div className="upload-actions">
+                <button type="submit" disabled={!canPull}>
+                  {pullStatus === "polling" ? "Pulling…" : "Pull"}
+                </button>
+              </div>
+            )}
+          </form>
+        ) : null}
+
+        {mode === "file" && status === "loading" ? (
           <div className="upload-status upload-status-loading">
             Upload in progress. Keep this page open until response returns.
           </div>
         ) : null}
 
-        {status === "error" && error ? (
+        {mode === "file" && status === "error" && error ? (
           <div className="upload-status upload-status-error">{error}</div>
         ) : null}
 
-        {status === "success" && result ? (
+        {mode === "file" ? (status === "success" && result ? (
           <div className="upload-success">
             <h2>✅ Upload accepted</h2>
             <dl className="result-dl">
@@ -407,7 +656,7 @@ export default function UploadPage() {
               </button>
             </div>
           </form>
-        )}
+        )) : null}
       </section>
     </main>
   );

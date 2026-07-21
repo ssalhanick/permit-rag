@@ -10,6 +10,7 @@ from api.routes.commerce import router as commerce_router
 from api.routes.corpus import router as corpus_router
 from api.routes.documents import router as documents_router
 from api.routes.projects import router as projects_router
+from api.routes.pull import router as pull_router
 from api.routes.query import router as query_router
 from api.routes.upload import router as upload_router
 
@@ -20,6 +21,7 @@ __all__ = [
     "corpus_router",
     "documents_router",
     "projects_router",
+    "pull_router",
     "query_router",
     "upload_router",
 ]
