@@ -3,6 +3,7 @@ import { Link, useParams } from "react-router-dom";
 import { Directory, Encoding, Filesystem } from "@capacitor/filesystem";
 import { fetchProjectRoomScans, fetchUserRoomScans } from "../../api.js";
 import OverlayProductList from "../../components/OverlayProductList.jsx";
+import RoomFloorPlanMap from "../../components/RoomFloorPlanMap.jsx";
 import { isNativePlatform } from "../../platform.js";
 import { LIBRARY_SCOPE } from "../../services/roomScanFilesystem.js";
 import {
@@ -40,6 +41,7 @@ export default function RoomDesignPage({ libraryMode = false }) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [message, setMessage] = useState("");
+  const [selectedSurfaceId, setSelectedSurfaceId] = useState(null);
 
   const scope = libraryMode ? LIBRARY_SCOPE : projectId;
   const fsIds = filesystemLocation
@@ -309,6 +311,7 @@ export default function RoomDesignPage({ libraryMode = false }) {
       await openRoomARForScan(scanRow, {
         scope,
         roomLabel: scanRow.room_label,
+        selectedSurfaceId,
       });
     } catch (err) {
       setError(err.message || "AR unavailable.");
@@ -417,6 +420,12 @@ export default function RoomDesignPage({ libraryMode = false }) {
         {error && <div className="error-box">{error}</div>}
         {message && <div className="profile-flash profile-flash--success">{message}</div>}
 
+        <RoomFloorPlanMap
+          surfaces={capture?.surfaces}
+          selectedSurfaceId={selectedSurfaceId}
+          onSelectSurface={setSelectedSurfaceId}
+        />
+
         <textarea
           className="room-design-input room-design-textarea"
           rows={3}
@@ -452,7 +461,7 @@ export default function RoomDesignPage({ libraryMode = false }) {
           )}
           {isNativePlatform() && (
             <button type="button" className="secondary-button" onClick={handleOpenAR}>
-              Open AR
+              {selectedSurfaceId ? "Open AR here" : "Open AR"}
             </button>
           )}
           <button type="button" className="secondary-button" onClick={handleExportDxf} disabled={busy}>

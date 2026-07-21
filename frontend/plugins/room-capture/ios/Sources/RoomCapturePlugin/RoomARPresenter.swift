@@ -37,7 +37,8 @@ final class RoomARPresenter: NSObject, UITableViewDelegate, UITableViewDataSourc
         projectId: String,
         structureId: String,
         roomId: String,
-        roomLabel: String
+        roomLabel: String,
+        initialSelectedSurfaceId: String? = nil
     ) {
         self.call = call
         self.plugin = plugin
@@ -45,6 +46,7 @@ final class RoomARPresenter: NSObject, UITableViewDelegate, UITableViewDataSourc
         self.structureId = structureId
         self.roomId = roomId
         self.roomLabel = roomLabel
+        self.selectedSurfaceId = initialSelectedSurfaceId
         super.init()
     }
 
@@ -215,7 +217,8 @@ final class RoomARPresenter: NSObject, UITableViewDelegate, UITableViewDataSourc
         ])
 
         addWallAnchors(to: arView)
-        
+        updateDictateButtonTitle()
+
         self.raycastTimer = Timer.scheduledTimer(withTimeInterval: 0.3, repeats: true) { [weak self] _ in
             self?.performCenterRaycast()
         }
@@ -273,22 +276,24 @@ final class RoomARPresenter: NSObject, UITableViewDelegate, UITableViewDataSourc
         var doorCount = 0
         var windowCount = 0
         var openingCount = 0
-        
+        var floorCount = 0
+
         for (index, surface) in surfaces.enumerated() {
             let cat = surface["category"] as? String ?? ""
-            guard cat == "wall" || cat == "door" || cat == "window" || cat == "opening" else { continue }
-            
+            guard cat == "wall" || cat == "door" || cat == "window" || cat == "opening" || cat == "floor" else { continue }
+
             if cat == "wall" { wallCount += 1 }
             else if cat == "door" { doorCount += 1 }
             else if cat == "window" { windowCount += 1 }
             else if cat == "opening" { openingCount += 1 }
-            
+            else if cat == "floor" { floorCount += 1 }
+
             let entity = buildWallEntity(surface: surface, index: index)
             anchor.addChild(entity)
         }
         arView.scene.addAnchor(anchor)
-        
-        hudLabel?.text = " Scan Loaded: \(surfaces.count) surfaces\n - Walls: \(wallCount) | Doors: \(doorCount)\n - Windows: \(windowCount) | Openings: \(openingCount)\n Centroid: \(String(format: "%.2f, %.2f, %.2f", centroid.x, centroid.y, centroid.z))"
+
+        hudLabel?.text = " Scan Loaded: \(surfaces.count) surfaces\n - Walls: \(wallCount) | Doors: \(doorCount)\n - Windows: \(windowCount) | Openings: \(openingCount) | Floors: \(floorCount)\n Centroid: \(String(format: "%.2f, %.2f, %.2f", centroid.x, centroid.y, centroid.z))"
         
         preloadOverlayTextures()
     }
@@ -341,7 +346,7 @@ final class RoomARPresenter: NSObject, UITableViewDelegate, UITableViewDataSourc
         
         for (index, surface) in surfaces.enumerated() {
             let cat = surface["category"] as? String ?? ""
-            guard cat == "wall" || cat == "door" || cat == "window" || cat == "opening" else { continue }
+            guard cat == "wall" || cat == "door" || cat == "window" || cat == "opening" || cat == "floor" else { continue }
             let entity = buildWallEntity(surface: surface, index: index)
             anchor.addChild(entity)
         }
@@ -377,6 +382,10 @@ final class RoomARPresenter: NSObject, UITableViewDelegate, UITableViewDataSourc
                     } else if category == "opening" {
                         var unlit = UnlitMaterial()
                         unlit.color = .init(tint: isSelected ? UIColor.systemBlue.withAlphaComponent(0.65) : (isPointed ? UIColor.systemGreen.withAlphaComponent(0.35) : UIColor.lightGray.withAlphaComponent(0.15)))
+                        material = unlit
+                    } else if category == "floor" {
+                        var unlit = UnlitMaterial()
+                        unlit.color = .init(tint: isSelected ? UIColor.systemBlue.withAlphaComponent(0.65) : (isPointed ? UIColor.systemGreen.withAlphaComponent(0.35) : (UIColor(hex: "#C2A878")?.withAlphaComponent(0.35) ?? .gray.withAlphaComponent(0.35))))
                         material = unlit
                     } else {
                         // Wall
@@ -827,6 +836,7 @@ final class RoomARPresenter: NSObject, UITableViewDelegate, UITableViewDataSourc
         let dims = surface["dimensions"] as? [String: Double] ?? [:]
         let width = Float(dims["width"] ?? 1)
         let height = Float(dims["height"] ?? 2.4)
+        let depth = Float(dims["depth"] ?? 1)
         let surfaceId = surface["id"] as? String
         let category = surface["category"] as? String ?? "wall"
         
@@ -840,10 +850,18 @@ final class RoomARPresenter: NSObject, UITableViewDelegate, UITableViewDataSourc
             ($0["surface_id"] as? String) == surfaceId
         }
         
-        let mesh = MeshResource.generateBox(width: width, height: height, depth: 0.05)
+        var mesh = MeshResource.generateBox(width: width, height: height, depth: 0.05)
         let material: Material
-        
-        if category == "door" {
+
+        if category == "floor" {
+            // Floor surfaces are flat: RoomPlan reports the second planar extent
+            // in the "depth" field rather than a vertical height, so swap axes
+            // and use a thin fixed thickness for visibility.
+            mesh = MeshResource.generateBox(width: width, height: 0.02, depth: depth)
+            var unlit = UnlitMaterial()
+            unlit.color = .init(tint: isSelected ? UIColor.systemBlue.withAlphaComponent(0.65) : (isPointed ? UIColor.systemGreen.withAlphaComponent(0.35) : (UIColor(hex: "#C2A878")?.withAlphaComponent(0.35) ?? .gray.withAlphaComponent(0.35))))
+            material = unlit
+        } else if category == "door" {
             var unlit = UnlitMaterial()
             unlit.color = .init(tint: isSelected ? UIColor.systemBlue.withAlphaComponent(0.65) : (isPointed ? UIColor.systemGreen.withAlphaComponent(0.35) : (UIColor(hex: "#8B5A2B")?.withAlphaComponent(0.4) ?? .brown.withAlphaComponent(0.4))))
             material = unlit

@@ -22,6 +22,11 @@ enum RoomCaptureEncoder {
         surfaces.append(contentsOf: capturedRoom.openings.enumerated().map {
             encodeSurface($0.element, category: "opening", prefix: "\(rid)-opening", index: $0.offset)
         })
+        if #available(iOS 17.0, *) {
+            surfaces.append(contentsOf: capturedRoom.floors.enumerated().map {
+                encodeSurface($0.element, category: "floor", prefix: "\(rid)-floor", index: $0.offset)
+            })
+        }
 
         let formatter = ISO8601DateFormatter()
         formatter.formatOptions = [.withInternetDateTime]

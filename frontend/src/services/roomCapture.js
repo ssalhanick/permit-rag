@@ -60,7 +60,7 @@ export async function openRoomAR(opts) {
  * Resolve on-device capture path then open AR for a scan row.
  *
  * @param {object} scanRow
- * @param {{ scope: string, roomLabel?: string }} opts
+ * @param {{ scope: string, roomLabel?: string, selectedSurfaceId?: string }} opts
  * @returns {Promise<object>}
  */
 export async function openRoomARForScan(scanRow, opts) {
@@ -74,6 +74,7 @@ export async function openRoomARForScan(scanRow, opts) {
     structureId: location.structureId,
     roomId: location.roomId,
     roomLabel: opts.roomLabel || scanRow.room_label,
+    selectedSurfaceId: opts.selectedSurfaceId,
   });
 }
 

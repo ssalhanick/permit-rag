@@ -127,6 +127,7 @@ public class RoomCapturePlugin: CAPPlugin, CAPBridgedPlugin {
             return
         }
         let roomLabel = call.getString("roomLabel") ?? "Room"
+        let selectedSurfaceId = call.getString("selectedSurfaceId")
         DispatchQueue.main.async { [weak self] in
             guard let self else { return }
             let presenter = RoomARPresenter(
@@ -135,7 +136,8 @@ public class RoomCapturePlugin: CAPPlugin, CAPBridgedPlugin {
                 projectId: projectId,
                 structureId: structureId,
                 roomId: roomId,
-                roomLabel: roomLabel
+                roomLabel: roomLabel,
+                initialSelectedSurfaceId: selectedSurfaceId
             )
             self.activeARPresenters[roomId] = presenter
             presenter.present(from: viewController)
