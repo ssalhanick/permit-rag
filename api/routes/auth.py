@@ -17,6 +17,7 @@ from api.auth import get_current_user
 from api.schemas import (
     DesignIntentRequest,
     DesignIntentResponse,
+    SetActiveProjectRequest,
     UserMeResponse,
     UpsertRoomScansRequest,
     UserRoomScanResponse,
@@ -44,6 +45,34 @@ def get_me(current_user: Annotated[dict, Depends(get_current_user)]) -> UserMeRe
         role=user["role"],
         cognito_sub=user["cognito_sub"],
         created_at=user["created_at"],
+        active_project_id=user.get("active_project_id"),
+    )
+
+
+@router.patch("/me/active-project", response_model=UserMeResponse)
+def set_active_project(
+    body: SetActiveProjectRequest,
+    current_user: Annotated[dict, Depends(get_current_user)],
+) -> UserMeResponse:
+    """Set (or clear, with project_id=null) the caller's single active project.
+
+    New queries, uploads, and room scans that don't specify a project_id fall
+    back to this one. The caller must be a member of the project being activated.
+    """
+    if body.project_id is not None:
+        role = db_client.get_project_role(body.project_id, current_user["user_id"])
+        if not role:
+            raise HTTPException(status_code=403, detail="Not a member of that project.")
+    db_client.set_active_project(current_user["user_id"], body.project_id)
+    user = db_client.get_user_by_id(current_user["user_id"])
+    return UserMeResponse(
+        id=user["id"],
+        username=user["username"],
+        email=user["email"],
+        role=user["role"],
+        cognito_sub=user["cognito_sub"],
+        created_at=user["created_at"],
+        active_project_id=user.get("active_project_id"),
     )
 
 

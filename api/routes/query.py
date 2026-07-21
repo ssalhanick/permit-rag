@@ -223,6 +223,13 @@ def query_answer(
     request_id = request.headers.get("X-Client-Request-Id", "").strip() or f"api-{int(time.time() * 1000)}"
     tracing_on = _langsmith_enabled()
 
+    if not body.project_id and current_user and isinstance(current_user, dict):
+        from db import client as db_client
+
+        user_row = db_client.get_user_by_id(current_user["user_id"])
+        if user_row and user_row.get("active_project_id"):
+            body.project_id = str(user_row["active_project_id"])
+
     # Sprint 3 Task 11: classify permit types (non-blocking)
     try:
         permit_types = classify_permit_types(body.query)

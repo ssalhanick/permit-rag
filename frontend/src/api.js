@@ -289,10 +289,26 @@ export async function fetchMe() {
   return await requestJson("/auth/me");
 }
 
+export async function setActiveProjectApi(projectId) {
+  return await requestJson("/auth/me/active-project", {
+    method: "PATCH",
+    body: { project_id: projectId },
+  });
+}
+
 // ── Project Endpoints ────────────────────────────────────────
 
-export async function fetchProjects() {
-  return await requestJson("/projects/");
+export async function fetchProjects({ status, search, hasRoomScans } = {}) {
+  const params = new URLSearchParams();
+  if (status) params.set("status", status);
+  if (search) params.set("search", search);
+  if (hasRoomScans !== undefined) params.set("has_room_scans", hasRoomScans);
+  const query = params.toString();
+  return await requestJson(`/projects/${query ? `?${query}` : ""}`);
+}
+
+export async function fetchDeletedProjects() {
+  return await requestJson("/projects/trash");
 }
 
 export async function createProject(payload) {
@@ -320,8 +336,28 @@ export async function getProject(projectId) {
   return await requestJson(`/projects/${projectId}`);
 }
 
+export async function setProjectStatus(projectId, isArchived) {
+  return await requestJson(`/projects/${projectId}/status`, {
+    method: "PATCH",
+    body: { is_archived: isArchived },
+  });
+}
+
 export async function deleteProject(projectId) {
+  // Soft delete — moves the project to the trash view, room scans are kept.
   return await requestJson(`/projects/${projectId}`, {
+    method: "DELETE",
+  });
+}
+
+export async function restoreProject(projectId) {
+  return await requestJson(`/projects/${projectId}/restore`, {
+    method: "POST",
+  });
+}
+
+export async function hardDeleteProject(projectId) {
+  return await requestJson(`/projects/${projectId}/permanent`, {
     method: "DELETE",
   });
 }

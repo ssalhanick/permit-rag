@@ -149,6 +149,7 @@ class TestProjectsAPI:
             spaces=None,
             work_types=None,
             recommended_permits=None,
+            **_ignored,
         ):
             return {
                 "id": uuid4(),
@@ -160,7 +161,7 @@ class TestProjectsAPI:
                 "spaces": spaces,
                 "work_types": work_types,
                 "recommended_permits": recommended_permits,
-                "is_active": True,
+                "is_archived": False,
                 "created_at": datetime.now(timezone.utc),
                 "updated_at": datetime.now(timezone.utc),
             }
@@ -191,7 +192,7 @@ class TestProjectsAPI:
                 "id": project_id,
                 "name": "Transferred Project",
                 "owner_user_id": new_owner_id,
-                "is_active": True,
+                "is_archived": False,
                 "created_at": datetime.now(timezone.utc),
                 "updated_at": datetime.now(timezone.utc),
             }

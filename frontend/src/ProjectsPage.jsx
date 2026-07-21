@@ -5,10 +5,11 @@ import { buildKickoffPath } from "./projectKickoffRoutes.js";
 import { createProject, fetchProjects } from "./api.js";
 
 /**
- * Project list — select a project to open its dashboard workspace.
+ * Project list — searchable/filterable, select a project to open its dashboard
+ * workspace, or set it as the active project from the nav.
  */
 export default function ProjectsPage() {
-  const { user } = useAuth();
+  const { user, activeProject, setActiveProject } = useAuth();
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const requestedProjectId = searchParams.get("projectId");
@@ -18,6 +19,9 @@ export default function ProjectsPage() {
   const [actionLoading, setActionLoading] = useState(false);
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
+  const [statusFilter, setStatusFilter] = useState("ongoing");
+  const [search, setSearch] = useState("");
+  const [hasRoomScans, setHasRoomScans] = useState(false);
 
   const loadProjects = async () => {
     if (!user) {
@@ -26,7 +30,11 @@ export default function ProjectsPage() {
     setLoading(true);
     setError("");
     try {
-      const res = await fetchProjects();
+      const res = await fetchProjects({
+        status: statusFilter === "all" ? undefined : statusFilter,
+        search: search || undefined,
+        hasRoomScans: hasRoomScans || undefined,
+      });
       setProjects(res.data || []);
     } catch (err) {
       setError(err.message || "Failed to load projects.");
@@ -37,7 +45,16 @@ export default function ProjectsPage() {
 
   useEffect(() => {
     loadProjects();
-  }, [user]);
+  }, [user, statusFilter, search, hasRoomScans]);
+
+  const handleSetActive = async (e, projectId) => {
+    e.stopPropagation();
+    try {
+      await setActiveProject(projectId);
+    } catch (err) {
+      setError(err.message || "Failed to set active project.");
+    }
+  };
 
   useEffect(() => {
     if (requestedProjectId) {
@@ -81,9 +98,14 @@ export default function ProjectsPage() {
               Each project has its own dashboard — query history, linked room scans, documents, and collaborators.
             </p>
           </div>
-          <Link to="/profile/room-scans" className="secondary-button">
-            My scan library
-          </Link>
+          <div className="flex items-center gap-2">
+            <Link to="/projects/trash" className="secondary-button">
+              Recently deleted
+            </Link>
+            <Link to="/profile/room-scans" className="secondary-button">
+              My scan library
+            </Link>
+          </div>
         </header>
 
         {error && <div className="error-box">{error}</div>}
@@ -92,22 +114,73 @@ export default function ProjectsPage() {
         <div className="project-grid project-grid--list-only">
           <section className="panel project-list-panel">
             <h3>My projects</h3>
+
+            <div className="mb-3 flex flex-wrap items-center gap-2">
+              <div className="flex rounded-md border border-slate-700" role="tablist" aria-label="Status filter">
+                {["ongoing", "archived", "all"].map((s) => (
+                  <button
+                    key={s}
+                    type="button"
+                    role="tab"
+                    aria-selected={statusFilter === s}
+                    onClick={() => setStatusFilter(s)}
+                    className={`px-3 py-1.5 text-sm capitalize ${
+                      statusFilter === s ? "bg-slate-700 text-slate-100" : "text-slate-400"
+                    }`}
+                  >
+                    {s}
+                  </button>
+                ))}
+              </div>
+              <input
+                type="text"
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                placeholder="Search name, address, municipality…"
+                className="min-w-[220px] flex-1 rounded border border-slate-600 bg-slate-800 px-2 py-1.5 text-sm text-slate-100"
+              />
+              <label className="flex items-center gap-1.5 text-sm text-slate-300">
+                <input
+                  type="checkbox"
+                  checked={hasRoomScans}
+                  onChange={(e) => setHasRoomScans(e.target.checked)}
+                />
+                Has room scans
+              </label>
+            </div>
+
             {loading && <p>Loading projects…</p>}
-            {!loading && projects.length === 0 && <p className="muted">No projects yet.</p>}
+            {!loading && projects.length === 0 && <p className="muted">No matching projects.</p>}
             <ul className="project-list-items">
               {projects.map((p) => (
-                <li key={p.id}>
+                <li key={p.id} className="flex items-center gap-2">
                   <button
                     type="button"
-                    className="project-list-item-btn"
+                    className="project-list-item-btn flex-1"
                     onClick={() => openProject(p.id)}
                   >
                     <span className="project-list-item-text">
                       <strong>{p.name}</strong>
                       {p.address && <span className="kickoff-project-address">{p.address}</span>}
                     </span>
-                    {p.municipality && <span className="muni-badge">{p.municipality}</span>}
+                    <span className="flex items-center gap-2">
+                      {p.municipality && <span className="muni-badge">{p.municipality}</span>}
+                      <span className={`muni-badge ${p.is_archived ? "opacity-60" : ""}`}>
+                        {p.is_archived ? "Archived" : "Ongoing"}
+                      </span>
+                    </span>
                   </button>
+                  {activeProject?.id === p.id ? (
+                    <span className="muni-badge bg-sky-700 text-slate-100">Active</span>
+                  ) : (
+                    <button
+                      type="button"
+                      className="text-button"
+                      onClick={(e) => handleSetActive(e, p.id)}
+                    >
+                      Set active
+                    </button>
+                  )}
                 </li>
               ))}
             </ul>

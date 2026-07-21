@@ -237,14 +237,22 @@ async def upload_document(
         )
     if source_tier not in (1, 2, 3):
         raise HTTPException(status_code=400, detail="source_tier must be 1, 2, or 3.")
+
+    # Resolve uploaded_by user_id
+    uploaded_by = auth_user.get("user_id") if (auth_user and isinstance(auth_user, dict)) else None
+
+    if project_id is None and uploaded_by:
+        from db import client as db_client
+
+        user_row = db_client.get_user_by_id(uploaded_by)
+        if user_row and user_row.get("active_project_id"):
+            project_id = user_row["active_project_id"]
+
     if project_id and not get_project(project_id):
         raise HTTPException(
             status_code=404,
             detail=f"Project {project_id} not found.",
         )
-
-    # Resolve uploaded_by user_id
-    uploaded_by = auth_user.get("user_id") if (auth_user and isinstance(auth_user, dict)) else None
 
     # ── Save file ────────────────────────────────────────────
     UPLOAD_DIR.mkdir(parents=True, exist_ok=True)

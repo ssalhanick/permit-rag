@@ -1146,23 +1146,60 @@ def create_project(
 
 
 def get_project(project_id: UUID) -> dict[str, Any] | None:
-    """Fetch active project by UUID."""
-    sql = "SELECT * FROM projects WHERE id = %s AND is_active = true;"
+    """Fetch project by UUID (excludes soft-deleted; archived projects still resolve)."""
+    sql = "SELECT * FROM projects WHERE id = %s AND deleted_at IS NULL;"
     with get_conn() as conn:
         return conn.execute(sql, (project_id,)).fetchone()
 
 
-def list_projects_for_user(user_id: UUID) -> list[dict[str, Any]]:
-    """All active projects where user is a member (any role)."""
-    sql = """
+def list_projects_for_user(
+    user_id: UUID,
+    *,
+    status: str | None = None,
+    search: str | None = None,
+    has_room_scans: bool | None = None,
+) -> list[dict[str, Any]]:
+    """Projects where user is a member (any role), filterable for the projects browser.
+
+    status: "ongoing" (not archived), "archived", "deleted" (soft-deleted trash view),
+    or None for everything not soft-deleted (ongoing + archived).
+    """
+    where = ["pm.user_id = %(user_id)s"]
+    params: dict[str, Any] = {"user_id": user_id}
+
+    if status == "deleted":
+        where.append("p.deleted_at IS NOT NULL")
+    else:
+        where.append("p.deleted_at IS NULL")
+        if status == "ongoing":
+            where.append("p.is_archived = false")
+        elif status == "archived":
+            where.append("p.is_archived = true")
+
+    if search:
+        where.append(
+            "(p.name ILIKE %(search)s OR p.address ILIKE %(search)s OR p.municipality ILIKE %(search)s)"
+        )
+        params["search"] = f"%{search}%"
+
+    if has_room_scans is not None:
+        exists_clause = """
+            EXISTS (
+                SELECT 1 FROM project_room_scan_links l
+                WHERE l.project_id = p.id
+            )
+        """
+        where.append(exists_clause if has_room_scans else f"NOT {exists_clause}")
+
+    sql = f"""
         SELECT p.*
         FROM projects p
         JOIN project_members pm ON pm.project_id = p.id
-        WHERE pm.user_id = %s AND p.is_active = true
+        WHERE {' AND '.join(where)}
         ORDER BY p.created_at DESC;
     """
     with get_conn() as conn:
-        return conn.execute(sql, (user_id,)).fetchall()
+        return conn.execute(sql, params).fetchall()
 
 
 def update_project(
@@ -1268,13 +1305,76 @@ def transfer_project_ownership(project_id: UUID, new_owner_id: UUID) -> dict[str
     return get_project(project_id)
 
 
-def archive_project(project_id: UUID) -> dict[str, Any] | None:
-    """Soft-delete: set is_active=False."""
-    sql = "UPDATE projects SET is_active = false WHERE id = %s RETURNING *;"
+def set_project_archived(project_id: UUID, is_archived: bool) -> dict[str, Any] | None:
+    """Toggle the ongoing/archived filter tag. Non-destructive — project stays fully accessible."""
+    sql = "UPDATE projects SET is_archived = %s WHERE id = %s RETURNING *;"
+    with get_conn() as conn:
+        row = conn.execute(sql, (is_archived, project_id)).fetchone()
+        conn.commit()
+    return row
+
+
+def soft_delete_project(project_id: UUID) -> dict[str, Any] | None:
+    """Hide project behind the trash view; room scans and documents are untouched."""
+    sql = "UPDATE projects SET deleted_at = now() WHERE id = %s AND deleted_at IS NULL RETURNING *;"
     with get_conn() as conn:
         row = conn.execute(sql, (project_id,)).fetchone()
         conn.commit()
     return row
+
+
+def restore_project(project_id: UUID) -> dict[str, Any] | None:
+    """Undo a soft delete."""
+    sql = "UPDATE projects SET deleted_at = NULL WHERE id = %s RETURNING *;"
+    with get_conn() as conn:
+        row = conn.execute(sql, (project_id,)).fetchone()
+        conn.commit()
+    return row
+
+
+def find_project_exclusive_documents(project_id: UUID) -> list[UUID]:
+    """Documents tied only to this project (via project_documents or documents.project_id),
+    not shared with any other project. These are what a hard delete removes."""
+    sql = """
+        SELECT d.id
+        FROM documents d
+        WHERE (
+            d.project_id = %(project_id)s
+            OR EXISTS (
+                SELECT 1 FROM project_documents pd
+                WHERE pd.document_id = d.id AND pd.project_id = %(project_id)s
+            )
+        )
+        AND (d.project_id IS NULL OR d.project_id = %(project_id)s)
+        AND NOT EXISTS (
+            SELECT 1 FROM project_documents pd2
+            WHERE pd2.document_id = d.id AND pd2.project_id != %(project_id)s
+        );
+    """
+    with get_conn() as conn:
+        rows = conn.execute(sql, {"project_id": project_id}).fetchall()
+    return [row["id"] for row in rows]
+
+
+def hard_delete_project(project_id: UUID) -> bool:
+    """Permanently remove a project: cascades members/room-scan links (via FK), and also
+    deletes documents (and their chunks) that are exclusive to this project. Shared
+    documents and query_log rows detach (ON DELETE SET NULL) rather than get deleted."""
+    exclusive_doc_ids = find_project_exclusive_documents(project_id)
+    with get_conn() as conn:
+        if exclusive_doc_ids:
+            conn.execute("DELETE FROM documents WHERE id = ANY(%s);", (exclusive_doc_ids,))
+        cur = conn.execute("DELETE FROM projects WHERE id = %s;", (project_id,))
+        conn.commit()
+    return cur.rowcount > 0
+
+
+def set_active_project(user_id: UUID, project_id: UUID | None) -> None:
+    """Persist the caller's single "active" project (or clear it with None)."""
+    sql = "UPDATE users SET active_project_id = %s WHERE id = %s;"
+    with get_conn() as conn:
+        conn.execute(sql, (project_id, user_id))
+        conn.commit()
 
 
 # ════════════════════════════════════════════════
@@ -1405,7 +1505,7 @@ def delete_user_and_clean_up(user_id: UUID) -> bool:
     with get_conn() as conn:
         # Find all projects owned by the user
         projects = conn.execute(
-            "SELECT id FROM projects WHERE owner_user_id = %s AND is_active = true;",
+            "SELECT id FROM projects WHERE owner_user_id = %s AND deleted_at IS NULL;",
             (user_id,)
         ).fetchall()
         

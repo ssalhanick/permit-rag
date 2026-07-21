@@ -4,7 +4,9 @@ import {
   addProjectMember,
   deleteProject,
   fetchProjectMembers,
+  hardDeleteProject,
   removeProjectMember,
+  setProjectStatus,
   transferProjectOwnership,
 } from "../../api.js";
 import { useAuth } from "../../context/AuthContext.jsx";
@@ -98,8 +100,21 @@ export default function ProjectMembersPage() {
     }
   };
 
-  const handleDeleteProject = async () => {
-    if (!window.confirm(`Delete project "${project?.name}"? This cannot be undone.`)) {
+  const handleToggleArchived = async () => {
+    setActionLoading(true);
+    setError("");
+    try {
+      await setProjectStatus(projectId, !project?.is_archived);
+      setSuccess(project?.is_archived ? "Project marked ongoing." : "Project archived.");
+    } catch (err) {
+      setError(err.message || "Failed to update project status.");
+    } finally {
+      setActionLoading(false);
+    }
+  };
+
+  const handleSoftDeleteProject = async () => {
+    if (!window.confirm(`Move "${project?.name}" to trash? Room scans are kept, and you can restore it later.`)) {
       return;
     }
     setActionLoading(true);
@@ -109,6 +124,25 @@ export default function ProjectMembersPage() {
       navigate("/projects");
     } catch (err) {
       setError(err.message || "Failed to delete project.");
+      setActionLoading(false);
+    }
+  };
+
+  const handleHardDeleteProject = async () => {
+    if (
+      !window.confirm(
+        `Permanently delete "${project?.name}"? This also deletes any documents uploaded only to this project. This cannot be undone.`
+      )
+    ) {
+      return;
+    }
+    setActionLoading(true);
+    setError("");
+    try {
+      await hardDeleteProject(projectId);
+      navigate("/projects");
+    } catch (err) {
+      setError(err.message || "Failed to permanently delete project.");
       setActionLoading(false);
     }
   };
@@ -217,16 +251,55 @@ export default function ProjectMembersPage() {
 
           <div className="danger-zone-delete">
             <div>
-              <strong>Delete project workspace</strong>
-              <p className="muted">Permanently delete this project and revoke collaborator access.</p>
+              <strong>Ongoing / Archived</strong>
+              <p className="muted">
+                Archiving is just a filter tag on the projects page — it doesn't hide the
+                project or restrict access.
+              </p>
             </div>
             <button
               type="button"
-              onClick={handleDeleteProject}
+              onClick={handleToggleArchived}
+              disabled={actionLoading}
+              className="secondary-button"
+            >
+              {project?.is_archived ? "Mark ongoing" : "Archive project"}
+            </button>
+          </div>
+
+          <div className="danger-zone-delete">
+            <div>
+              <strong>Delete project workspace</strong>
+              <p className="muted">
+                Moves the project to trash and revokes collaborator access. Room scans are
+                kept, and you can restore it from Recently Deleted.
+              </p>
+            </div>
+            <button
+              type="button"
+              onClick={handleSoftDeleteProject}
               disabled={actionLoading}
               className="primary-button danger-button"
             >
               Delete project
+            </button>
+          </div>
+
+          <div className="danger-zone-delete">
+            <div>
+              <strong>Permanently delete</strong>
+              <p className="muted">
+                Irreversible. Also deletes any documents uploaded exclusively to this
+                project.
+              </p>
+            </div>
+            <button
+              type="button"
+              onClick={handleHardDeleteProject}
+              disabled={actionLoading}
+              className="primary-button danger-button"
+            >
+              Permanently delete
             </button>
           </div>
         </section>

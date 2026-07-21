@@ -429,6 +429,11 @@ class UpdateProjectRequest(BaseModel):
     custom_system_prompt: str | None = Field(default=None, description="Generated system prompt instructions")
 
 
+class SetProjectStatusRequest(BaseModel):
+    """Payload to toggle the ongoing/archived filter tag."""
+    is_archived: bool
+
+
 class ProjectResponse(BaseModel):
     """Project representation response."""
     id: UUID
@@ -436,7 +441,8 @@ class ProjectResponse(BaseModel):
     description: str | None = None
     owner_user_id: UUID
     municipality: str | None = None
-    is_active: bool
+    is_archived: bool
+    deleted_at: datetime | None = None
     created_at: datetime
     updated_at: datetime
     address: str | None = None
@@ -674,4 +680,10 @@ class UserMeResponse(BaseModel):
     role: str
     cognito_sub: str
     created_at: datetime
+    active_project_id: UUID | None = None
+
+
+class SetActiveProjectRequest(BaseModel):
+    """Payload to set or clear the caller's single "active" project."""
+    project_id: UUID | None = Field(default=None, description="Project to activate, or null to clear")
 

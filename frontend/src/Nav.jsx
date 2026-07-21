@@ -3,6 +3,7 @@ import { NavLink } from "react-router-dom";
 import { useAuth } from "./context/AuthContext.jsx";
 import { LogOut } from "lucide-react";
 import LogoSVG from "./components/LogoSVG.jsx";
+import ProjectSwitcher from "./components/ProjectSwitcher.jsx";
 
 
 export default function Nav() {
@@ -56,6 +57,7 @@ export default function Nav() {
               >
                 Projects
               </NavLink>
+              <ProjectSwitcher />
               <NavLink
                 to="/profile"
                 className={({ isActive }) => "nav-link" + (isActive ? " nav-link-active" : "")}

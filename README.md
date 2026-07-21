@@ -43,6 +43,7 @@ py -m pytest tests/test_commerce_takeoff.py tests/test_commerce_product_resolver
 *None*
 
 ### Planned
+- [ ] **Step-by-step instructions agent** — a dedicated agent specialized in turning project/design-intent context into detailed, easy-to-follow step-by-step instructions. Intended to eventually back a "Instructions produced" section on the project dashboard (deferred from migration 023's project lifecycle work — no data source existed yet).
 - [ ] Apply migration 018 + deploy backend with scan_id design-intent routes + `/commerce/room-preview-image` to prod ECS
 - [ ] Device smoke: Preview → Generate image → Save → AR texture → DXF on iPhone ([docs/room_generative_preview.md](docs/room_generative_preview.md))
 - [ ] Optional: set `OPENAI_API_KEY` (+ SSM) for live generative room images (mock PNG works offline)

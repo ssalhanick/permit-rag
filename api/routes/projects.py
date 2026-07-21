@@ -8,7 +8,7 @@ from __future__ import annotations
 from typing import Annotated
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query
 
 from api.auth import get_current_user
 from api.schemas import (
@@ -25,6 +25,7 @@ from api.schemas import (
     ProjectResponse,
     RoomScanResponse,
     RoomSummaryRequest,
+    SetProjectStatusRequest,
     ShareDocumentRequest,
     TransferOwnershipRequest,
     UpdateProjectRequest,
@@ -114,9 +115,26 @@ def kickoff_chat(body: KickoffChatRequest, current_user: CurrentUser) -> dict:
 
 
 @router.get("/", response_model=list[ProjectResponse])
-def list_projects(current_user: CurrentUser) -> list[dict]:
-    """List all projects the caller is a member of."""
-    projects = db_client.list_projects_for_user(current_user["user_id"])
+def list_projects(
+    current_user: CurrentUser,
+    status: str | None = Query(default=None, description="ongoing | archived | deleted"),
+    search: str | None = Query(default=None, description="Match against name, address, municipality"),
+    has_room_scans: bool | None = Query(default=None),
+) -> list[dict]:
+    """List projects the caller is a member of, filterable by status/search/room scans."""
+    projects = db_client.list_projects_for_user(
+        current_user["user_id"],
+        status=status,
+        search=search,
+        has_room_scans=has_room_scans,
+    )
+    return [dict(p) for p in projects]
+
+
+@router.get("/trash", response_model=list[ProjectResponse])
+def list_trash(current_user: CurrentUser) -> list[dict]:
+    """List the caller's soft-deleted projects (owner-only actions apply from here)."""
+    projects = db_client.list_projects_for_user(current_user["user_id"], status="deleted")
     return [dict(p) for p in projects]
 
 
@@ -175,13 +193,47 @@ def update_project(
     return dict(updated)
 
 
-@router.delete("/{project_id}", status_code=200)
-def archive_project(project_id: UUID, current_user: CurrentUser) -> dict:
-    """Archive a project (owner only)."""
+@router.patch("/{project_id}/status", response_model=ProjectResponse)
+def set_project_status(
+    project_id: UUID,
+    body: SetProjectStatusRequest,
+    current_user: CurrentUser,
+) -> dict:
+    """Toggle the ongoing/archived filter tag (owner only). Non-destructive."""
     _require_role(project_id, current_user["user_id"], {"owner"})
-    if not db_client.archive_project(project_id):
+    updated = db_client.set_project_archived(project_id, body.is_archived)
+    if not updated:
         raise HTTPException(status_code=404, detail="Project not found.")
-    return {"detail": "Project archived successfully."}
+    return dict(updated)
+
+
+@router.delete("/{project_id}", status_code=200)
+def soft_delete_project(project_id: UUID, current_user: CurrentUser) -> dict:
+    """Soft-delete a project (owner only): hides it behind the trash view, keeps room scans."""
+    _require_role(project_id, current_user["user_id"], {"owner"})
+    if not db_client.soft_delete_project(project_id):
+        raise HTTPException(status_code=404, detail="Project not found.")
+    return {"detail": "Project moved to trash."}
+
+
+@router.post("/{project_id}/restore", response_model=ProjectResponse)
+def restore_project(project_id: UUID, current_user: CurrentUser) -> dict:
+    """Restore a soft-deleted project (owner only)."""
+    _require_role(project_id, current_user["user_id"], {"owner"})
+    updated = db_client.restore_project(project_id)
+    if not updated:
+        raise HTTPException(status_code=404, detail="Project not found.")
+    return dict(updated)
+
+
+@router.delete("/{project_id}/permanent", status_code=200)
+def hard_delete_project(project_id: UUID, current_user: CurrentUser) -> dict:
+    """Permanently delete a project (owner only): also deletes documents/chunks
+    exclusive to this project. Shared documents and query history are detached, not deleted."""
+    _require_role(project_id, current_user["user_id"], {"owner"})
+    if not db_client.hard_delete_project(project_id):
+        raise HTTPException(status_code=404, detail="Project not found.")
+    return {"detail": "Project permanently deleted."}
 
 
 @router.post("/{project_id}/transfer", response_model=ProjectResponse)

@@ -5,7 +5,7 @@ import {
   CognitoUserAttribute,
   CognitoUserPool,
 } from "amazon-cognito-identity-js";
-import { registerTokenRefresher, requestJson } from "../api.js";
+import { getProject, registerTokenRefresher, requestJson, setActiveProjectApi } from "../api.js";
 import { usernameFromEmail } from "../authUsername.js";
 import {
   closeOAuthBrowser,
@@ -87,6 +87,7 @@ const AuthContext = createContext(null);
 export function AuthProvider({ children }) {
   const [user, setUser] = useState(null);   // RDS user profile from /auth/me
   const [loading, setLoading] = useState(true);
+  const [activeProject, setActiveProjectState] = useState(null);
 
   // Stores a pending CognitoUser ref during MFA challenge so confirmMfa() can reach it
   const pendingCognitoUserRef = useRef(null);
@@ -118,6 +119,32 @@ export function AuthProvider({ children }) {
   useEffect(() => {
     restoreSession();
   }, [restoreSession]);
+
+  // ── Active project (nav switcher) ──────────────────────────────
+
+  useEffect(() => {
+    let cancelled = false;
+    if (!user?.active_project_id) {
+      setActiveProjectState(null);
+      return;
+    }
+    getProject(user.active_project_id)
+      .then((res) => {
+        if (!cancelled) setActiveProjectState(res.data);
+      })
+      .catch(() => {
+        if (!cancelled) setActiveProjectState(null);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [user?.active_project_id]);
+
+  const setActiveProject = useCallback(async (projectId) => {
+    const res = await setActiveProjectApi(projectId);
+    setUser((prev) => (prev ? { ...prev, active_project_id: res.data.active_project_id } : prev));
+    return res.data;
+  }, []);
 
   // ── Register token refresher with api.js ──────────────────────
 
@@ -427,6 +454,7 @@ export function AuthProvider({ children }) {
     }
     localStorage.removeItem("access_token");
     setUser(null);
+    setActiveProjectState(null);
   }, []);
 
   return (
@@ -434,6 +462,8 @@ export function AuthProvider({ children }) {
       value={{
         user,
         loading,
+        activeProject,
+        setActiveProject,
         login,
         register,
         confirmSignUp,
