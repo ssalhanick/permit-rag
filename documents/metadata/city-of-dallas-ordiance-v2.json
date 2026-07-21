@@ -1,5 +1,32 @@
 {
   "doc_id": "city-of-dallas-ordiance-v2",
+  "source_url": "https://codelibrary.amlegal.com/codes/dallas/latest/dallas_tx/0-0-0-1",
+  "local_path": "raw\\city-of-dallas-ordiance-v2.pdf",
+  "filename": "city-of-dallas-ordiance-v2.pdf",
+  "municipality": "dallas",
+  "authority_level": "municipal",
+  "doc_type": "building_code",
+  "subject_tags": [
+    "construction",
+    "ordinance",
+    "inspection",
+    "permits",
+    "building-code"
+  ],
+  "effective_date": null,
+  "version": null,
+  "document_status": "active",
+  "is_current": true,
+  "supersedes_doc_id": null,
+  "review_due": "2026-09-18",
+  "ingested_at": "2026-07-20T21:20:20.583393Z",
+  "checksum_sha256": "11d41b8b835b295fdfc00d1d35434b7d6305ff3475addfb0b0b26c5e04e34456",
+  "source_etag": null,
+  "source_last_modified": null,
+  "file_size_bytes": 4341560,
+  "page_count": 646,
+  "retrieval_weight": 1.0,
+  "notes": "Dallas Code of Ordinances Volume II \u2014 manually exported from amlegal PDF. Review every 60 days.",
   "verifications": {
     "download": {
       "result": "pass",
@@ -22,14 +49,6 @@
         "chunk_chars": 2389324,
         "num_chunks": 1890,
         "coverage_ratio": 1.0883
-      }
-    },
-    "embedding": {
-      "result": "pass",
-      "detail": {
-        "num_chunks": 1890,
-        "num_embedded": 1890,
-        "embedding_dim": 768
       }
     }
   }

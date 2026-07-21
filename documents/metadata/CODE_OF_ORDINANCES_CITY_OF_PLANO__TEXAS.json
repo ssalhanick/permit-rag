@@ -1,30 +1,30 @@
 {
   "doc_id": "CODE_OF_ORDINANCES_CITY_OF_PLANO__TEXAS",
   "source_url": "https://library.municode.com/tx/plano/codes/code_of_ordinances?nodeId=COORPLTE",
-  "local_path": "raw\\CODE_OF_ORDINANCES_CITY_OF_PLANO__TEXAS.html",
-  "filename": "CODE_OF_ORDINANCES_CITY_OF_PLANO__TEXAS.html",
+  "local_path": "raw\\CODE_OF_ORDINANCES_CITY_OF_PLANO__TEXAS.docx",
+  "filename": "CODE_OF_ORDINANCES_CITY_OF_PLANO__TEXAS.docx",
   "municipality": "plano",
   "authority_level": "municipal",
   "doc_type": "zoning_ordinance",
   "subject_tags": [
+    "setbacks",
+    "commercial",
+    "zoning",
     "residential",
     "easements",
-    "zoning",
-    "setbacks",
-    "land-use",
-    "commercial"
+    "land-use"
   ],
   "effective_date": null,
   "version": null,
   "document_status": "active",
   "is_current": true,
   "supersedes_doc_id": null,
-  "review_due": "2026-07-29",
-  "ingested_at": "2026-05-30T14:29:19.725447Z",
-  "checksum_sha256": "3806fc66ac14c91f047aea062381b5726d851fb30c4e73435f782049d63197aa",
+  "review_due": "2026-09-18",
+  "ingested_at": "2026-07-20T21:20:20.583393Z",
+  "checksum_sha256": "3873f50532017e1a9ebeb937f4663809f047a796080edc85202b42972330f682",
   "source_etag": null,
   "source_last_modified": null,
-  "file_size_bytes": 6095,
+  "file_size_bytes": 107943,
   "page_count": null,
   "retrieval_weight": 1.0,
   "notes": "Plano City Code of Ordinances via Municode",
@@ -50,14 +50,6 @@
         "chunk_chars": 154432,
         "num_chunks": 112,
         "coverage_ratio": 1.0303
-      }
-    },
-    "embedding": {
-      "result": "pass",
-      "detail": {
-        "num_chunks": 112,
-        "num_embedded": 112,
-        "embedding_dim": 768
       }
     }
   }

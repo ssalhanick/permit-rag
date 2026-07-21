@@ -1,29 +1,29 @@
 {
   "doc_id": "ADA-Standards",
   "source_url": "https://www.access-board.gov/ada/",
-  "local_path": "raw\\ADA-Standards.html",
-  "filename": "ADA-Standards.html",
+  "local_path": "raw\\ADA-Standards.pdf",
+  "filename": "ADA-Standards.pdf",
   "municipality": "federal",
   "authority_level": "federal",
   "doc_type": "federal_regulation",
   "subject_tags": [
-    "design",
-    "public-accommodations",
     "accessibility",
-    "ADA",
-    "commercial"
+    "public-accommodations",
+    "commercial",
+    "design",
+    "ADA"
   ],
   "effective_date": null,
   "version": "2010",
   "document_status": "active",
   "is_current": true,
   "supersedes_doc_id": null,
-  "review_due": "2027-05-30",
-  "ingested_at": "2026-05-30T14:29:19.725447Z",
-  "checksum_sha256": "c1fc39d0fa6829dc13121f726e1e52285dd3cb481f8f5549eaf6ee20139c58fa",
+  "review_due": "2027-07-20",
+  "ingested_at": "2026-07-20T21:20:20.583393Z",
+  "checksum_sha256": "503df87a090a7b6fc3dbe8f9138d3ddc04781e55c1187c97770fb77b96225c20",
   "source_etag": "\"252567c188966378c7fc63349b1cf548\"",
   "source_last_modified": "Wed, 04 Feb 2026 13:37:17 GMT",
-  "file_size_bytes": 809071,
+  "file_size_bytes": 3953645,
   "page_count": null,
   "retrieval_weight": 1.0,
   "notes": "ADA 2010 Design Standards \u2014 applies to all commercial construction.",
@@ -49,14 +49,6 @@
         "chunk_chars": 524506,
         "num_chunks": 478,
         "coverage_ratio": 1.0399
-      }
-    },
-    "embedding": {
-      "result": "pass",
-      "detail": {
-        "num_chunks": 478,
-        "num_embedded": 478,
-        "embedding_dim": 768
       }
     }
   }

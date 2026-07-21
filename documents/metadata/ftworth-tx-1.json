@@ -1,5 +1,33 @@
 {
   "doc_id": "ftworth-tx-1",
+  "source_url": "https://codelibrary.amlegal.com/codes/ftworth/latest/ftworth_tx/0-0-0-1",
+  "local_path": "raw\\ftworth-tx-1.pdf",
+  "filename": "ftworth-tx-1.pdf",
+  "municipality": "fortworth",
+  "authority_level": "municipal",
+  "doc_type": "zoning_ordinance",
+  "subject_tags": [
+    "setbacks",
+    "commercial",
+    "zoning",
+    "residential",
+    "easements",
+    "land-use"
+  ],
+  "effective_date": null,
+  "version": null,
+  "document_status": "active",
+  "is_current": true,
+  "supersedes_doc_id": null,
+  "review_due": "2026-09-18",
+  "ingested_at": "2026-07-20T21:20:20.583393Z",
+  "checksum_sha256": "2ca7e5af474a9e5293274b07d4582c94e962c40e30e088a61dde3befb6ef37d4",
+  "source_etag": null,
+  "source_last_modified": null,
+  "file_size_bytes": 36137638,
+  "page_count": 1133,
+  "retrieval_weight": 1.0,
+  "notes": "Fort Worth full code via American Legal Publishing.",
   "verifications": {
     "download": {
       "result": "pass",
@@ -22,14 +50,6 @@
         "chunk_chars": 8549251,
         "num_chunks": 6852,
         "coverage_ratio": 1.062
-      }
-    },
-    "embedding": {
-      "result": "pass",
-      "detail": {
-        "num_chunks": 6852,
-        "num_embedded": 6852,
-        "embedding_dim": 768
       }
     }
   }
