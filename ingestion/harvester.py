@@ -26,6 +26,17 @@ from pathlib import Path
 from typing import Any
 
 import requests
+import truststore
+
+# Use the OS-native certificate trust store (macOS Keychain / Windows cert
+# store) instead of certifi's static bundle. Some municipal sites serve an
+# incomplete TLS chain (missing intermediate CA); OS trust evaluation fetches
+# the missing intermediate via AIA the way curl/browsers do, while a static
+# certifi bundle has no such fallback and fails with
+# "unable to get local issuer certificate". Must run before any SSLContext is
+# created, so it's applied at import time here — every requests.get() call
+# under ingestion/ goes through harvester.HEADERS or fetch_document/fetch_asset.
+truststore.inject_into_ssl()
 
 # ── optional rich logging (falls back gracefully) ──
 try:

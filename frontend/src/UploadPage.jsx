@@ -44,6 +44,7 @@ const DEFAULT_FORM = {
 
 export default function UploadPage() {
   const { user } = useAuth();
+  const isSuperadmin = user?.role === "superadmin";
   const [form, setForm] = useState(DEFAULT_FORM);
   const [file, setFile] = useState(null);
   const [projects, setProjects] = useState([]);
@@ -55,6 +56,12 @@ export default function UploadPage() {
   const [pullJob, setPullJob] = useState(null);
   const [pullStatus, setPullStatus] = useState(null); // null | 'loading' | 'polling' | 'success' | 'error'
   const [pullError, setPullError] = useState("");
+
+  useEffect(() => {
+    if (mode === "url" && !isSuperadmin) {
+      setMode("file");
+    }
+  }, [mode, isSuperadmin]);
 
   useEffect(() => {
     if (user) {
@@ -242,18 +249,20 @@ export default function UploadPage() {
           >
             Upload file
           </button>
-          <button
-            type="button"
-            role="tab"
-            aria-selected={mode === "url"}
-            className={mode === "url" ? "" : "secondary-button"}
-            onClick={() => setMode("url")}
-          >
-            Pull from URL
-          </button>
+          {isSuperadmin ? (
+            <button
+              type="button"
+              role="tab"
+              aria-selected={mode === "url"}
+              className={mode === "url" ? "" : "secondary-button"}
+              onClick={() => setMode("url")}
+            >
+              Pull from URL
+            </button>
+          ) : null}
         </div>
 
-        {mode === "url" ? (
+        {mode === "url" && isSuperadmin ? (
           <form onSubmit={handlePullSubmit} className="form upload-form">
             <fieldset className="upload-fieldset">
               <legend>Page URL</legend>

@@ -1061,6 +1061,23 @@ def get_user_by_id(user_id: UUID) -> dict[str, Any] | None:
         return conn.execute(sql, (user_id,)).fetchone()
 
 
+def sync_user_role(user_id: UUID, role: str) -> None:
+    """Mirror a Cognito-derived global role onto the users row.
+
+    Called on every authenticated request so demotions (leaving the Cognito
+    admin/superadmin group) take effect on the next login without a manual
+    SQL edit. No-ops when the role already matches to avoid a write per request.
+    """
+    sql = """
+        UPDATE users
+        SET role = %(role)s, role_synced_at = now()
+        WHERE id = %(user_id)s AND role != %(role)s;
+    """
+    with get_conn() as conn:
+        conn.execute(sql, {"user_id": user_id, "role": role})
+        conn.commit()
+
+
 def deactivate_user(user_id: UUID) -> dict[str, Any] | None:
     """Soft-delete user: set is_active=False."""
     sql = "UPDATE users SET is_active = false WHERE id = %s RETURNING *;"
@@ -1196,6 +1213,51 @@ def list_projects_for_user(
         FROM projects p
         JOIN project_members pm ON pm.project_id = p.id
         WHERE {' AND '.join(where)}
+        ORDER BY p.created_at DESC;
+    """
+    with get_conn() as conn:
+        return conn.execute(sql, params).fetchall()
+
+
+def list_all_projects(
+    *,
+    status: str | None = None,
+    search: str | None = None,
+    has_room_scans: bool | None = None,
+) -> list[dict[str, Any]]:
+    """All projects regardless of membership — staff (admin/superadmin) read bypass."""
+    where = []
+    params: dict[str, Any] = {}
+
+    if status == "deleted":
+        where.append("p.deleted_at IS NOT NULL")
+    else:
+        where.append("p.deleted_at IS NULL")
+        if status == "ongoing":
+            where.append("p.is_archived = false")
+        elif status == "archived":
+            where.append("p.is_archived = true")
+
+    if search:
+        where.append(
+            "(p.name ILIKE %(search)s OR p.address ILIKE %(search)s OR p.municipality ILIKE %(search)s)"
+        )
+        params["search"] = f"%{search}%"
+
+    if has_room_scans is not None:
+        exists_clause = """
+            EXISTS (
+                SELECT 1 FROM project_room_scan_links l
+                WHERE l.project_id = p.id
+            )
+        """
+        where.append(exists_clause if has_room_scans else f"NOT {exists_clause}")
+
+    where_clause = f"WHERE {' AND '.join(where)}" if where else ""
+    sql = f"""
+        SELECT p.*
+        FROM projects p
+        {where_clause}
         ORDER BY p.created_at DESC;
     """
     with get_conn() as conn:

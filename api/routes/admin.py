@@ -13,7 +13,7 @@ from typing import Annotated
 
 from fastapi import APIRouter, Depends, Header, HTTPException
 
-from api.auth import get_optional_current_user
+from api.auth import get_optional_current_user, is_staff, is_superadmin
 from api.schemas import (
     DocumentAdminActionResponse,
     DocumentAdminUpdateRequest,
@@ -38,14 +38,23 @@ def _require_admin_auth(
     x_admin_token: str | None,
     x_admin_role: str | None,
     current_user: dict | None = None,
+    *,
+    min_role: str = "admin",
 ) -> None:
     """Enforce token + role checks for admin routes when enabled.
 
-    Accepts EITHER a verified Cognito session with role='admin' OR the
-    shared X-Admin-Token (kept only as a machine credential for
+    Accepts EITHER a verified Cognito session with a sufficient global role
+    OR the shared X-Admin-Token (kept only as a machine credential for
     scripts/purge_project_uploads.py -- never collected in the frontend UI).
+
+    min_role="admin" (default) accepts admin or superadmin. min_role="superadmin"
+    requires superadmin specifically -- used for SSRF-adjacent routes (pull-page)
+    that make the server fetch an admin-supplied URL.
     """
-    if current_user is not None and current_user.get("role") == "admin":
+    if min_role == "superadmin":
+        if is_superadmin(current_user):
+            return
+    elif is_staff(current_user):
         return
 
     required = os.environ.get("API_ADMIN_AUTH_REQUIRED", "true").strip().lower()
@@ -62,7 +71,9 @@ def _require_admin_auth(
     if x_admin_token != configured_token:
         raise HTTPException(status_code=403, detail="Invalid admin token.")
 
-    allowed_roles = _parse_role_set("API_ADMIN_ALLOWED_ROLES", "admin")
+    default_allowed = "superadmin" if min_role == "superadmin" else "admin"
+    env_key = "API_PULL_ALLOWED_ROLES" if min_role == "superadmin" else "API_ADMIN_ALLOWED_ROLES"
+    allowed_roles = _parse_role_set(env_key, default_allowed)
     if allowed_roles:
         role = (x_admin_role or "").strip().lower()
         if role not in allowed_roles:

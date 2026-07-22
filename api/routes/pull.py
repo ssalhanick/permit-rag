@@ -355,8 +355,12 @@ def pull_page(
     x_admin_role: str | None = Header(default=None),
     current_user: Annotated[dict | None, Depends(get_optional_current_user)] = None,
 ) -> PullAcceptedResponse:
-    """Validate the request, register a job, and process files in background."""
-    _require_admin_auth(x_admin_token, x_admin_role, current_user)
+    """Validate the request, register a job, and process files in background.
+
+    Superadmin-gated: this makes the server fetch and parse an admin-supplied
+    URL (SSRF-adjacent), so it's held to a tighter bar than other admin routes.
+    """
+    _require_admin_auth(x_admin_token, x_admin_role, current_user, min_role="superadmin")
 
     if body.authority_level not in VALID_AUTHORITY_LEVELS:
         raise HTTPException(400, f"Invalid authority_level. Choose from: {sorted(VALID_AUTHORITY_LEVELS)}")
@@ -400,7 +404,7 @@ def get_pull_job(
     current_user: Annotated[dict | None, Depends(get_optional_current_user)] = None,
 ) -> PullJobResponse:
     """Return current status and per-file verdicts for one pull job."""
-    _require_admin_auth(x_admin_token, x_admin_role, current_user)
+    _require_admin_auth(x_admin_token, x_admin_role, current_user, min_role="superadmin")
     with _JOBS_LOCK:
         job = _JOBS.get(job_id)
         if job is None:

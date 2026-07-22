@@ -10,7 +10,7 @@ from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 
-from api.auth import get_current_user
+from api.auth import get_current_user, is_staff, is_superadmin
 from api.schemas import (
     AddMemberRequest,
     AssetSyncAckRequest,
@@ -40,8 +40,22 @@ router = APIRouter(prefix="/projects", tags=["projects"])
 CurrentUser = Annotated[dict, Depends(get_current_user)]
 
 
-def _require_role(project_id: UUID, user_id: UUID, allowed: set[str]) -> None:
-    """Raise HTTP 403 if user's project role is not in allowed set."""
+def _require_role(
+    project_id: UUID,
+    user_id: UUID,
+    allowed: set[str],
+    current_user: dict | None = None,
+) -> None:
+    """Raise HTTP 403 if user's project role is not in allowed set.
+
+    Global staff bypass: superadmin bypasses any check. admin bypasses
+    read-tier checks (those that permit "viewer") per docs/cognito_groups_rbac.md
+    product policy — admin can see any project but not mutate it.
+    """
+    if is_superadmin(current_user):
+        return
+    if is_staff(current_user) and "viewer" in allowed:
+        return
     role = db_client.get_project_role(project_id, user_id)
     if not role or role not in allowed:
         raise HTTPException(status_code=403, detail="Insufficient project privileges.")
@@ -121,13 +135,24 @@ def list_projects(
     search: str | None = Query(default=None, description="Match against name, address, municipality"),
     has_room_scans: bool | None = Query(default=None),
 ) -> list[dict]:
-    """List projects the caller is a member of, filterable by status/search/room scans."""
-    projects = db_client.list_projects_for_user(
-        current_user["user_id"],
-        status=status,
-        search=search,
-        has_room_scans=has_room_scans,
-    )
+    """List projects the caller is a member of, filterable by status/search/room scans.
+
+    Staff (admin/superadmin) see every project, per docs/cognito_groups_rbac.md
+    product policy — "list all projects (read)" is staff-bypass, not membership-scoped.
+    """
+    if is_staff(current_user):
+        projects = db_client.list_all_projects(
+            status=status,
+            search=search,
+            has_room_scans=has_room_scans,
+        )
+    else:
+        projects = db_client.list_projects_for_user(
+            current_user["user_id"],
+            status=status,
+            search=search,
+            has_room_scans=has_room_scans,
+        )
     return [dict(p) for p in projects]
 
 
@@ -141,7 +166,7 @@ def list_trash(current_user: CurrentUser) -> list[dict]:
 @router.get("/{project_id}", response_model=ProjectResponse)
 def get_project(project_id: UUID, current_user: CurrentUser) -> dict:
     """Fetch details of a single project."""
-    _require_role(project_id, current_user["user_id"], {"owner", "editor", "viewer"})
+    _require_role(project_id, current_user["user_id"], {"owner", "editor", "viewer"}, current_user)
     project = db_client.get_project(project_id)
     if not project:
         raise HTTPException(status_code=404, detail="Project not found.")
@@ -155,7 +180,7 @@ def update_project(
     current_user: CurrentUser,
 ) -> dict:
     """Update mutable project settings and kickoff wizard fields."""
-    _require_role(project_id, current_user["user_id"], {"owner", "editor"})
+    _require_role(project_id, current_user["user_id"], {"owner", "editor"}, current_user)
 
     update_fields = body.model_dump(exclude_unset=True)
 
@@ -200,7 +225,7 @@ def set_project_status(
     current_user: CurrentUser,
 ) -> dict:
     """Toggle the ongoing/archived filter tag (owner only). Non-destructive."""
-    _require_role(project_id, current_user["user_id"], {"owner"})
+    _require_role(project_id, current_user["user_id"], {"owner"}, current_user)
     updated = db_client.set_project_archived(project_id, body.is_archived)
     if not updated:
         raise HTTPException(status_code=404, detail="Project not found.")
@@ -210,7 +235,7 @@ def set_project_status(
 @router.delete("/{project_id}", status_code=200)
 def soft_delete_project(project_id: UUID, current_user: CurrentUser) -> dict:
     """Soft-delete a project (owner only): hides it behind the trash view, keeps room scans."""
-    _require_role(project_id, current_user["user_id"], {"owner"})
+    _require_role(project_id, current_user["user_id"], {"owner"}, current_user)
     if not db_client.soft_delete_project(project_id):
         raise HTTPException(status_code=404, detail="Project not found.")
     return {"detail": "Project moved to trash."}
@@ -219,7 +244,7 @@ def soft_delete_project(project_id: UUID, current_user: CurrentUser) -> dict:
 @router.post("/{project_id}/restore", response_model=ProjectResponse)
 def restore_project(project_id: UUID, current_user: CurrentUser) -> dict:
     """Restore a soft-deleted project (owner only)."""
-    _require_role(project_id, current_user["user_id"], {"owner"})
+    _require_role(project_id, current_user["user_id"], {"owner"}, current_user)
     updated = db_client.restore_project(project_id)
     if not updated:
         raise HTTPException(status_code=404, detail="Project not found.")
@@ -230,7 +255,7 @@ def restore_project(project_id: UUID, current_user: CurrentUser) -> dict:
 def hard_delete_project(project_id: UUID, current_user: CurrentUser) -> dict:
     """Permanently delete a project (owner only): also deletes documents/chunks
     exclusive to this project. Shared documents and query history are detached, not deleted."""
-    _require_role(project_id, current_user["user_id"], {"owner"})
+    _require_role(project_id, current_user["user_id"], {"owner"}, current_user)
     if not db_client.hard_delete_project(project_id):
         raise HTTPException(status_code=404, detail="Project not found.")
     return {"detail": "Project permanently deleted."}
@@ -243,7 +268,7 @@ def transfer_ownership(
     current_user: CurrentUser,
 ) -> dict:
     """Transfer project ownership (owner only)."""
-    _require_role(project_id, current_user["user_id"], {"owner"})
+    _require_role(project_id, current_user["user_id"], {"owner"}, current_user)
     updated = db_client.transfer_project_ownership(project_id, body.new_owner_id)
     if not updated:
         raise HTTPException(status_code=404, detail="Project not found.")
@@ -253,7 +278,7 @@ def transfer_ownership(
 @router.get("/{project_id}/members", response_model=list[ProjectMemberResponse])
 def list_members(project_id: UUID, current_user: CurrentUser) -> list[dict]:
     """List all members of the project."""
-    _require_role(project_id, current_user["user_id"], {"owner", "editor", "viewer"})
+    _require_role(project_id, current_user["user_id"], {"owner", "editor", "viewer"}, current_user)
     members = db_client.list_project_members(project_id)
     return [dict(m) for m in members]
 
@@ -265,7 +290,7 @@ def add_member(
     current_user: CurrentUser,
 ) -> dict:
     """Add or invite a user to the project (owner only)."""
-    _require_role(project_id, current_user["user_id"], {"owner"})
+    _require_role(project_id, current_user["user_id"], {"owner"}, current_user)
     if not db_client.get_user_by_id(body.user_id):
         raise HTTPException(status_code=404, detail="User not found.")
     row = db_client.upsert_project_member(project_id, body.user_id, role=body.role)
@@ -280,7 +305,7 @@ def change_member_role(
     current_user: CurrentUser,
 ) -> dict:
     """Modify role of a member (owner only)."""
-    _require_role(project_id, current_user["user_id"], {"owner"})
+    _require_role(project_id, current_user["user_id"], {"owner"}, current_user)
     if user_id == current_user["user_id"]:
         raise HTTPException(status_code=400, detail="Cannot modify your own owner role.")
     row = db_client.upsert_project_member(project_id, user_id, role=body.role)
@@ -294,7 +319,7 @@ def remove_member(
     current_user: CurrentUser,
 ) -> dict:
     """Remove a member from the project (owner only)."""
-    _require_role(project_id, current_user["user_id"], {"owner"})
+    _require_role(project_id, current_user["user_id"], {"owner"}, current_user)
     if user_id == current_user["user_id"]:
         raise HTTPException(status_code=400, detail="Owner cannot be removed. Transfer ownership first.")
     if not db_client.remove_project_member(project_id, user_id):
@@ -305,7 +330,7 @@ def remove_member(
 @router.get("/{project_id}/documents", response_model=list[DocumentSummaryResponse])
 def list_shared_documents(project_id: UUID, current_user: CurrentUser) -> list[dict]:
     """List all documents shared to this project."""
-    _require_role(project_id, current_user["user_id"], {"owner", "editor", "viewer"})
+    _require_role(project_id, current_user["user_id"], {"owner", "editor", "viewer"}, current_user)
     docs = db_client.list_project_documents(project_id)
     return [dict(d) for d in docs]
 
@@ -317,7 +342,7 @@ def share_document(
     current_user: CurrentUser,
 ) -> dict:
     """Share a document to the project (owner/editor only)."""
-    _require_role(project_id, current_user["user_id"], {"owner", "editor"})
+    _require_role(project_id, current_user["user_id"], {"owner", "editor"}, current_user)
     if not db_client.get_document_by_uuid(body.document_id):
         raise HTTPException(status_code=404, detail="Document not found.")
     row = db_client.share_document_to_project(
@@ -335,7 +360,7 @@ def unshare_document(
     current_user: CurrentUser,
 ) -> dict:
     """Remove a document from the project (owner/editor only)."""
-    _require_role(project_id, current_user["user_id"], {"owner", "editor"})
+    _require_role(project_id, current_user["user_id"], {"owner", "editor"}, current_user)
     if not db_client.unshare_document_from_project(project_id, document_id):
         raise HTTPException(status_code=404, detail="Document was not shared to this project.")
     return {"detail": "Document unshared."}
@@ -348,7 +373,7 @@ def asset_sync_ack(
     current_user: CurrentUser,
 ) -> dict:
     """Acknowledge mobile asset upload for lifecycle eviction gate."""
-    _require_role(project_id, current_user["user_id"], {"owner", "editor", "viewer"})
+    _require_role(project_id, current_user["user_id"], {"owner", "editor", "viewer"}, current_user)
     if body.doc_id and not db_client.get_document_by_doc_id(body.doc_id):
         raise HTTPException(status_code=404, detail="Document not found for sync ack.")
     return {
@@ -365,7 +390,7 @@ def update_room_summary(
     current_user: CurrentUser,
 ) -> dict:
     """Persist derived room capture summary (no raw mesh). Deprecated — prefer room-scans."""
-    _require_role(project_id, current_user["user_id"], {"owner", "editor"})
+    _require_role(project_id, current_user["user_id"], {"owner", "editor"}, current_user)
     updated = db_client.update_project(
         project_id,
         room_summary=body.room_summary,
@@ -378,7 +403,7 @@ def update_room_summary(
 @router.get("/{project_id}/room-scans", response_model=list[ProjectLinkedRoomScanResponse])
 def list_room_scans(project_id: UUID, current_user: CurrentUser) -> list[dict]:
     """List library scans linked to this project."""
-    _require_role(project_id, current_user["user_id"], {"owner", "editor", "viewer"})
+    _require_role(project_id, current_user["user_id"], {"owner", "editor", "viewer"}, current_user)
     rows = db_client.list_linked_project_room_scans(project_id)
     return [dict(row) for row in rows]
 
@@ -390,7 +415,7 @@ def upsert_room_scans(
     current_user: CurrentUser,
 ) -> list[dict]:
     """Upsert user library scans and link them to the project."""
-    _require_role(project_id, current_user["user_id"], {"owner", "editor"})
+    _require_role(project_id, current_user["user_id"], {"owner", "editor"}, current_user)
     for scan in body.scans:
         if "surfaces" in (scan.derived or {}):
             raise HTTPException(
@@ -418,7 +443,7 @@ def link_room_scans(
     current_user: CurrentUser,
 ) -> list[dict]:
     """Attach existing library scans to a project."""
-    _require_role(project_id, current_user["user_id"], {"owner", "editor"})
+    _require_role(project_id, current_user["user_id"], {"owner", "editor"}, current_user)
     try:
         rows = db_client.link_scans_to_project(
             project_id,
@@ -438,7 +463,7 @@ def unlink_room_scan(
     current_user: CurrentUser,
 ) -> dict:
     """Remove a scan from the project (keeps it in the user's library)."""
-    _require_role(project_id, current_user["user_id"], {"owner", "editor"})
+    _require_role(project_id, current_user["user_id"], {"owner", "editor"}, current_user)
     if not db_client.unlink_scan_from_project(project_id, scan_id):
         raise HTTPException(status_code=404, detail="Scan link not found.")
     return {"detail": "Scan unlinked from project."}
@@ -451,7 +476,7 @@ def set_active_room_scan(
     current_user: CurrentUser,
 ) -> dict:
     """Set the active room scan used for chat context."""
-    _require_role(project_id, current_user["user_id"], {"owner", "editor"})
+    _require_role(project_id, current_user["user_id"], {"owner", "editor"}, current_user)
     updated = db_client.set_active_room_scan(project_id, scan_id)
     if not updated:
         raise HTTPException(status_code=404, detail="Room scan not found.")
@@ -473,7 +498,7 @@ def room_design_intent_by_scan(
     """Parse remodel intent for a linked room scan (standalone or structure child)."""
     from api.design_intent_helpers import _resolve_room_scan_row, run_design_intent
 
-    _require_role(project_id, current_user["user_id"], {"owner", "editor", "viewer"})
+    _require_role(project_id, current_user["user_id"], {"owner", "editor", "viewer"}, current_user)
     rows = db_client.list_linked_project_room_scans(project_id)
     room_row = _resolve_room_scan_row(rows, scan_id)
     return run_design_intent(
@@ -497,7 +522,7 @@ def room_design_intent(
     current_user: CurrentUser,
 ) -> dict:
     """Legacy nested route — delegates to scan_id resolver."""
-    _require_role(project_id, current_user["user_id"], {"owner", "editor", "viewer"})
+    _require_role(project_id, current_user["user_id"], {"owner", "editor", "viewer"}, current_user)
     rows = db_client.list_linked_project_room_scans(project_id)
     room_row = next((r for r in rows if r["id"] == room_id), None)
     if not room_row or room_row.get("scan_type") != "room":

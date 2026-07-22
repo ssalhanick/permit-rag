@@ -114,7 +114,48 @@ def verify_cognito_token(token: str) -> dict:
     return payload
 
 
+# ── Global role mapping (Cognito groups → app role) ────────────
+
+
+def map_cognito_groups_to_role(groups: list[str] | None) -> str:
+    """Map Cognito `cognito:groups` claim to a global app role.
+
+    Precedence: superadmin > admin > member. See docs/cognito_groups_rbac.md.
+    """
+    g = {x.lower() for x in (groups or [])}
+    if "superadmin" in g:
+        return "superadmin"
+    if "admin" in g:
+        return "admin"
+    return "member"
+
+
+def is_staff(user: dict | None) -> bool:
+    """True if user has global admin or superadmin role."""
+    return bool(user) and user.get("role") in ("admin", "superadmin")
+
+
+def is_superadmin(user: dict | None) -> bool:
+    """True if user has global superadmin role."""
+    return bool(user) and user.get("role") == "superadmin"
+
+
 # ── Internal user extraction ──────────────────────────────────
+
+
+def _sync_role_from_groups(payload: dict, user: dict) -> str:
+    """Compute role from the token's cognito:groups claim and mirror it to RDS
+    if it differs from the stored role. Returns the role to use for this request
+    (the freshly computed one, not necessarily what's in `user` yet)."""
+    role = map_cognito_groups_to_role(payload.get("cognito:groups"))
+    if role != user.get("role"):
+        from db import client as db_client
+
+        try:
+            db_client.sync_user_role(user["id"], role)
+        except Exception:
+            return user.get("role", "member")
+    return role
 
 
 def _extract_user(credentials: HTTPAuthorizationCredentials | None) -> dict | None:
@@ -144,9 +185,11 @@ def _extract_user(credentials: HTTPAuthorizationCredentials | None) -> dict | No
     except Exception:
         return None
 
+    role = _sync_role_from_groups(payload, user)
+
     return {
         "user_id": user["id"],
-        "role": user["role"],
+        "role": role,
         "cognito_sub": cognito_sub,
         "username": user.get("username"),
         "email": user.get("email"),
@@ -183,9 +226,12 @@ def get_current_user(
             status_code=503,
             detail=f"Database error provisioning user: {exc}",
         ) from exc
+
+    role = _sync_role_from_groups(payload, user)
+
     return {
         "user_id": user["id"],
-        "role": user["role"],
+        "role": role,
         "cognito_sub": cognito_sub,
         "username": user.get("username"),
         "email": user.get("email"),

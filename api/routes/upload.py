@@ -34,7 +34,7 @@ from fastapi import (
 from fastapi.security import APIKeyHeader
 from pydantic import BaseModel
 
-from api.auth import get_optional_current_user
+from api.auth import get_optional_current_user, is_staff
 from db.client import (
     delete_chunks_for_document,
     get_project,
@@ -84,11 +84,11 @@ def _require_admin_or_jwt(
     token: str | None = Depends(_token_header),
     current_user: dict | None = Depends(get_optional_current_user),
 ) -> dict | None:
-    """Require either a valid X-Admin-Token or a Cognito session with role='admin'.
+    """Require either a valid X-Admin-Token or a Cognito session with a staff role.
 
     Note: this previously returned ANY logged-in user regardless of role,
     which let any authenticated (non-admin) account bypass the token
-    requirement entirely. Fixed to require role == 'admin' explicitly.
+    requirement entirely. Fixed to require an admin/superadmin role explicitly.
     """
     required = os.environ.get("API_ADMIN_AUTH_REQUIRED", "true").lower() not in {"0", "false", "no"}
     if not required:
@@ -99,8 +99,8 @@ def _require_admin_or_jwt(
     if expected and token == expected:
         return {"user_id": None, "role": "admin", "username": "system-admin"}
 
-    # Check Cognito-authenticated admin
-    if current_user and current_user.get("role") == "admin":
+    # Check Cognito-authenticated staff (admin or superadmin)
+    if is_staff(current_user):
         return current_user
 
     raise HTTPException(status_code=401, detail="Authentication required. Provide a valid admin token or log in as an admin.")
