@@ -66,11 +66,15 @@ Output style:
 """
 
 
-def _build_system_prompt(project_context: dict[str, Any] | None = None) -> str:
+def _build_system_prompt(
+    project_context: dict[str, Any] | None = None,
+    system_prompt_override: str | None = None,
+) -> str:
     """Build system prompt with project specific guidelines."""
+    base = system_prompt_override if system_prompt_override is not None else SYSTEM_PROMPT
     if project_context and project_context.get("custom_system_prompt"):
-        return f"{SYSTEM_PROMPT}\n\nProject Specific Guidelines:\n{project_context['custom_system_prompt']}"
-    return SYSTEM_PROMPT
+        return f"{base}\n\nProject Specific Guidelines:\n{project_context['custom_system_prompt']}"
+    return base
 
 
 KICKOFF_SYSTEM_PROMPT = """\
@@ -163,6 +167,7 @@ def _generate_with_ollama(
     max_tokens: int,
     temperature: float,
     project_context: dict[str, Any] | None = None,
+    system_prompt_override: str | None = None,
 ) -> GenerationResult:
     """Generate answer using local Ollama runtime."""
     import requests
@@ -175,7 +180,10 @@ def _generate_with_ollama(
     payload = {
         "model": model,
         "messages": [
-            {"role": "system", "content": _build_system_prompt(project_context)},
+            {
+                "role": "system",
+                "content": _build_system_prompt(project_context, system_prompt_override),
+            },
             {"role": "user", "content": user_message},
         ],
         "stream": False,
@@ -327,6 +335,7 @@ def generate_answer(
     max_tokens: int = 1024,
     temperature: float = 0.0,
     project_context: dict[str, Any] | None = None,
+    system_prompt_override: str | None = None,
 ) -> GenerationResult:
     """
     Generate a cited answer from retrieved chunks via configured provider.
@@ -338,6 +347,9 @@ def generate_answer(
         max_tokens: Maximum output tokens.
         temperature: Sampling temperature (low = more deterministic).
         project_context: Optional kickoff + active room derived facts (not cited).
+        system_prompt_override: Optional replacement for the default SYSTEM_PROMPT.
+            Eval-harness use only (prompt-variant comparison) -- unset in all
+            production call sites, so default behavior is unchanged.
 
     Returns:
         GenerationResult with answer text, parsed citations, and usage stats.
@@ -357,6 +369,7 @@ def generate_answer(
             max_tokens=max_tokens,
             temperature=temperature,
             project_context=project_context,
+            system_prompt_override=system_prompt_override,
         )
 
     import anthropic
@@ -385,7 +398,7 @@ def generate_answer(
     client = anthropic.Anthropic(api_key=api_key)
     cache_control = _prompt_cache_control()
     system_payload: Any
-    system_prompt_str = _build_system_prompt(project_context)
+    system_prompt_str = _build_system_prompt(project_context, system_prompt_override)
     if cache_enabled:
         system_payload = [
             {

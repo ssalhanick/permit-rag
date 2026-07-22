@@ -167,6 +167,36 @@ def test_geocode_no_match_returns_none():
     assert result is None
 
 
+def test_point_in_polygon_parses_dict_row():
+    """
+    _point_in_polygon() must read the dict_row-shaped cursor result by key,
+    not by index — db.client.get_pool() configures psycopg with
+    row_factory=dict_row, so cur.fetchone() returns {"jurisdiction_id": ...},
+    and `row[0]` raises KeyError(0) (silently caught, mis-logged as "DB query
+    failed: 0", function returns None for every address). Regression guard
+    for that bug.
+    """
+    from rag.jurisdiction_resolver import _point_in_polygon
+
+    mock_cur = MagicMock()
+    mock_cur.fetchone.return_value = {"jurisdiction_id": "dallas"}
+    mock_cur.__enter__.return_value = mock_cur
+    mock_cur.__exit__.return_value = False
+
+    mock_conn = MagicMock()
+    mock_conn.cursor.return_value = mock_cur
+    mock_conn.__enter__.return_value = mock_conn
+    mock_conn.__exit__.return_value = False
+
+    mock_pool = MagicMock()
+    mock_pool.connection.return_value = mock_conn
+
+    with patch("db.client.get_pool", return_value=mock_pool):
+        result = _point_in_polygon(32.776661, -96.795837)
+
+    assert result == "dallas"
+
+
 def test_resolve_jurisdiction_hits_polygon(monkeypatch):
     """Full resolution: geocode succeeds + polygon hit → resolved jurisdiction."""
     import requests

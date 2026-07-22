@@ -363,7 +363,9 @@ resource "aws_ecs_task_definition" "backend" {
         { name = "APP_READER_URL", value = "postgresql://postgres:${data.aws_ssm_parameter.db_password.value}@${aws_db_instance.postgres.endpoint}/permit_rag?sslmode=require" },
         { name = "LLM_MODEL", value = "claude-haiku-4-5-20251001" },
         { name = "LLM_PROVIDER", value = "anthropic" },
-        { name = "OPENAI_IMAGE_MODEL", value = "gpt-image-1" }
+        { name = "OPENAI_IMAGE_MODEL", value = "gpt-image-1" },
+        { name = "LANGCHAIN_TRACING_V2", value = "true" },
+        { name = "LANGCHAIN_PROJECT", value = "permit-rag-app" }
       ]
       secrets = [
         {
@@ -393,6 +395,10 @@ resource "aws_ecs_task_definition" "backend" {
         {
           name      = "API_ADMIN_TOKEN"
           valueFrom = "arn:aws:ssm:${data.aws_region.current.name}:${data.aws_caller_identity.current.account_id}:parameter/permit_rag/prod/admin_token"
+        },
+        {
+          name      = "LANGSMITH_API_KEY"
+          valueFrom = "arn:aws:ssm:${data.aws_region.current.name}:${data.aws_caller_identity.current.account_id}:parameter/permit_rag/prod/langsmith_api_key"
         }
       ]
       logConfiguration = {

@@ -1,0 +1,346 @@
+{
+  "dataset_name": "permit_rag_eval_v1",
+  "description": "Hand-curated golden set for permit_rag retrieval+generation, DFW pilot corpus (dallas/plano/fortworth/texas/federal, 19 docs). Source of truth for evaluation/langsmith_upsert_dataset.py -- do not hand-edit examples in the LangSmith UI, they get clobbered on the next upsert.",
+  "examples": [
+    {
+      "inputs": {
+        "query": "What are the setback requirements for a residential fence in Dallas?",
+        "municipality": "dallas",
+        "address": null,
+        "project_id": null,
+        "top_k": 10
+      },
+      "outputs": {
+        "expected_resolved_municipality": null,
+        "expected_citations": [{"doc_id": "city-of-dallas-ordiance-v3", "chunk_index": 1941}],
+        "reference_facts": "States the minimum setback distance for residential fences and cites the Dallas ordinance chunk covering fence/setback rules.",
+        "is_out_of_corpus": false,
+        "skip_citation_check": false
+      },
+      "notes": "Seeded from ragas_eval.TEST_QUERIES[0]. doc_id/chunk_index verified live against prod RDS 2026-07-21."
+    },
+    {
+      "inputs": {
+        "query": "Do I need a permit for electrical work in Texas?",
+        "municipality": null,
+        "address": null,
+        "project_id": null,
+        "top_k": 10
+      },
+      "outputs": {
+        "expected_resolved_municipality": null,
+        "expected_citations": [{"doc_id": "texas-contractor-licensing-electrical", "chunk_index": 0}],
+        "reference_facts": "States whether/when an electrical permit is required in Texas, citing the state contractor-licensing chunk.",
+        "is_out_of_corpus": false,
+        "skip_citation_check": false
+      },
+      "notes": "Seeded from ragas_eval.TEST_QUERIES[1]. Verified live against prod RDS 2026-07-21."
+    },
+    {
+      "inputs": {
+        "query": "What are the ADA accessibility requirements for commercial buildings?",
+        "municipality": null,
+        "address": null,
+        "project_id": null,
+        "top_k": 10
+      },
+      "outputs": {
+        "expected_resolved_municipality": null,
+        "expected_citations": [{"doc_id": "ada-design-standards", "chunk_index": 1}],
+        "reference_facts": "Summarizes ADA accessibility requirements for commercial buildings, citing the federal ADA design standards chunk.",
+        "is_out_of_corpus": false,
+        "skip_citation_check": false
+      },
+      "notes": "Seeded from ragas_eval.TEST_QUERIES[2]. Verified live against prod RDS 2026-07-21."
+    },
+    {
+      "inputs": {
+        "query": "What is the stormwater management plan requirement for construction sites?",
+        "municipality": null,
+        "address": null,
+        "project_id": null,
+        "top_k": 10
+      },
+      "outputs": {
+        "expected_resolved_municipality": null,
+        "expected_citations": [{"doc_id": "epa-stormwater-construction", "chunk_index": 2}],
+        "reference_facts": "States the stormwater management plan requirement for construction sites, citing the EPA stormwater chunk.",
+        "is_out_of_corpus": false,
+        "skip_citation_check": false
+      },
+      "notes": "Seeded from ragas_eval.TEST_QUERIES[3]. Verified live against prod RDS 2026-07-21."
+    },
+    {
+      "inputs": {
+        "query": "What are the building permit requirements in Plano?",
+        "municipality": "plano",
+        "address": null,
+        "project_id": null,
+        "top_k": 10
+      },
+      "outputs": {
+        "expected_resolved_municipality": null,
+        "expected_citations": [{"doc_id": "plano-2", "chunk_index": 448}],
+        "reference_facts": "States Plano building permit requirements, citing the plano-2 ordinance chunk.",
+        "is_out_of_corpus": false,
+        "skip_citation_check": false
+      },
+      "notes": "Seeded from ragas_eval.TEST_QUERIES[4]. Verified live against prod RDS 2026-07-21."
+    },
+    {
+      "inputs": {
+        "query": "What are the fire sprinkler requirements for new construction in Dallas?",
+        "municipality": "dallas",
+        "address": null,
+        "project_id": null,
+        "top_k": 10
+      },
+      "outputs": {
+        "expected_resolved_municipality": null,
+        "expected_citations": [{"doc_id": "dallas-fire-code-2021", "chunk_index": 173}],
+        "reference_facts": "States Dallas fire sprinkler requirements for new construction, citing the Dallas fire code chunk.",
+        "is_out_of_corpus": false,
+        "skip_citation_check": false
+      },
+      "notes": "Seeded from ragas_eval.TEST_QUERIES[5]. Verified live against prod RDS 2026-07-21."
+    },
+    {
+      "inputs": {
+        "query": "What is the maximum building height allowed in a residential zone?",
+        "municipality": "dallas",
+        "address": null,
+        "project_id": null,
+        "top_k": 10
+      },
+      "outputs": {
+        "expected_resolved_municipality": null,
+        "expected_citations": [{"doc_id": "city-of-dallas-ordiance-v3", "chunk_index": 262}],
+        "reference_facts": "States the maximum building height for a residential zone in Dallas, citing the Dallas zoning ordinance chunk.",
+        "is_out_of_corpus": false,
+        "skip_citation_check": false
+      },
+      "notes": "Seeded from ragas_eval.TEST_QUERIES[6]. Verified live against prod RDS 2026-07-21."
+    },
+    {
+      "inputs": {
+        "query": "What permits are needed for a bathroom addition with new electrical and plumbing in Dallas?",
+        "municipality": "dallas",
+        "address": null,
+        "project_id": null,
+        "top_k": 10
+      },
+      "outputs": {
+        "expected_resolved_municipality": null,
+        "expected_citations": [{"doc_id": "city-of-dallas-ordiance-v1", "chunk_index": 554}],
+        "reference_facts": "Identifies multiple applicable permit categories (building, electrical, plumbing) for a bathroom addition in Dallas.",
+        "is_out_of_corpus": false,
+        "skip_citation_check": false
+      },
+      "notes": "New multi-permit-type example. top_sim=0.7644 verified live 2026-07-21; clears the 0.74 guardrail."
+    },
+    {
+      "inputs": {
+        "query": "Do I need separate permits for HVAC replacement and an electrical panel upgrade in Fort Worth?",
+        "municipality": "fortworth",
+        "address": null,
+        "project_id": null,
+        "top_k": 10
+      },
+      "outputs": {
+        "expected_resolved_municipality": null,
+        "expected_citations": [{"doc_id": "ftworth-tx-1", "chunk_index": 908}],
+        "reference_facts": "Identifies HVAC and electrical as separate permit categories for Fort Worth work.",
+        "is_out_of_corpus": false,
+        "skip_citation_check": false
+      },
+      "notes": "KNOWN THRESHOLD ISSUE: top_sim=0.7182 verified live 2026-07-21 -- BELOW the 0.74 MIN_GROUNDED_TOP_SIM guardrail, so this genuinely-answerable, easy question currently gets abstained on in production. This is the exact 'easy questions flagged as insufficient confidence' symptom the eval was commissioned to investigate. Expect abstention_correct to FAIL until RAG_GUARD_MIN_TOP_SIM is recalibrated -- intentionally left failing to document the bug, not a dataset error."
+    },
+    {
+      "inputs": {
+        "query": "What permits does a homeowner need to build a detached garage with electrical wiring in Plano?",
+        "municipality": "plano",
+        "address": null,
+        "project_id": null,
+        "top_k": 10
+      },
+      "outputs": {
+        "expected_resolved_municipality": null,
+        "expected_citations": [{"doc_id": "plano-2", "chunk_index": 523}],
+        "reference_facts": "Identifies building and electrical permit requirements for a detached garage in Plano.",
+        "is_out_of_corpus": false,
+        "skip_citation_check": false
+      },
+      "notes": "New multi-permit-type example. top_sim=0.7600 verified live 2026-07-21; clears the 0.74 guardrail."
+    },
+    {
+      "inputs": {
+        "query": "What permits are required for a kitchen remodel involving plumbing, electrical, and structural changes in Dallas?",
+        "municipality": "dallas",
+        "address": null,
+        "project_id": null,
+        "top_k": 10
+      },
+      "outputs": {
+        "expected_resolved_municipality": null,
+        "expected_citations": [{"doc_id": "city-of-dallas-ordiance-v1", "chunk_index": 554}],
+        "reference_facts": "Identifies plumbing, electrical, and structural/building permit categories for a Dallas kitchen remodel.",
+        "is_out_of_corpus": false,
+        "skip_citation_check": false
+      },
+      "notes": "New multi-permit-type example. top_sim=0.7740 verified live 2026-07-21; clears the 0.74 guardrail."
+    },
+    {
+      "inputs": {
+        "query": "What state-level licensing is required for electrical and plumbing contractors doing work in Texas?",
+        "municipality": null,
+        "address": null,
+        "project_id": null,
+        "top_k": 10
+      },
+      "outputs": {
+        "expected_resolved_municipality": null,
+        "expected_citations": [{"doc_id": "texas-contractor-licensing-electrical", "chunk_index": 0}],
+        "reference_facts": "States Texas state-level contractor licensing requirements for electrical (and, if covered, plumbing) work.",
+        "is_out_of_corpus": false,
+        "skip_citation_check": false
+      },
+      "notes": "New multi-permit-type example. top_sim=0.8259 verified live 2026-07-21."
+    },
+    {
+      "inputs": {
+        "query": "What accessibility and fire code requirements apply to a commercial building renovation?",
+        "municipality": null,
+        "address": null,
+        "project_id": null,
+        "top_k": 10
+      },
+      "outputs": {
+        "expected_resolved_municipality": null,
+        "expected_citations": [{"doc_id": "ftworth-tx-1", "chunk_index": 1276}],
+        "reference_facts": "Covers both accessibility and fire-code requirements applicable to a commercial renovation.",
+        "is_out_of_corpus": false,
+        "skip_citation_check": false
+      },
+      "notes": "KNOWN THRESHOLD ISSUE: top_sim=0.7210 verified live 2026-07-21 -- BELOW the 0.74 guardrail, second reproduction of the false-abstention symptom (see the Fort Worth HVAC example above). Expect abstention_correct to FAIL until the threshold is recalibrated."
+    },
+    {
+      "inputs": {
+        "query": "What permits are required for a home addition project?",
+        "municipality": null,
+        "address": "1500 Marilla St, Dallas, TX 75201",
+        "project_id": null,
+        "top_k": 10
+      },
+      "outputs": {
+        "expected_resolved_municipality": "dallas",
+        "expected_citations": [{"doc_id": "city-of-dallas-ordiance-v3", "chunk_index": 1174}],
+        "reference_facts": "States permit requirements for a home addition, using Dallas ordinance sources after resolving the address to the dallas jurisdiction.",
+        "is_out_of_corpus": false,
+        "skip_citation_check": false
+      },
+      "notes": "Address-driven jurisdiction resolution (Dallas City Hall -- public building, not PII). Verified live 2026-07-21 AFTER fixing the rag/jurisdiction_resolver.py dict_row bug (row[0] -> row['jurisdiction_id']); resolved_municipality='dallas', top_sim=0.8001."
+    },
+    {
+      "inputs": {
+        "query": "What are the requirements for a residential deck or patio structure?",
+        "municipality": null,
+        "address": "1401 Commerce St, Dallas, TX 75201",
+        "project_id": null,
+        "top_k": 10
+      },
+      "outputs": {
+        "expected_resolved_municipality": "dallas",
+        "expected_citations": [{"doc_id": "city-of-dallas-ordiance-v3", "chunk_index": 445}],
+        "reference_facts": "States deck/patio requirements using Dallas ordinance sources after resolving the address to the dallas jurisdiction.",
+        "is_out_of_corpus": false,
+        "skip_citation_check": false
+      },
+      "notes": "Address-driven jurisdiction resolution (downtown Dallas commercial address, not PII). Verified live 2026-07-21 post-fix; resolved_municipality='dallas', top_sim=0.7572."
+    },
+    {
+      "inputs": {
+        "query": "What permits are required for a home addition project?",
+        "municipality": null,
+        "address": "350 Fifth Avenue, New York, NY 10118",
+        "project_id": null,
+        "top_k": 10
+      },
+      "outputs": {
+        "expected_resolved_municipality": null,
+        "expected_citations": [],
+        "reference_facts": "Address is outside the pilot municipal_boundaries dataset (only Dallas is loaded); resolution should correctly fail rather than silently defaulting to a wrong jurisdiction.",
+        "is_out_of_corpus": false,
+        "skip_citation_check": true
+      },
+      "notes": "Negative jurisdiction-resolution case (Empire State Building -- public landmark, not PII). Geocodes successfully but correctly falls outside the only loaded boundary (Dallas). skip_citation_check=true: this example's purpose is verifying resolved_municipality is None, not grading citations against an unscoped, cross-corpus retrieval."
+    },
+    {
+      "inputs": {
+        "query": "What permits are required for a home addition project?",
+        "municipality": null,
+        "address": "1 Infinite Loop, Cupertino, CA 95014",
+        "project_id": null,
+        "top_k": 10
+      },
+      "outputs": {
+        "expected_resolved_municipality": null,
+        "expected_citations": [],
+        "reference_facts": "Address is far outside the DFW pilot region; Census geocoding itself may fail for this address, and even if it succeeds, no boundary match should occur.",
+        "is_out_of_corpus": false,
+        "skip_citation_check": true
+      },
+      "notes": "Negative jurisdiction-resolution case (well-known public landmark, not PII). Verified live 2026-07-21: Census geocode failed outright for this address -- a different failure mode than the New York example (boundary miss vs geocode miss), both correctly land at resolved_municipality=None."
+    },
+    {
+      "inputs": {
+        "query": "What is the process for filing a federal tax extension?",
+        "municipality": null,
+        "address": null,
+        "project_id": null,
+        "top_k": 10
+      },
+      "outputs": {
+        "expected_resolved_municipality": null,
+        "expected_citations": [],
+        "reference_facts": "Not a construction-permit question and not covered by the corpus; the system should abstain rather than hallucinate an answer from unrelated chunks.",
+        "is_out_of_corpus": true,
+        "skip_citation_check": true
+      },
+      "notes": "Out-of-corpus guardrail check. top_sim=0.6690 verified live 2026-07-21 -- correctly below the 0.74 threshold."
+    },
+    {
+      "inputs": {
+        "query": "What are the noise ordinance requirements in Seattle, Washington?",
+        "municipality": null,
+        "address": null,
+        "project_id": null,
+        "top_k": 10
+      },
+      "outputs": {
+        "expected_resolved_municipality": null,
+        "expected_citations": [],
+        "reference_facts": "Seattle is not in the DFW pilot corpus; the system should abstain rather than answer from Dallas/Fort Worth chunks that happen to share the word 'noise' or 'ordinance'.",
+        "is_out_of_corpus": true,
+        "skip_citation_check": true
+      },
+      "notes": "Out-of-corpus guardrail check. top_sim=0.6671 verified live 2026-07-21 -- correctly below the 0.74 threshold."
+    },
+    {
+      "inputs": {
+        "query": "What permit is required to open a daycare business in Austin, Texas?",
+        "municipality": null,
+        "address": null,
+        "project_id": null,
+        "top_k": 10
+      },
+      "outputs": {
+        "expected_resolved_municipality": null,
+        "expected_citations": [],
+        "reference_facts": "Austin is not in the DFW pilot corpus (only dallas/plano/fortworth/texas-state/federal); the system should abstain rather than answer using Dallas-specific chunks.",
+        "is_out_of_corpus": true,
+        "skip_citation_check": true
+      },
+      "notes": "Out-of-corpus guardrail check. top_sim=0.6777 verified live 2026-07-21 -- correctly below the 0.74 threshold."
+    }
+  ]
+}

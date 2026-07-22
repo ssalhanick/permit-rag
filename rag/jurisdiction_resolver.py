@@ -150,7 +150,7 @@ def _point_in_polygon(lat: float, lng: float) -> str | None:
             cur.execute(sql, (lng, lat))   # PostGIS is (longitude, latitude)
             row = cur.fetchone()
             if row:
-                jid = row[0]
+                jid = row["jurisdiction_id"]
                 log.info(
                     "_point_in_polygon: (%.6f, %.6f) → '%s'", lat, lng, jid
                 )
