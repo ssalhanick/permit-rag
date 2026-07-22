@@ -53,6 +53,7 @@ py -m pytest tests/test_commerce_takeoff.py tests/test_commerce_product_resolver
 - [ ] [Agent Implementation Plan](../..\.gemini\antigravity\brain\acda4bb1-53b2-4cf2-b710-5e93089c1fab/agent_implementation_plan.md) — Implement single-responsibility agents (Query Deconstructor, Semantic Conflict Analyzer, Citation Verification) with the `instructor` library and dynamic token truncation.
 - [ ] [Token Optimization & Cost-Effectiveness Plan](../..\.gemini\antigravity\brain\acda4bb1-53b2-4cf2-b710-5e93089c1fab\token_optimization_plan.md) - Analyze prompt caching, chunking strategies, and embedding model trade-offs to minimize Claude token usage.
 - [ ] [CMS Admin Dashboard](.gemini\antigravity\brain\acda4bb1-53b2-4cf2-b710-5e93089c1fab\cms_admin_dashboard_plan.md)
+- [ ] [Cognito Groups RBAC](docs/cognito_groups_rbac.md) — Cognito groups as source of truth for `member` / `admin` / `superadmin`; staff bypass for see-everything; keep project_members + ops token
 
 ### Upcoming
 - [ ] **SerpApi production key** — add `SERPAPI_API_KEY` to ECS task env / SSM after account signup (blocker for live HD prices; mocks work until then)
