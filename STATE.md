@@ -1,10 +1,26 @@
 # permit_rag — State
 
-_Updated: 2026-07-21 (On-demand URL pull implemented)_
+_Updated: 2026-07-22 (Cognito groups RBAC plan)_
 
 ## Phase
 
-**Ingestion tooling** — URL pull feature code-complete. Next: run migration 022 + tests + verification checklist.
+**Auth / permissions planning** — Cognito-groups RBAC plan written. URL pull is deployed-ish; next product work can be Phase 0 Cognito groups + Phase 1 sync.
+
+## Blocked on
+
+1. **Mobile OAuth deep links (deferred)** — M0-6/M0-7 device Google/Apple roundtrip
+
+## Deliverables checklist
+
+### Cognito Groups RBAC (planned)
+
+- [ ] Plan: [docs/cognito_groups_rbac.md](docs/cognito_groups_rbac.md) + README Planned link
+- [ ] Phase 0: create Cognito groups `admin` / `superadmin`; add self; verify `cognito:groups` on access token
+- [ ] Phase 1: migration 023 + JWT group → `users.role` sync + staff project read bypass
+- [ ] Phase 2: dual-auth corpus routes (Cognito staff or `X-Admin-Token`)
+- [ ] Verification checklist in plan doc
+
+### On-demand URL pull (code done prior session)
 
 ## Blocked on
 
@@ -76,6 +92,7 @@ cd frontend; npm run test
 | Pull job state | In-memory dict for MVP; DB-backed table later |
 | Redirect SSRF | `fetch_asset` disables auto-redirects, re-validates every hop |
 | Enum source of truth | `db/schema.sql` enums; upload/pull/frontend lists copied from it |
+| Global staff roles | Cognito groups `admin` / `superadmin` → mirror `users.role`; project RBAC stays in RDS; ops token kept as break-glass ([docs/cognito_groups_rbac.md](docs/cognito_groups_rbac.md)) |
 | Gen image provider | Leonardo.ai when keyed; OpenAI fallback; mock PNG fallback otherwise |
 | Kickoff flow | Deterministic checkbox selections for spaces, work types, and materials |
 
