@@ -7,6 +7,9 @@ from __future__ import annotations
 
 from uuid import uuid4
 
+import pytest
+from fastapi import HTTPException
+
 from api.routes import upload as upload_route
 
 
@@ -147,3 +150,44 @@ def test_process_upload_html_retries_without_filter(monkeypatch, tmp_path) -> No
 
     assert calls["chunk_calls"] == 2
     assert calls["status"] == "active"
+
+
+# ═══════════════════════════════════════════════════════════════
+#  _require_admin_or_jwt — regression: role must be 'admin'
+# ═══════════════════════════════════════════════════════════════
+
+
+def test_require_admin_or_jwt_rejects_non_admin_authenticated_user(monkeypatch) -> None:
+    """
+    A logged-in Cognito user with role='member' must NOT bypass the admin
+    gate. Previously any truthy current_user was accepted regardless of
+    role, letting any authenticated (non-admin) account upload documents.
+    """
+    monkeypatch.setenv("API_ADMIN_AUTH_REQUIRED", "true")
+    monkeypatch.delenv("API_ADMIN_TOKEN", raising=False)
+
+    member_user = {"user_id": uuid4(), "role": "member", "username": "regular-user"}
+
+    with pytest.raises(HTTPException) as exc_info:
+        upload_route._require_admin_or_jwt(token=None, current_user=member_user)
+    assert exc_info.value.status_code == 401
+
+
+def test_require_admin_or_jwt_allows_cognito_admin(monkeypatch) -> None:
+    """A logged-in Cognito user with role='admin' satisfies the admin gate."""
+    monkeypatch.setenv("API_ADMIN_AUTH_REQUIRED", "true")
+    monkeypatch.delenv("API_ADMIN_TOKEN", raising=False)
+
+    admin_user = {"user_id": uuid4(), "role": "admin", "username": "site-owner"}
+
+    result = upload_route._require_admin_or_jwt(token=None, current_user=admin_user)
+    assert result == admin_user
+
+
+def test_require_admin_or_jwt_allows_shared_token(monkeypatch) -> None:
+    """The shared X-Admin-Token path still works (machine credential for scripts)."""
+    monkeypatch.setenv("API_ADMIN_AUTH_REQUIRED", "true")
+    monkeypatch.setenv("API_ADMIN_TOKEN", "secret-token")
+
+    result = upload_route._require_admin_or_jwt(token="secret-token", current_user=None)
+    assert result["role"] == "admin"

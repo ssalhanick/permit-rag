@@ -9,9 +9,11 @@ from __future__ import annotations
 import logging
 import os
 from pathlib import Path
+from typing import Annotated
 
-from fastapi import APIRouter, Header, HTTPException
+from fastapi import APIRouter, Depends, Header, HTTPException
 
+from api.auth import get_optional_current_user
 from api.schemas import (
     DocumentAdminActionResponse,
     DocumentAdminUpdateRequest,
@@ -32,8 +34,20 @@ def _parse_role_set(env_key: str, default: str) -> set[str]:
     return {value.strip().lower() for value in raw.split(",") if value.strip()}
 
 
-def _require_admin_auth(x_admin_token: str | None, x_admin_role: str | None) -> None:
-    """Enforce token + role checks for admin routes when enabled."""
+def _require_admin_auth(
+    x_admin_token: str | None,
+    x_admin_role: str | None,
+    current_user: dict | None = None,
+) -> None:
+    """Enforce token + role checks for admin routes when enabled.
+
+    Accepts EITHER a verified Cognito session with role='admin' OR the
+    shared X-Admin-Token (kept only as a machine credential for
+    scripts/purge_project_uploads.py -- never collected in the frontend UI).
+    """
+    if current_user is not None and current_user.get("role") == "admin":
+        return
+
     required = os.environ.get("API_ADMIN_AUTH_REQUIRED", "true").strip().lower()
     auth_required = required in {"1", "true", "yes", "on"}
     if not auth_required:
@@ -140,9 +154,10 @@ def patch_document_admin(
     body: DocumentAdminUpdateRequest,
     x_admin_token: str | None = Header(default=None),
     x_admin_role: str | None = Header(default=None),
+    current_user: Annotated[dict | None, Depends(get_optional_current_user)] = None,
 ) -> DocumentAdminActionResponse:
     """Patch mutable governance fields for an existing document."""
-    _require_admin_auth(x_admin_token, x_admin_role)
+    _require_admin_auth(x_admin_token, x_admin_role, current_user)
     try:
         updated = db_client.update_document_admin_fields(doc_id, **body.model_dump())
     except Exception as exc:
@@ -175,9 +190,10 @@ def supersede_document_admin(
     body: DocumentSupersedeRequest,
     x_admin_token: str | None = Header(default=None),
     x_admin_role: str | None = Header(default=None),
+    current_user: Annotated[dict | None, Depends(get_optional_current_user)] = None,
 ) -> DocumentAdminActionResponse:
     """Supersede doc_id using replacement_doc_id and downweight old retrieval."""
-    _require_admin_auth(x_admin_token, x_admin_role)
+    _require_admin_auth(x_admin_token, x_admin_role, current_user)
     try:
         updated = db_client.supersede_document(
             doc_id,
@@ -216,9 +232,10 @@ def purge_project_upload_admin(
     x_admin_token: str | None = Header(default=None),
     x_admin_role: str | None = Header(default=None),
     x_admin_user: str | None = Header(default=None),
+    current_user: Annotated[dict | None, Depends(get_optional_current_user)] = None,
 ) -> DocumentAdminActionResponse:
     """Purge project-upload content while retaining governance document row."""
-    _require_admin_auth(x_admin_token, x_admin_role)
+    _require_admin_auth(x_admin_token, x_admin_role, current_user)
     try:
         row = db_client.get_document_by_doc_id(doc_id)
     except Exception as exc:
@@ -229,8 +246,16 @@ def purge_project_upload_admin(
     source_tier = int(row.get("source_tier", 1))
     if source_tier != 3:
         _require_any_tier_purge_role(x_admin_role)
-    actor_role = (x_admin_role or "").strip().lower() or "unknown"
-    actor_identity = (x_admin_user or "").strip() or "unknown"
+    actor_role = (
+        (x_admin_role or "").strip().lower()
+        or (current_user.get("role") if current_user else None)
+        or "unknown"
+    )
+    actor_identity = (
+        (x_admin_user or "").strip()
+        or (current_user.get("username") if current_user else None)
+        or "unknown"
+    )
     try:
         deleted_chunks = db_client.delete_chunks_for_document(row["id"])
         file_deleted = _remove_local_raw_file(row.get("local_path"))

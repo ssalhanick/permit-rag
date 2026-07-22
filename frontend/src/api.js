@@ -1,4 +1,3 @@
-import { buildAdminHeaders } from "./documentAdminUtils.js";
 import { getPlatformName, isNativePlatform } from "./platform.js";
 
 // Mock localStorage for non-browser testing environments (e.g. Node runner)
@@ -416,44 +415,38 @@ export async function fetchDocumentDetail(docId) {
   return await requestJson(`/documents/${encodeURIComponent(docId)}`);
 }
 
-export async function updateDocumentAdmin(docId, body, adminToken, adminRole = "admin") {
+// Admin governance routes require an admin-role login. Auth is handled by
+// requestJson's automatic Authorization: Bearer <access_token> header --
+// no separate admin token is collected or sent from the browser.
+
+export async function updateDocumentAdmin(docId, body) {
   return await requestJson(`/admin/documents/${encodeURIComponent(docId)}`, {
     method: "PATCH",
     body,
-    headers: buildAdminHeaders(adminToken, adminRole),
   });
 }
 
-export async function supersedeDocumentAdmin(docId, body, adminToken, adminRole = "admin") {
+export async function supersedeDocumentAdmin(docId, body) {
   return await requestJson(`/admin/documents/${encodeURIComponent(docId)}/supersede`, {
     method: "POST",
     body,
-    headers: buildAdminHeaders(adminToken, adminRole),
   });
 }
 
-export async function pullPage(payload, adminToken, adminRole = "admin") {
+export async function pullPage(payload) {
   return await requestJson("/admin/documents/pull-page", {
     method: "POST",
     body: payload,
-    headers: buildAdminHeaders(adminToken, adminRole),
   });
 }
 
-export async function getPullJob(jobId, adminToken, adminRole = "admin") {
-  return await requestJson(`/admin/documents/pull-jobs/${encodeURIComponent(jobId)}`, {
-    headers: buildAdminHeaders(adminToken, adminRole),
-  });
+export async function getPullJob(jobId) {
+  return await requestJson(`/admin/documents/pull-jobs/${encodeURIComponent(jobId)}`);
 }
 
-export async function purgeDocumentAdmin(docId, adminToken, adminRole = "admin", adminUser = "") {
-  const headers = buildAdminHeaders(adminToken, adminRole);
-  if (adminUser.trim()) {
-    headers["X-Admin-User"] = adminUser.trim();
-  }
+export async function purgeDocumentAdmin(docId) {
   return await requestJson(`/admin/documents/${encodeURIComponent(docId)}/purge-project-upload`, {
     method: "POST",
-    headers,
   });
 }
 

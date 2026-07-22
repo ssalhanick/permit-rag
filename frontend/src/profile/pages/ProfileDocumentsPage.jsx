@@ -6,7 +6,7 @@ import {
   purgeDocumentAdmin,
   shareDocumentToProject,
 } from "../../api.js";
-import { formatAdminError, getStoredAdminToken } from "../../documentAdminUtils.js";
+import { formatAdminError } from "../../documentAdminUtils.js";
 
 /**
  * User-uploaded documents with project share and admin purge actions.
@@ -87,13 +87,8 @@ export default function ProfileDocumentsPage() {
     if (!window.confirm(`Are you sure you want to delete and purge all chunks for document ${docId}?`)) {
       return;
     }
-    const adminToken = getStoredAdminToken();
-    if (!adminToken.trim()) {
-      setActionError("Set X-Admin-Token on Upload or Documents page before purging.");
-      return;
-    }
     try {
-      await purgeDocumentAdmin(docId, adminToken, "admin", user?.username || userId || "");
+      await purgeDocumentAdmin(docId);
       setActionSuccess(`Document ${docId} purged successfully.`);
       loadDocuments();
     } catch (err) {

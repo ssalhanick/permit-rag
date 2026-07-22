@@ -3,7 +3,6 @@ import { Link } from "react-router-dom";
 import { API_BASE_URL, API_PREFIX, fetchProjects, getPullJob, pullPage } from "./api.js";
 import { useAuth } from "./context/AuthContext.jsx";
 import { formatUploadError, getUploadBlockers, suggestDocIdFromFilename } from "./uploadUtils.js";
-import { getStoredAdminToken, setStoredAdminToken } from "./documentAdminUtils.js";
 import { isNativePlatform } from "./platform.js";
 import { capturePhotoForUpload, pickImageForUpload } from "./services/mobileUpload.js";
 
@@ -48,7 +47,6 @@ export default function UploadPage() {
   const [form, setForm] = useState(DEFAULT_FORM);
   const [file, setFile] = useState(null);
   const [projects, setProjects] = useState([]);
-  const [adminToken, setAdminToken] = useState(() => getStoredAdminToken());
   const [status, setStatus] = useState(null); // null | 'loading' | 'success' | 'error'
   const [result, setResult] = useState(null);
   const [error, setError] = useState("");
@@ -113,16 +111,9 @@ export default function UploadPage() {
     file,
     docId: form.doc_id,
     municipality: form.municipality,
-    adminToken,
     status,
   });
   const canSubmit = blockers.length === 0;
-
-  function handleAdminTokenChange(event) {
-    const value = event.target.value;
-    setAdminToken(value);
-    setStoredAdminToken(value);
-  }
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -146,9 +137,10 @@ export default function UploadPage() {
     }
 
     try {
+      const accessToken = localStorage.getItem("access_token");
       const res = await fetch(`${API_BASE_URL}${API_PREFIX}/admin/documents/upload`, {
         method: "POST",
-        headers: { "X-Admin-Token": adminToken.trim() },
+        headers: accessToken ? { Authorization: `Bearer ${accessToken}` } : {},
         body,
       });
       const data = await res.json();
@@ -166,7 +158,6 @@ export default function UploadPage() {
   const handleReset = () => {
     setForm(DEFAULT_FORM);
     setFile(null);
-    setAdminToken("");
     setStatus(null);
     setResult(null);
     setError("");
@@ -179,7 +170,7 @@ export default function UploadPage() {
     }
     const timer = setInterval(async () => {
       try {
-        const res = await getPullJob(pullJob.job_id, adminToken.trim());
+        const res = await getPullJob(pullJob.job_id);
         setPullJob(res.data);
         if (res.data.status === "complete") {
           setPullStatus("success");
@@ -193,12 +184,11 @@ export default function UploadPage() {
       }
     }, 2500);
     return () => clearInterval(timer);
-  }, [pullStatus, pullJob?.job_id, adminToken]);
+  }, [pullStatus, pullJob?.job_id]);
 
   const canPull =
     pullUrl.trim().startsWith("https://") &&
     form.municipality.trim() &&
-    adminToken.trim() &&
     pullStatus !== "loading" &&
     pullStatus !== "polling";
 
@@ -216,7 +206,7 @@ export default function UploadPage() {
         subject_tags: form.subject_tags.split(",").map((t) => t.trim()).filter(Boolean),
         source_tier: form.source_tier,
       };
-      const res = await pullPage(payload, adminToken.trim());
+      const res = await pullPage(payload);
       setPullJob(res.data);
       setPullStatus("polling");
     } catch (err) {
@@ -349,19 +339,6 @@ export default function UploadPage() {
                 value={form.subject_tags}
                 onChange={handleChange}
                 placeholder="permits, checklists"
-              />
-            </fieldset>
-
-            <fieldset className="upload-fieldset">
-              <legend>Admin Auth</legend>
-              <label htmlFor="pull-admin-token">X-Admin-Token *</label>
-              <input
-                id="pull-admin-token"
-                type="password"
-                value={adminToken}
-                onChange={handleAdminTokenChange}
-                placeholder="Your API_ADMIN_TOKEN value"
-                required
               />
             </fieldset>
 
@@ -618,23 +595,6 @@ export default function UploadPage() {
                   <p className="field-hint">Bind this document specifically to one project workspace.</p>
                 </div>
               )}
-            </fieldset>
-
-            {/* ── Auth ── */}
-            <fieldset className="upload-fieldset">
-              <legend>Admin Auth</legend>
-              <label htmlFor="admin-token">X-Admin-Token *</label>
-              <input
-                id="admin-token"
-                type="password"
-                value={adminToken}
-                onChange={handleAdminTokenChange}
-                placeholder="Your API_ADMIN_TOKEN value"
-                required
-              />
-              <p className="field-hint">
-                Token is sent only as request header to `{API_BASE_URL}`.
-              </p>
             </fieldset>
 
             {blockers.length ? (

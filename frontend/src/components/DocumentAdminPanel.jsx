@@ -29,7 +29,6 @@ const DEFAULT_SUPERSEDE_FORM = {
  */
 export default function DocumentAdminPanel({
   docId,
-  adminToken,
   candidateDocIds = [],
   onClose,
   onSaved,
@@ -100,13 +99,9 @@ export default function DocumentAdminPanel({
       setError(validationErrors.join(" "));
       return;
     }
-    if (!adminToken.trim()) {
-      setError("Enter X-Admin-Token before saving.");
-      return;
-    }
     setSaving(true);
     try {
-      await updateDocumentAdmin(docId, payload, adminToken);
+      await updateDocumentAdmin(docId, payload);
       setSuccess("Metadata updated.");
       onSaved?.();
     } catch (err) {
@@ -125,10 +120,6 @@ export default function DocumentAdminPanel({
       setError(validationErrors.join(" "));
       return;
     }
-    if (!adminToken.trim()) {
-      setError("Enter X-Admin-Token before superseding.");
-      return;
-    }
     const confirmed = window.confirm(
       `Supersede "${docId}" with "${supersedeForm.replacement_doc_id.trim()}"? ` +
         "Superseded documents are never deleted; retrieval weight is reduced."
@@ -138,14 +129,10 @@ export default function DocumentAdminPanel({
     }
     setSuperseding(true);
     try {
-      await supersedeDocumentAdmin(
-        docId,
-        {
-          replacement_doc_id: supersedeForm.replacement_doc_id.trim(),
-          superseded_weight: Number(supersedeForm.superseded_weight),
-        },
-        adminToken
-      );
+      await supersedeDocumentAdmin(docId, {
+        replacement_doc_id: supersedeForm.replacement_doc_id.trim(),
+        superseded_weight: Number(supersedeForm.superseded_weight),
+      });
       setSuccess("Document superseded.");
       onSaved?.();
       onClose?.();
@@ -241,7 +228,7 @@ export default function DocumentAdminPanel({
                 </label>
               </div>
             </div>
-            <button type="submit" disabled={saving || !adminToken.trim()}>
+            <button type="submit" disabled={saving}>
               {saving ? "Saving…" : "Save metadata"}
             </button>
           </form>
@@ -294,7 +281,7 @@ export default function DocumentAdminPanel({
                 />
               </div>
             </div>
-            <button type="submit" className="secondary-button" disabled={superseding || !adminToken.trim()}>
+            <button type="submit" className="secondary-button" disabled={superseding}>
               {superseding ? "Superseding…" : "Supersede document"}
             </button>
           </form>

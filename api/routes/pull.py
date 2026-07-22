@@ -9,7 +9,9 @@ only what changed. Identity: normalized URL first, then
 municipality + doc_type + filename fallback (sets url_changed flag).
 Old versions are superseded ONLY after the new version chunks + embeds.
 
-Auth: strict admin token + role (admin.py), not upload's JWT-any-user.
+Auth: same dual-path admin gate as admin.py -- a verified Cognito session
+with role='admin', OR the shared X-Admin-Token (kept only as a machine
+credential for scripts, never collected in the frontend UI).
 Job state is an in-memory dict (MVP) — a DB-backed table is a later upgrade.
 """
 
@@ -20,11 +22,13 @@ import re
 import threading
 from datetime import UTC, datetime
 from pathlib import Path
+from typing import Annotated
 from uuid import uuid4
 
-from fastapi import APIRouter, BackgroundTasks, Header, HTTPException
+from fastapi import APIRouter, BackgroundTasks, Depends, Header, HTTPException
 from pydantic import BaseModel, Field
 
+from api.auth import get_optional_current_user
 from api.routes.admin import _require_admin_auth
 from api.routes.upload import (
     VALID_AUTHORITY_LEVELS,
@@ -349,9 +353,10 @@ def pull_page(
     background_tasks: BackgroundTasks,
     x_admin_token: str | None = Header(default=None),
     x_admin_role: str | None = Header(default=None),
+    current_user: Annotated[dict | None, Depends(get_optional_current_user)] = None,
 ) -> PullAcceptedResponse:
     """Validate the request, register a job, and process files in background."""
-    _require_admin_auth(x_admin_token, x_admin_role)
+    _require_admin_auth(x_admin_token, x_admin_role, current_user)
 
     if body.authority_level not in VALID_AUTHORITY_LEVELS:
         raise HTTPException(400, f"Invalid authority_level. Choose from: {sorted(VALID_AUTHORITY_LEVELS)}")
@@ -392,9 +397,10 @@ def get_pull_job(
     job_id: str,
     x_admin_token: str | None = Header(default=None),
     x_admin_role: str | None = Header(default=None),
+    current_user: Annotated[dict | None, Depends(get_optional_current_user)] = None,
 ) -> PullJobResponse:
     """Return current status and per-file verdicts for one pull job."""
-    _require_admin_auth(x_admin_token, x_admin_role)
+    _require_admin_auth(x_admin_token, x_admin_role, current_user)
     with _JOBS_LOCK:
         job = _JOBS.get(job_id)
         if job is None:

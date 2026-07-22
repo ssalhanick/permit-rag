@@ -5,7 +5,8 @@ POST /admin/documents/upload
 
 Accepts a PDF or HTML file plus required metadata, saves it to
 documents/raw/, and triggers chunk + embed as a FastAPI background task.
-Guarded by the existing admin token (X-Admin-Token header).
+Guarded by a Cognito session with role='admin', or the shared X-Admin-Token
+(kept as a machine credential for scripts only).
 
 Response is immediate — upload completes, processing continues in background.
 Poll GET /documents/{doc_id} to check when document_status transitions from
@@ -83,7 +84,12 @@ def _require_admin_or_jwt(
     token: str | None = Depends(_token_header),
     current_user: dict | None = Depends(get_optional_current_user),
 ) -> dict | None:
-    """Require either a valid X-Admin-Token or a valid logged-in JWT user."""
+    """Require either a valid X-Admin-Token or a Cognito session with role='admin'.
+
+    Note: this previously returned ANY logged-in user regardless of role,
+    which let any authenticated (non-admin) account bypass the token
+    requirement entirely. Fixed to require role == 'admin' explicitly.
+    """
     required = os.environ.get("API_ADMIN_AUTH_REQUIRED", "true").lower() not in {"0", "false", "no"}
     if not required:
         return current_user or {"user_id": None, "role": "admin", "username": "system-admin"}
@@ -93,11 +99,11 @@ def _require_admin_or_jwt(
     if expected and token == expected:
         return {"user_id": None, "role": "admin", "username": "system-admin"}
 
-    # Check JWT user
-    if current_user:
+    # Check Cognito-authenticated admin
+    if current_user and current_user.get("role") == "admin":
         return current_user
 
-    raise HTTPException(status_code=401, detail="Authentication required. Provide a valid admin token or log in.")
+    raise HTTPException(status_code=401, detail="Authentication required. Provide a valid admin token or log in as an admin.")
 
 
 # ── Background processing task ───────────────────────────────
@@ -196,7 +202,7 @@ VALID_DOC_TYPES = {
     summary="Upload a permit document for ingestion",
     description=(
         "Upload a PDF or HTML permit document. The file is saved to documents/raw/ "
-        "and chunked + embedded in the background. Requires X-Admin-Token header. "
+        "and chunked + embedded in the background. Requires an admin login. "
         "Poll GET /documents/{doc_id} to check processing status."
     ),
 )

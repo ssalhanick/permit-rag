@@ -1,7 +1,5 @@
 /** Shared helpers for admin document governance UI. */
 
-export const ADMIN_TOKEN_STORAGE_KEY = "permit_rag_admin_token";
-
 export const DOCUMENT_STATUS_OPTIONS = [
   "active",
   "superseded",
@@ -9,53 +7,6 @@ export const DOCUMENT_STATUS_OPTIONS = [
   "needs_ocr",
   "draft",
 ];
-
-/**
- * Build request headers for admin governance routes.
- *
- * @param {string} adminToken
- * @param {string} [adminRole]
- * @returns {Record<string, string>}
- */
-export function buildAdminHeaders(adminToken, adminRole = "admin") {
-  const token = (adminToken || "").trim();
-  if (!token) {
-    return {};
-  }
-  return {
-    "X-Admin-Token": token,
-    "X-Admin-Role": adminRole,
-  };
-}
-
-/**
- * Read persisted admin token from sessionStorage.
- *
- * @returns {string}
- */
-export function getStoredAdminToken() {
-  if (typeof sessionStorage === "undefined") {
-    return "";
-  }
-  return sessionStorage.getItem(ADMIN_TOKEN_STORAGE_KEY) || "";
-}
-
-/**
- * Persist admin token for Upload and Documents pages.
- *
- * @param {string} token
- */
-export function setStoredAdminToken(token) {
-  if (typeof sessionStorage === "undefined") {
-    return;
-  }
-  const trimmed = (token || "").trim();
-  if (trimmed) {
-    sessionStorage.setItem(ADMIN_TOKEN_STORAGE_KEY, trimmed);
-  } else {
-    sessionStorage.removeItem(ADMIN_TOKEN_STORAGE_KEY);
-  }
-}
 
 /**
  * Build PATCH body, omitting empty unchanged fields.
@@ -128,8 +79,8 @@ export function validateSupersedePayload(form) {
 export function formatAdminError(err) {
   const status = err?.meta?.status;
   const detail = err?.message || "Request failed.";
-  if (status === 403) {
-    return "Invalid admin token or role. Check X-Admin-Token.";
+  if (status === 401 || status === 403) {
+    return "You need admin privileges for this action. Log in with an admin account.";
   }
   if (status === 404) {
     return "Document not found.";

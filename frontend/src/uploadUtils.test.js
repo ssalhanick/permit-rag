@@ -13,13 +13,12 @@ test("getUploadBlockers reports missing required fields", () => {
     file: null,
     docId: "",
     municipality: "",
-    adminToken: "",
     status: null,
   });
-  assert.equal(blockers.length, 4);
+  assert.equal(blockers.length, 3);
 });
 
 test("formatUploadError maps auth issue", () => {
-  const text = formatUploadError("Invalid or missing admin token.");
-  assert.equal(text, "Auth failed. Check X-Admin-Token value.");
+  const text = formatUploadError("Authentication required. Provide a valid admin token or log in as an admin.");
+  assert.equal(text, "You need admin privileges for this action. Log in with an admin account.");
 });

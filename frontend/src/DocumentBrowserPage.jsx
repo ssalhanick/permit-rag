@@ -2,7 +2,6 @@ import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { fetchDocuments, fetchDocumentStatus, fetchProjects, shareDocumentToProject } from "./api.js";
 import { useAuth } from "./context/AuthContext.jsx";
 import DocumentAdminPanel from "./components/DocumentAdminPanel.jsx";
-import { getStoredAdminToken, setStoredAdminToken } from "./documentAdminUtils.js";
 
 const DEFAULT_FILTERS = {
   municipality: "",
@@ -21,8 +20,6 @@ export default function DocumentBrowserPage() {
   const [error, setError] = useState("");
   const [shareSuccess, setShareSuccess] = useState("");
   const [shareError, setShareError] = useState("");
-  const [adminToken, setAdminToken] = useState(() => getStoredAdminToken());
-  const [showAdminSection, setShowAdminSection] = useState(false);
   const [editingDocId, setEditingDocId] = useState(null);
 
   const activeFilterCount = useMemo(() => {
@@ -69,12 +66,6 @@ export default function DocumentBrowserPage() {
 
   function resetFilters() {
     setFilters(DEFAULT_FILTERS);
-  }
-
-  function handleAdminTokenChange(event) {
-    const value = event.target.value;
-    setAdminToken(value);
-    setStoredAdminToken(value);
   }
 
   const handleShare = async (docId, projId) => {
@@ -124,31 +115,6 @@ export default function DocumentBrowserPage() {
             {loading ? "Loading..." : `${rows.length} document(s), ${statusBuckets.length} status bucket(s)`}
           </span>
         </div>
-
-        {user ? (
-          <div className="doc-admin-token-section">
-            <button
-              type="button"
-              className="secondary-button"
-              onClick={() => setShowAdminSection((prev) => !prev)}
-            >
-              {showAdminSection ? "Hide admin actions" : "Admin actions"}
-            </button>
-            {showAdminSection ? (
-              <div className="doc-admin-token-field">
-                <label htmlFor="doc-admin-token">X-Admin-Token</label>
-                <input
-                  id="doc-admin-token"
-                  type="password"
-                  value={adminToken}
-                  onChange={handleAdminTokenChange}
-                  placeholder="Your API_ADMIN_TOKEN value"
-                />
-                <p className="field-hint muted">Required to save metadata or supersede documents.</p>
-              </div>
-            ) : null}
-          </div>
-        ) : null}
 
         {error ? <p className="error">{error}</p> : null}
         {shareSuccess && <div className="success-box" style={{ marginTop: "10px" }}>{shareSuccess}</div>}
@@ -237,7 +203,6 @@ export default function DocumentBrowserPage() {
       {editingDocId ? (
         <DocumentAdminPanel
           docId={editingDocId}
-          adminToken={adminToken}
           candidateDocIds={candidateDocIds}
           onClose={() => setEditingDocId(null)}
           onSaved={loadDocuments}

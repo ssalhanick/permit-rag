@@ -2,22 +2,11 @@ import test from "node:test";
 import assert from "node:assert/strict";
 
 import {
-  buildAdminHeaders,
   buildUpdatePayload,
   formatAdminError,
   validateSupersedePayload,
   validateUpdatePayload,
 } from "./documentAdminUtils.js";
-
-test("buildAdminHeaders includes token and role", () => {
-  const headers = buildAdminHeaders("secret-token", "admin");
-  assert.equal(headers["X-Admin-Token"], "secret-token");
-  assert.equal(headers["X-Admin-Role"], "admin");
-});
-
-test("buildAdminHeaders returns empty object without token", () => {
-  assert.deepEqual(buildAdminHeaders(""), {});
-});
 
 test("buildUpdatePayload strips empty fields", () => {
   const payload = buildUpdatePayload({
@@ -57,8 +46,8 @@ test("validateSupersedePayload requires replacement doc_id", () => {
   assert.match(errors[0], /replacement doc_id/i);
 });
 
-test("formatAdminError maps 403 to token message", () => {
+test("formatAdminError maps 403 to admin-privileges message", () => {
   const err = new Error("Forbidden");
   err.meta = { status: 403 };
-  assert.match(formatAdminError(err), /admin token/i);
+  assert.match(formatAdminError(err), /admin privileges/i);
 });

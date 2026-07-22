@@ -9,7 +9,7 @@ export function suggestDocIdFromFilename(filename) {
     .replace(/^-+|-+$/g, "");
 }
 
-export function getUploadBlockers({ file, docId, municipality, adminToken, status }) {
+export function getUploadBlockers({ file, docId, municipality, status }) {
   const blockers = [];
   if (!file) {
     blockers.push("Select a PDF or HTML file.");
@@ -20,9 +20,6 @@ export function getUploadBlockers({ file, docId, municipality, adminToken, statu
   if (!municipality.trim()) {
     blockers.push("Enter a municipality.");
   }
-  if (!adminToken.trim()) {
-    blockers.push("Enter X-Admin-Token.");
-  }
   if (status === "loading") {
     blockers.push("Upload is in progress.");
   }
@@ -31,8 +28,8 @@ export function getUploadBlockers({ file, docId, municipality, adminToken, statu
 
 export function formatUploadError(message) {
   const normalized = (message || "").toLowerCase();
-  if (normalized.includes("401") || normalized.includes("invalid or missing admin token")) {
-    return "Auth failed. Check X-Admin-Token value.";
+  if (normalized.includes("401") || normalized.includes("403") || normalized.includes("authentication required")) {
+    return "You need admin privileges for this action. Log in with an admin account.";
   }
   if (normalized.includes("unsupported file type")) {
     return "File type not allowed. Use .pdf, .html, or .htm.";
