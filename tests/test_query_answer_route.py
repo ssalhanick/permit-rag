@@ -46,6 +46,9 @@ def _retrieval_result() -> SimpleNamespace:
         top_k=5,
         municipality="dallas",
         chunks=chunks,
+        # Mirrors the real RetrievalResult property: only chunks the reranker
+        # kept are prompted, so rejected ones are never billed or cited.
+        passing_chunks=[c for c in chunks if not c.get("filtered_out")],
         num_results=len(chunks),
         top_similarity=0.88,
         mean_similarity=0.85,

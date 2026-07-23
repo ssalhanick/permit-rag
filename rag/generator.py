@@ -19,6 +19,7 @@ import time
 from dataclasses import dataclass
 from typing import Any
 
+from audit.logger import traced
 from rag.llm_provider import get_provider_capabilities
 
 log = logging.getLogger(__name__)
@@ -39,6 +40,12 @@ class GenerationResult:
     output_tokens: int
     latency_ms: int
     chunk_count: int
+    # Named to match the Anthropic usage fields so audit.logger.usage_from()
+    # reads them without special-casing. Previously computed and discarded,
+    # which left cache effectiveness unmeasurable.
+    cache_read_input_tokens: int = 0
+    cache_creation_input_tokens: int = 0
+    stop_reason: str | None = None
 
 
 # ── System prompt ────────────────────────────────────────────
@@ -236,6 +243,22 @@ def _generate_with_ollama(
     return result
 
 
+def drop_filtered_chunks(chunks: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """
+    Remove chunks the reranker rejected.
+
+    rag/reranker.py marks sub-threshold chunks filtered_out=True but still
+    returns them so the frontend can grey them out. They must not reach the
+    model: they are paid for as input tokens and they dilute context with
+    material the reranker already judged irrelevant -- including superseded
+    documents demoted to retrieval_weight=0.1.
+
+    Applied inside generate_answer so every caller benefits, including the
+    evaluation harnesses.
+    """
+    return [c for c in chunks if not c.get("filtered_out", False)]
+
+
 def _format_chunks_for_prompt(chunks: list[dict[str, Any]]) -> str:
     """Format retrieved chunks as numbered context blocks."""
     parts: list[str] = []
@@ -331,6 +354,7 @@ def _extract_citations(
 # ── Core generation function ─────────────────────────────────
 
 
+@traced("answer_generator", prompt_version=PROMPT_VERSION)
 def generate_answer(
     query: str,
     chunks: list[dict[str, Any]],
@@ -346,7 +370,9 @@ def generate_answer(
 
     Args:
         query: The user's natural-language question.
-        chunks: Retrieved chunks (from rag.retriever.retrieve()).
+        chunks: Retrieved chunks (from rag.retriever.retrieve()). Chunks the
+            reranker marked filtered_out are dropped before prompting -- pass
+            the full result set and let this function do the filtering.
         model: Model name. Defaults to provider-specific env var.
         max_tokens: Maximum output tokens.
         temperature: Sampling temperature (low = more deterministic).
@@ -361,6 +387,7 @@ def generate_answer(
     Raises:
         RuntimeError: If configured provider credentials/runtime are unavailable.
     """
+    chunks = drop_filtered_chunks(chunks)
     capabilities = get_provider_capabilities()
     if capabilities.supports_local_runtime:
         local_model = model or os.environ.get(
@@ -426,6 +453,8 @@ def generate_answer(
     answer = response.content[0].text
     citations = _extract_citations(answer, chunks)
 
+    cache_create_tokens, cache_read_tokens = _extract_cache_tokens(response.usage)
+
     result = GenerationResult(
         query=query,
         answer=answer,
@@ -435,8 +464,10 @@ def generate_answer(
         output_tokens=response.usage.output_tokens,
         latency_ms=latency_ms,
         chunk_count=len(chunks),
+        cache_read_input_tokens=cache_read_tokens,
+        cache_creation_input_tokens=cache_create_tokens,
+        stop_reason=getattr(response, "stop_reason", None),
     )
-    cache_create_tokens, cache_read_tokens = _extract_cache_tokens(response.usage)
 
     log.info(
         "Generated answer: %d chars, %d citations, %d+%d tokens, %dms, cache create/read=%d/%d",

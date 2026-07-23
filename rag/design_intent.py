@@ -10,6 +10,8 @@ import os
 import re
 from typing import Any
 
+from audit.logger import traced
+
 log = logging.getLogger(__name__)
 
 _DESIGN_SYSTEM = """\
@@ -133,6 +135,7 @@ def _parse_design_intent_rules(
     }
 
 
+@traced("design_intent")
 def _parse_design_intent_llm(
     utterance: str,
     *,

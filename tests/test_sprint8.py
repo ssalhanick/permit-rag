@@ -203,6 +203,10 @@ class TestQueryAnswerBackgroundTask:
         mock_body.municipality = "dallas"
         mock_body.address = None
         mock_body.min_similarity = 0.0
+        # MagicMock attributes are truthy but iterate empty, so an unset
+        # chunk_ids sends the route down the by-id branch and skips retrieval
+        # entirely -- pin it so the patched retrieval is actually exercised.
+        mock_body.chunk_ids = None
 
         # Stub out all heavy dependencies
         mock_chunk = {
@@ -224,6 +228,9 @@ class TestQueryAnswerBackgroundTask:
         }
         mock_result = MagicMock()
         mock_result.chunks = [mock_chunk]
+        # Real RetrievalResult exposes this; MagicMock would auto-create a
+        # non-iterable attribute and blow up in the generator.
+        mock_result.passing_chunks = [mock_chunk]
         mock_result.num_results = 1
         mock_result.top_similarity = 0.9
         mock_result.mean_similarity = 0.9
@@ -246,7 +253,7 @@ class TestQueryAnswerBackgroundTask:
         mock_gen.latency_ms = 200
         mock_gen.chunk_count = 1
 
-        with patch("api.routes.query.retrieve", return_value=mock_result), \
+        with patch("api.routes.query.retrieve_with_project", return_value=mock_result), \
              patch("rag.generator.generate_answer", return_value=mock_gen), \
              patch("rag.permit_classifier.classify_permit_types", return_value=[]), \
              patch("rag.conflict_detector.detect_conflicts", return_value=[]), \
@@ -289,6 +296,10 @@ class TestQueryAnswerBackgroundTask:
         mock_body.municipality = None
         mock_body.address = None
         mock_body.min_similarity = 0.0
+        # MagicMock attributes are truthy but iterate empty, so an unset
+        # chunk_ids sends the route down the by-id branch and skips retrieval
+        # entirely -- pin it so the patched retrieval is actually exercised.
+        mock_body.chunk_ids = None
 
         mock_chunk = {
             "id": "00000000-0000-0000-0000-000000000003",
@@ -309,6 +320,9 @@ class TestQueryAnswerBackgroundTask:
         }
         mock_result = MagicMock()
         mock_result.chunks = [mock_chunk]
+        # Real RetrievalResult exposes this; MagicMock would auto-create a
+        # non-iterable attribute and blow up in the generator.
+        mock_result.passing_chunks = [mock_chunk]
         mock_result.num_results = 1
         mock_result.top_similarity = 0.8
         mock_result.mean_similarity = 0.8
@@ -332,7 +346,7 @@ class TestQueryAnswerBackgroundTask:
         mock_gen.latency_ms = 150
         mock_gen.chunk_count = 1
 
-        with patch("api.routes.query.retrieve", return_value=mock_result), \
+        with patch("api.routes.query.retrieve_with_project", return_value=mock_result), \
              patch("rag.generator.generate_answer", return_value=mock_gen), \
              patch("rag.permit_classifier.classify_permit_types", return_value=[]), \
              patch("rag.conflict_detector.detect_conflicts", return_value=[]), \

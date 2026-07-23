@@ -19,6 +19,7 @@ from uuid import UUID
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Request
 
 from api.auth import get_current_user
+from audit.logger import annotate_run, traced_run
 from api.schemas import (
     AHJDisclaimer,
     AnswerResponse,
@@ -209,6 +210,7 @@ def query_chunks(
         "the source chunks used as context."
     ),
 )
+@traced_run("query_answer")
 def query_answer(
     body: QueryRequest,
     request: Request,
@@ -230,6 +232,15 @@ def query_answer(
         user_row = db_client.get_user_by_id(current_user["user_id"])
         if user_row and user_row.get("active_project_id"):
             body.project_id = str(user_row["active_project_id"])
+
+    # Attach request identity to the trace run opened by @traced_run. Done
+    # here rather than at the decorator because the active project is only
+    # resolved above.
+    annotate_run(
+        user_id=current_user["user_id"] if isinstance(current_user, dict) else None,
+        project_id=body.project_id,
+        session_id=session_id,
+    )
 
     # Sprint 3 Task 11: classify permit types (non-blocking)
     try:
@@ -415,12 +426,17 @@ def query_answer(
             "session_id": session_id,
             "request_id": request_id,
             "num_chunks": result.num_results,
+            "num_chunks_prompted": len(result.passing_chunks),
         },
         parent=root_trace,
         extra={"metadata": {"prompt_version": PROMPT_VERSION}},
     ) if tracing_on else None
     try:
-        gen = generate_answer(body.query, result.chunks, project_context=project_context)
+        # passing_chunks only: reranker-rejected chunks must not be prompted
+        # or billed. generate_answer re-filters defensively for other callers.
+        gen = generate_answer(
+            body.query, result.passing_chunks, project_context=project_context
+        )
         _end_trace(
             generation_trace,
             outputs={

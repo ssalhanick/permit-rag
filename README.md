@@ -40,18 +40,20 @@ py -m pytest tests/test_commerce_takeoff.py tests/test_commerce_product_resolver
 ## TODO
 
 ### In Progress
-*None*
+- [ ] **[Agent Architecture](docs/agent_architecture.md)** — 26-agent roster under one Manager, with prompt routing, a feedback loop, autonomy levels, and a token protocol. **Phase 0 (trace store) is done**; Phase 1 is the agent runtime + registry. Phases 0–5 are the demo slice.
 
 ### Planned
-- [ ] **Step-by-step instructions agent** — a dedicated agent specialized in turning project/design-intent context into detailed, easy-to-follow step-by-step instructions. Intended to eventually back a "Instructions produced" section on the project dashboard (deferred from migration 023's project lifecycle work — no data source existed yet).
+- [ ] [Agent Architecture Phase 1](docs/agent_architecture.md) — `rag/agent_runtime.py` as the single Anthropic call site (structured outputs, model ladder, caching, autonomy enforcement, automatic tracing) plus the `AgentSpec` registry
+- [ ] [Agent Architecture Phase 2](docs/agent_architecture.md) — Manager + artifact store + Budget Governor, ported over `api/routes/query.py` with zero behaviour change
+- [ ] [Agent Architecture Phase 3](docs/agent_architecture.md) — Corpus Metadata Validator + 27-doc backfill + superadmin dashboard v1 (action queue)
+- [ ] **Step-by-step instructions agent** — agent #12 in [docs/agent_architecture.md](docs/agent_architecture.md); turns project/design-intent context into detailed step-by-step instructions, persona-aware. Backs an "Instructions produced" section on the project dashboard (deferred from migration 023's project lifecycle work — no data source existed yet).
 - [ ] Apply migration 018 + deploy backend with scan_id design-intent routes + `/commerce/room-preview-image` to prod ECS
 - [ ] Device smoke: Preview → Generate image → Save → AR texture → DXF on iPhone ([docs/room_generative_preview.md](docs/room_generative_preview.md))
 - [ ] Optional: set `OPENAI_API_KEY` (+ SSM) for live generative room images (mock PNG works offline)
 - [ ] **Sign up for [SerpApi](https://serpapi.com/) account** — required for live Home Depot pricing/inventory (see [Commerce / SerpApi](#commerce--serpapi) below); mock catalog works without it for demos
 - [ ] [Sprint 14: 3D Room Capture](docs/sprint_14_3d-room-capture-agnostic-guide.md) — Capacitor plugin, interchange JSON v1.0, on-device metrics → `room_summary` API
 - [ ] [Sprint 11: Document Governance UI](docs/sprint11_document_updates.md) — metadata edit + supersede on `/documents`
-- [ ] [Agent Implementation Plan](../..\.gemini\antigravity\brain\acda4bb1-53b2-4cf2-b710-5e93089c1fab/agent_implementation_plan.md) — Implement single-responsibility agents (Query Deconstructor, Semantic Conflict Analyzer, Citation Verification) with the `instructor` library and dynamic token truncation.
-- [ ] [Token Optimization & Cost-Effectiveness Plan](../..\.gemini\antigravity\brain\acda4bb1-53b2-4cf2-b710-5e93089c1fab\token_optimization_plan.md) - Analyze prompt caching, chunking strategies, and embedding model trade-offs to minimize Claude token usage.
+*(The former "Agent Implementation Plan" and "Token Optimization & Cost-Effectiveness Plan" entries are superseded by [docs/agent_architecture.md](docs/agent_architecture.md), which absorbs both. Note it drops the planned `instructor` dependency: the Anthropic SDK now has native structured outputs via `client.messages.parse()`, and `pydantic` is already a dependency.)*
 - [ ] [CMS Admin Dashboard](.gemini\antigravity\brain\acda4bb1-53b2-4cf2-b710-5e93089c1fab\cms_admin_dashboard_plan.md)
 - [ ] [Cognito Groups RBAC](docs/cognito_groups_rbac.md) — Cognito groups as source of truth for `member` / `admin` / `superadmin`; staff bypass for see-everything; keep project_members + ops token
 
@@ -63,6 +65,7 @@ py -m pytest tests/test_commerce_takeoff.py tests/test_commerce_product_resolver
 - [ ] 3D Map Integration — CesiumJS city boundaries + site overlay
 
 ### Completed
+- [x] **Agent Architecture Phase 0 — trace store + chunk-leakage fix** ([docs/agent_architecture.md](docs/agent_architecture.md)) — migration 026 (`agent_runs`, `agent_steps`, `agent_corrections`, `agent_action_items`, `agent_autonomy`), the three previously-empty `audit/` modules implemented, `@traced`/`@traced_run` wired onto `generate_answer` and `design_intent`, and reranker-rejected chunks no longer prompted or billed
 - [x] [On-Demand URL Pull](docs/on_demand_url_pull.md) — `ingestion/url_normalize.py`, `ingestion/page_crawler.py`, migration 022 identity keys + backfill script, `POST /admin/documents/pull-page` + job poll, Pull-from-URL tab on `/upload`. End-to-end verification checklist in the plan doc still pending.
 - [x] Sprint 17: Conversational Project Kickoff — Interactive LLM-driven dialog to extract user persona, budget, and materials. Automatically synthesizes a project-specific custom system prompt (migration 020) which is injected into all future compliance queries.
 - [x] Sprint 17: Room generative preview — `POST /commerce/room-preview-image`, OpenAI/mock images, device `asset_url`, AR prefers generated asset over product photo ([docs/room_generative_preview.md](docs/room_generative_preview.md))

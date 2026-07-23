@@ -2102,3 +2102,465 @@ def sum_design_intent_tokens(user_id: UUID, *, since: datetime) -> int:
         row = conn.execute(sql, (user_id, since)).fetchone()
     return int(row["total"]) if row else 0
 
+
+# ════════════════════════════════════════════════
+#  AGENT TRACES  (migration 026)
+# ════════════════════════════════════════════════
+# Backing store for audit/logger.py. Callers go through that module rather
+# than these helpers directly -- it owns cost math and the @traced decorator.
+
+
+def insert_agent_run(
+    *,
+    entrypoint: str,
+    user_id: UUID | None = None,
+    project_id: UUID | None = None,
+    intent: str | None = None,
+    persona: str | None = None,
+    request_id: str | None = None,
+    session_id: str | None = None,
+    model_default: str | None = None,
+) -> dict[str, Any]:
+    """Open a run row and return it (tokens/cost are filled in on finish)."""
+    sql = """
+        INSERT INTO agent_runs (
+            entrypoint, user_id, project_id, intent,
+            persona, request_id, session_id, model_default
+        )
+        VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
+        RETURNING *;
+    """
+    with get_conn() as conn:
+        row = conn.execute(
+            sql,
+            (
+                entrypoint,
+                user_id,
+                project_id,
+                intent,
+                persona,
+                request_id,
+                session_id,
+                model_default,
+            ),
+        ).fetchone()
+        conn.commit()
+    return row
+
+
+def finish_agent_run(
+    run_id: UUID,
+    *,
+    outcome: str,
+    latency_ms: int | None = None,
+    error: str | None = None,
+) -> dict[str, Any] | None:
+    """
+    Close a run, rolling token and cost totals up from its steps.
+
+    Aggregating in SQL rather than in Python keeps the totals correct even
+    when a step is written by a different process or a retry.
+    """
+    sql = """
+        UPDATE agent_runs AS r
+        SET outcome            = %s,
+            latency_ms         = %s,
+            error              = %s,
+            finished_at        = now(),
+            tokens_in          = COALESCE(s.tokens_in, 0),
+            tokens_out         = COALESCE(s.tokens_out, 0),
+            tokens_cache_read  = COALESCE(s.tokens_cache_read, 0),
+            tokens_cache_write = COALESCE(s.tokens_cache_write, 0),
+            cost_usd           = COALESCE(s.cost_usd, 0)
+        FROM (
+            SELECT SUM(tokens_in)          AS tokens_in,
+                   SUM(tokens_out)         AS tokens_out,
+                   SUM(tokens_cache_read)  AS tokens_cache_read,
+                   SUM(tokens_cache_write) AS tokens_cache_write,
+                   SUM(cost_usd)           AS cost_usd
+            FROM agent_steps
+            WHERE run_id = %s
+        ) AS s
+        WHERE r.id = %s
+        RETURNING r.*;
+    """
+    with get_conn() as conn:
+        row = conn.execute(
+            sql, (outcome, latency_ms, error, run_id, run_id)
+        ).fetchone()
+        conn.commit()
+    return row
+
+
+def insert_agent_step(
+    *,
+    run_id: UUID,
+    agent_name: str,
+    step_index: int = 0,
+    parent_step_id: UUID | None = None,
+    model: str | None = None,
+    deterministic: bool = False,
+    react_iterations: int = 0,
+    autonomy_level: str | None = None,
+    prompt_version: str | None = None,
+    prompt_fragment_ids: list[str] | None = None,
+    input_hash: str | None = None,
+    artifact_refs: list[str] | None = None,
+    tokens_in: int = 0,
+    tokens_out: int = 0,
+    tokens_cache_read: int = 0,
+    tokens_cache_write: int = 0,
+    cost_usd: float = 0.0,
+    latency_ms: int | None = None,
+    status: str = "ok",
+    error: str | None = None,
+) -> dict[str, Any]:
+    """Record one agent invocation within a run."""
+    sql = """
+        INSERT INTO agent_steps (
+            run_id, agent_name, step_index, parent_step_id, model,
+            deterministic, react_iterations, autonomy_level, prompt_version,
+            prompt_fragment_ids, input_hash, artifact_refs,
+            tokens_in, tokens_out, tokens_cache_read, tokens_cache_write,
+            cost_usd, latency_ms, status, error
+        )
+        VALUES (
+            %s, %s, %s, %s, %s,
+            %s, %s, %s, %s,
+            %s, %s, %s,
+            %s, %s, %s, %s,
+            %s, %s, %s, %s
+        )
+        RETURNING *;
+    """
+    with get_conn() as conn:
+        row = conn.execute(
+            sql,
+            (
+                run_id,
+                agent_name,
+                step_index,
+                parent_step_id,
+                model,
+                deterministic,
+                react_iterations,
+                autonomy_level,
+                prompt_version,
+                prompt_fragment_ids or [],
+                input_hash,
+                artifact_refs or [],
+                tokens_in,
+                tokens_out,
+                tokens_cache_read,
+                tokens_cache_write,
+                cost_usd,
+                latency_ms,
+                status,
+                error,
+            ),
+        ).fetchone()
+        conn.commit()
+    return row
+
+
+_RUN_ANNOTATABLE = frozenset(
+    {"user_id", "project_id", "intent", "persona", "model_default", "session_id"}
+)
+
+
+def annotate_agent_run(run_id: UUID, **fields: Any) -> dict[str, Any] | None:
+    """
+    Fill in run metadata that is only known partway through a request.
+
+    Column names are whitelisted rather than interpolated freely -- these are
+    the only fields a caller may set after the run opens.
+    """
+    updates = {k: v for k, v in fields.items() if k in _RUN_ANNOTATABLE}
+    if not updates:
+        return None
+    assignments = ", ".join(f"{col} = %({col})s" for col in updates)
+    params: dict[str, Any] = {**updates, "run_id": run_id}
+    sql = f"UPDATE agent_runs SET {assignments} WHERE id = %(run_id)s RETURNING *;"
+    with get_conn() as conn:
+        row = conn.execute(sql, params).fetchone()
+        conn.commit()
+    return row
+
+
+def get_agent_run(run_id: UUID) -> dict[str, Any] | None:
+    """Fetch a single run row."""
+    sql = "SELECT * FROM agent_runs WHERE id = %s;"
+    with get_conn() as conn:
+        return conn.execute(sql, (run_id,)).fetchone()
+
+
+def list_agent_steps(run_id: UUID) -> list[dict[str, Any]]:
+    """Fetch every step in a run, in execution order."""
+    sql = """
+        SELECT * FROM agent_steps
+        WHERE run_id = %s
+        ORDER BY step_index, created_at;
+    """
+    with get_conn() as conn:
+        return conn.execute(sql, (run_id,)).fetchall()
+
+
+def agent_scorecard(*, since: datetime) -> list[dict[str, Any]]:
+    """
+    Per-agent rollup for the superadmin dashboard.
+
+    deterministic_rate is the Crystallizer KPI -- the share of calls served
+    without a model.
+    """
+    sql = """
+        SELECT agent_name,
+               COUNT(*)                                        AS calls,
+               SUM(cost_usd)                                   AS cost_usd,
+               SUM(tokens_in + tokens_out)                     AS tokens,
+               SUM(tokens_cache_read)                          AS tokens_cache_read,
+               AVG(react_iterations)                           AS avg_react_iterations,
+               AVG(deterministic::int)                         AS deterministic_rate,
+               AVG(latency_ms)                                 AS avg_latency_ms,
+               PERCENTILE_DISC(0.5) WITHIN GROUP (ORDER BY latency_ms)  AS p50_latency_ms,
+               PERCENTILE_DISC(0.95) WITHIN GROUP (ORDER BY latency_ms) AS p95_latency_ms,
+               AVG((status <> 'ok')::int)                       AS error_rate
+        FROM agent_steps
+        WHERE created_at >= %s
+        GROUP BY agent_name
+        ORDER BY cost_usd DESC NULLS LAST;
+    """
+    with get_conn() as conn:
+        return conn.execute(sql, (since,)).fetchall()
+
+
+# ── Corrections ──────────────────────────────────────────────
+
+
+def insert_agent_correction(
+    *,
+    source: str,
+    run_id: UUID | None = None,
+    step_id: UUID | None = None,
+    attributed_agent: str | None = None,
+    attribution_confidence: float | None = None,
+    severity: str | None = None,
+    entity_type: str | None = None,
+    entity_id: str | None = None,
+    expected: str | None = None,
+    actual: str | None = None,
+    notes: str | None = None,
+    confirmed: bool = False,
+    created_by: UUID | None = None,
+) -> dict[str, Any]:
+    """Record a human correction. Training data for the Optimizer."""
+    sql = """
+        INSERT INTO agent_corrections (
+            source, run_id, step_id, attributed_agent, attribution_confidence,
+            severity, entity_type, entity_id, expected, actual, notes,
+            confirmed, created_by
+        )
+        VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+        RETURNING *;
+    """
+    with get_conn() as conn:
+        row = conn.execute(
+            sql,
+            (
+                source,
+                run_id,
+                step_id,
+                attributed_agent,
+                attribution_confidence,
+                severity,
+                entity_type,
+                entity_id,
+                expected,
+                actual,
+                notes,
+                confirmed,
+                created_by,
+            ),
+        ).fetchone()
+        conn.commit()
+    return row
+
+
+def correction_rate_by_agent(*, since: datetime) -> list[dict[str, Any]]:
+    """Confirmed corrections per agent since a timestamp."""
+    sql = """
+        SELECT attributed_agent AS agent_name,
+               COUNT(*) FILTER (WHERE confirmed) AS confirmed_corrections,
+               COUNT(*)                          AS total_corrections
+        FROM agent_corrections
+        WHERE created_at >= %s AND attributed_agent IS NOT NULL
+        GROUP BY attributed_agent
+        ORDER BY confirmed_corrections DESC;
+    """
+    with get_conn() as conn:
+        return conn.execute(sql, (since,)).fetchall()
+
+
+# ── Action items ─────────────────────────────────────────────
+
+
+def upsert_action_item(
+    *,
+    source_agent: str,
+    kind: str,
+    title: str,
+    severity: str = "medium",
+    blocking: bool = False,
+    run_id: UUID | None = None,
+    entity_type: str | None = None,
+    entity_id: str | None = None,
+    evidence: dict[str, Any] | None = None,
+    proposed_action: str | None = None,
+) -> dict[str, Any] | None:
+    """
+    File an item needing human action, deduped on the open-item unique index.
+
+    Re-filing an item that is already open or acknowledged refreshes its
+    evidence instead of creating a duplicate -- a nightly anomaly sweep
+    would otherwise pile up one row per run.
+    """
+    import json as _json
+
+    sql = """
+        INSERT INTO agent_action_items (
+            source_agent, kind, severity, blocking, run_id,
+            entity_type, entity_id, title, evidence, proposed_action
+        )
+        VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s::jsonb, %s)
+        ON CONFLICT (source_agent, kind, entity_type, entity_id)
+            WHERE status IN ('open', 'acknowledged')
+        DO UPDATE SET evidence   = EXCLUDED.evidence,
+                      severity   = EXCLUDED.severity,
+                      title      = EXCLUDED.title,
+                      created_at = now()
+        RETURNING *;
+    """
+    with get_conn() as conn:
+        row = conn.execute(
+            sql,
+            (
+                source_agent,
+                kind,
+                severity,
+                blocking,
+                run_id,
+                entity_type,
+                entity_id,
+                title,
+                _json.dumps(evidence or {}),
+                proposed_action,
+            ),
+        ).fetchone()
+        conn.commit()
+    return row
+
+
+def list_action_items(
+    *,
+    status: str = "open",
+    source_agent: str | None = None,
+    limit: int = 200,
+) -> list[dict[str, Any]]:
+    """List action items for the dashboard queue, most severe first."""
+    sql = """
+        SELECT * FROM agent_action_items
+        WHERE status = %s
+          AND (%s IS NULL OR source_agent = %s)
+        ORDER BY CASE severity
+                     WHEN 'critical' THEN 0
+                     WHEN 'high'     THEN 1
+                     WHEN 'medium'   THEN 2
+                     ELSE 3
+                 END,
+                 created_at DESC
+        LIMIT %s;
+    """
+    with get_conn() as conn:
+        return conn.execute(
+            sql, (status, source_agent, source_agent, limit)
+        ).fetchall()
+
+
+def resolve_action_item(
+    item_id: UUID,
+    *,
+    status: str,
+    resolved_by: UUID,
+    resolution_note: str | None = None,
+) -> dict[str, Any] | None:
+    """Resolve or dismiss an action item."""
+    sql = """
+        UPDATE agent_action_items
+        SET status          = %s,
+            resolved_by     = %s,
+            resolved_at     = now(),
+            resolution_note = %s
+        WHERE id = %s
+        RETURNING *;
+    """
+    with get_conn() as conn:
+        row = conn.execute(
+            sql, (status, resolved_by, resolution_note, item_id)
+        ).fetchone()
+        conn.commit()
+    return row
+
+
+# ── Autonomy ─────────────────────────────────────────────────
+
+
+def get_agent_autonomy(agent_name: str, scope: str = "default") -> dict[str, Any] | None:
+    """Fetch the autonomy row for an agent + scope. None means unregistered."""
+    sql = """
+        SELECT * FROM agent_autonomy
+        WHERE agent_name = %s AND scope = %s;
+    """
+    with get_conn() as conn:
+        return conn.execute(sql, (agent_name, scope)).fetchone()
+
+
+def list_agent_autonomy() -> list[dict[str, Any]]:
+    """Every autonomy row, for the dashboard control panel."""
+    sql = "SELECT * FROM agent_autonomy ORDER BY agent_name, scope;"
+    with get_conn() as conn:
+        return conn.execute(sql).fetchall()
+
+
+def set_agent_autonomy(
+    agent_name: str,
+    scope: str,
+    *,
+    current_level: str,
+    updated_by: UUID | None = None,
+) -> dict[str, Any] | None:
+    """
+    Set an agent's autonomy level, clamped to its ceiling in SQL.
+
+    The clamp lives here as well as in the runtime so that a direct API call
+    cannot exceed a ceiling the dashboard merely hides. Returns None when the
+    requested level is above max_level.
+    """
+    sql = """
+        UPDATE agent_autonomy
+        SET current_level = %s,
+            updated_by    = %s,
+            updated_at    = now()
+        WHERE agent_name = %s
+          AND scope = %s
+          AND CASE %s WHEN 'L0' THEN 0 WHEN 'L1' THEN 1
+                      WHEN 'L2' THEN 2 ELSE 3 END
+            <= CASE max_level WHEN 'L0' THEN 0 WHEN 'L1' THEN 1
+                              WHEN 'L2' THEN 2 ELSE 3 END
+        RETURNING *;
+    """
+    with get_conn() as conn:
+        row = conn.execute(
+            sql, (current_level, updated_by, agent_name, scope, current_level)
+        ).fetchone()
+        conn.commit()
+    return row
+
