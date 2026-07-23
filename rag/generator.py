@@ -43,6 +43,10 @@ class GenerationResult:
 
 # ── System prompt ────────────────────────────────────────────
 
+# Bump on every SYSTEM_PROMPT edit. Attached to LangSmith traces/eval runs as
+# metadata so prompt changes can be correlated with quality shifts in the UI.
+PROMPT_VERSION = "v1"
+
 SYSTEM_PROMPT = """\
 You are a construction permit compliance assistant for the Dallas–Fort Worth \
 metropolitan area. Answer questions about permits, codes, zoning, and regulatory \

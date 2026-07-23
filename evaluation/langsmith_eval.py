@@ -31,7 +31,7 @@ import time
 from typing import Any
 
 from rag.conflict_detector import detect_conflicts
-from rag.generator import generate_answer
+from rag.generator import PROMPT_VERSION, generate_answer
 from rag.jurisdiction_resolver import municipality_from_address
 from rag.permit_classifier import classify_permit_types
 from rag.retriever import retrieve_with_project
@@ -352,7 +352,7 @@ if __name__ == "__main__":
         data=args.dataset,
         evaluators=ALL_EVALUATORS,
         experiment_prefix=prefix,
-        metadata={"harness": "langsmith_eval", "dataset": args.dataset},
+        metadata={"harness": "langsmith_eval", "dataset": args.dataset, "prompt_version": PROMPT_VERSION},
     )
     print(f"Experiment complete: {prefix}")
     print(results)

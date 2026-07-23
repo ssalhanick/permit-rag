@@ -31,6 +31,7 @@ from api.schemas import (
     QueryResponse,
 )
 from db.client import get_jurisdiction
+from rag.generator import PROMPT_VERSION
 from rag.retriever import RetrievalResult, retrieve, retrieve_with_project
 
 log = logging.getLogger(__name__)
@@ -257,7 +258,7 @@ def query_answer(
         except Exception as exc:
             log.warning("jurisdiction_resolver failed (%s) — skipping auto-municipality", exc)
 
-    metadata = {}
+    metadata = {"prompt_version": PROMPT_VERSION}
     if current_user and isinstance(current_user, dict):
         metadata["user_id"] = str(current_user["user_id"])
         metadata["user_role"] = current_user["role"]
@@ -416,6 +417,7 @@ def query_answer(
             "num_chunks": result.num_results,
         },
         parent=root_trace,
+        extra={"metadata": {"prompt_version": PROMPT_VERSION}},
     ) if tracing_on else None
     try:
         gen = generate_answer(body.query, result.chunks, project_context=project_context)

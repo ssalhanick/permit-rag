@@ -684,6 +684,33 @@ RAGAs metric definitions used in this repo:
 - **Context precision**: How much of the retrieved context is actually useful/relevant to the query.
 - **Top similarity (`top_sim`)**: Similarity score of the highest-ranked retrieved chunk for that query.
 
+### LangSmith Tracing & Prompt Version Tracking
+
+Additive to RAGAs, not a replacement — `evaluation/langsmith_eval.py` reuses the same
+guardrail/generation pipeline but uploads to LangSmith for dataset versioning and
+experiment-comparison in the UI, and `api/routes/query.py` sends live `/query/answer`
+traffic there as traces when enabled.
+
+```bash
+# Enable tracing (.env)
+LANGSMITH_API_KEY=...
+LANGCHAIN_TRACING_V2=true
+
+# Run the LangSmith eval harness (uploads an experiment run)
+py -m evaluation.langsmith_eval                          # default dataset: permit_rag_eval_v1
+py -m evaluation.langsmith_eval --dataset permit_rag_security_v1
+py -m evaluation.langsmith_eval --experiment-prefix manual-smoke
+```
+
+**System prompt changes are not tracked by a LangSmith-managed prompt (no Prompt Hub
+integration yet)** — `SYSTEM_PROMPT` in `rag/generator.py` is a plain Python string,
+same as any other code change, so `git log -p rag/generator.py` is still the diff/changelog.
+What LangSmith gives you instead is correlation: `rag.generator.PROMPT_VERSION` is
+attached as `prompt_version` metadata on both the `/query/answer` trace (root + generation
+spans) and on `langsmith_eval` experiment runs. Bump `PROMPT_VERSION` every time you edit
+`SYSTEM_PROMPT`, then in the LangSmith UI filter/group runs by the `prompt_version`
+metadata field to see how faithfulness, latency, or token counts shifted around that edit.
+
 ---
 
 ## Ingestion Health Check
