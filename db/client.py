@@ -1431,6 +1431,46 @@ def hard_delete_project(project_id: UUID) -> bool:
     return cur.rowcount > 0
 
 
+def insert_project_delete_audit_log(
+    *,
+    project_id: UUID,
+    project_name: str,
+    owner_user_id: UUID | None,
+    actor_user_id: UUID,
+    actor_username: str,
+    actor_role: str,
+    action: str,
+) -> dict[str, Any]:
+    """Record a soft-delete / restore / hard-delete event for a project.
+
+    No FK on project_id -- hard_delete_project removes the projects row before
+    this is called, so project_name is a snapshot for a still-readable log.
+    """
+    sql = """
+        INSERT INTO project_delete_audit_log (
+            project_id, project_name, owner_user_id, actor_user_id,
+            actor_username, actor_role, action
+        ) VALUES (
+            %(project_id)s, %(project_name)s, %(owner_user_id)s, %(actor_user_id)s,
+            %(actor_username)s, %(actor_role)s, %(action)s
+        )
+        RETURNING *;
+    """
+    params = {
+        "project_id": project_id,
+        "project_name": project_name,
+        "owner_user_id": owner_user_id,
+        "actor_user_id": actor_user_id,
+        "actor_username": actor_username,
+        "actor_role": actor_role,
+        "action": action,
+    }
+    with get_conn() as conn:
+        row = conn.execute(sql, params).fetchone()
+        conn.commit()
+    return row
+
+
 def set_active_project(user_id: UUID, project_id: UUID | None) -> None:
     """Persist the caller's single "active" project (or clear it with None)."""
     sql = "UPDATE users SET active_project_id = %s WHERE id = %s;"

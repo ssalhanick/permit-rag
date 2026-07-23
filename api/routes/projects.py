@@ -5,6 +5,7 @@ api/routes/projects.py — Project lifecycle and membership management routes.
 
 from __future__ import annotations
 
+import logging
 from typing import Annotated
 from uuid import UUID
 
@@ -36,6 +37,7 @@ from api.schemas import (
 )
 from db import client as db_client
 
+log = logging.getLogger(__name__)
 router = APIRouter(prefix="/projects", tags=["projects"])
 CurrentUser = Annotated[dict, Depends(get_current_user)]
 
@@ -232,32 +234,60 @@ def set_project_status(
     return dict(updated)
 
 
+def _log_project_delete_action(project_row: dict, current_user: dict, action: str) -> None:
+    """Best-effort audit trail entry. Never blocks the delete/restore itself."""
+    try:
+        db_client.insert_project_delete_audit_log(
+            project_id=project_row["id"],
+            project_name=project_row["name"],
+            owner_user_id=project_row.get("owner_user_id"),
+            actor_user_id=current_user["user_id"],
+            actor_username=current_user.get("username") or "unknown",
+            actor_role=current_user["role"],
+            action=action,
+        )
+    except Exception:
+        log.exception(
+            "Failed to write project_delete_audit_log for project_id=%s action=%s",
+            project_row.get("id"), action,
+        )
+
+
 @router.delete("/{project_id}", status_code=200)
 def soft_delete_project(project_id: UUID, current_user: CurrentUser) -> dict:
-    """Soft-delete a project (owner only): hides it behind the trash view, keeps room scans."""
+    """Soft-delete a project (owner, or superadmin on any project): hides it
+    behind the trash view, keeps room scans."""
     _require_role(project_id, current_user["user_id"], {"owner"}, current_user)
-    if not db_client.soft_delete_project(project_id):
+    updated = db_client.soft_delete_project(project_id)
+    if not updated:
         raise HTTPException(status_code=404, detail="Project not found.")
+    _log_project_delete_action(dict(updated), current_user, "soft_delete")
     return {"detail": "Project moved to trash."}
 
 
 @router.post("/{project_id}/restore", response_model=ProjectResponse)
 def restore_project(project_id: UUID, current_user: CurrentUser) -> dict:
-    """Restore a soft-deleted project (owner only)."""
+    """Restore a soft-deleted project (owner, or superadmin on any project)."""
     _require_role(project_id, current_user["user_id"], {"owner"}, current_user)
     updated = db_client.restore_project(project_id)
     if not updated:
         raise HTTPException(status_code=404, detail="Project not found.")
+    _log_project_delete_action(dict(updated), current_user, "restore")
     return dict(updated)
 
 
 @router.delete("/{project_id}/permanent", status_code=200)
 def hard_delete_project(project_id: UUID, current_user: CurrentUser) -> dict:
-    """Permanently delete a project (owner only): also deletes documents/chunks
-    exclusive to this project. Shared documents and query history are detached, not deleted."""
+    """Permanently delete a project (owner, or superadmin on any project): also
+    deletes documents/chunks exclusive to this project. Shared documents and
+    query history are detached, not deleted."""
     _require_role(project_id, current_user["user_id"], {"owner"}, current_user)
+    project = db_client.get_project(project_id)
+    if not project:
+        raise HTTPException(status_code=404, detail="Project not found.")
     if not db_client.hard_delete_project(project_id):
         raise HTTPException(status_code=404, detail="Project not found.")
+    _log_project_delete_action(dict(project), current_user, "hard_delete")
     return {"detail": "Project permanently deleted."}
 
 

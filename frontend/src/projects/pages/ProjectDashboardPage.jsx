@@ -1,12 +1,19 @@
 import React, { useEffect, useState } from "react";
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import ProjectKickoffSummary from "../../components/ProjectKickoffSummary.jsx";
 import ScanLibraryList from "../../components/ScanLibraryList.jsx";
 import MaterialsEstimatePanel from "../../components/MaterialsEstimatePanel.jsx";
 import ProjectMapImage from "../../components/ProjectMapImage.jsx";
-import { fetchProjectDocuments, fetchProjectRoomScans, fetchQueryHistory } from "../../api.js";
+import {
+  deleteProject,
+  fetchProjectDocuments,
+  fetchProjectRoomScans,
+  fetchQueryHistory,
+  hardDeleteProject,
+} from "../../api.js";
 import { formatKickoffSummary } from "../../projectKickoffSummary.js";
 import { buildKickoffPath } from "../../projectKickoffRoutes.js";
+import { useAuth } from "../../context/AuthContext.jsx";
 import { useProject } from "../ProjectContext.jsx";
 
 /**
@@ -14,9 +21,14 @@ import { useProject } from "../ProjectContext.jsx";
  */
 export default function ProjectDashboardPage() {
   const { project, canEdit, projectId } = useProject();
+  const { user } = useAuth();
+  const navigate = useNavigate();
+  const isSuperadmin = user?.role === "superadmin";
   const [scans, setScans] = useState([]);
   const [queries, setQueries] = useState([]);
   const [documents, setDocuments] = useState([]);
+  const [dangerActionLoading, setDangerActionLoading] = useState(false);
+  const [dangerError, setDangerError] = useState("");
 
   useEffect(() => {
     (async () => {
@@ -40,6 +52,43 @@ export default function ProjectDashboardPage() {
   const kickoff = formatKickoffSummary(project);
   const roomRows = scans.filter((s) => s.scan_type === "room");
   const activeRoom = roomRows.find((r) => r.is_active);
+
+  const handleSuperadminSoftDelete = async () => {
+    if (
+      !window.confirm(
+        `Move "${project?.name}" to trash? You're not a member of this project — acting as superadmin. Room scans are kept, and the project owner can restore it later.`
+      )
+    ) {
+      return;
+    }
+    setDangerActionLoading(true);
+    setDangerError("");
+    try {
+      await deleteProject(projectId);
+      navigate("/projects");
+    } catch (err) {
+      setDangerError(err.message || "Failed to delete project.");
+      setDangerActionLoading(false);
+    }
+  };
+
+  const handleSuperadminHardDelete = async () => {
+    const typed = window.prompt(
+      `Permanently delete "${project?.name}"? This is irreversible and also deletes any documents uploaded exclusively to this project. Type DELETE to confirm.`
+    );
+    if ((typed || "").trim().toLowerCase() !== "delete") {
+      return;
+    }
+    setDangerActionLoading(true);
+    setDangerError("");
+    try {
+      await hardDeleteProject(projectId);
+      navigate("/projects");
+    } catch (err) {
+      setDangerError(err.message || "Failed to permanently delete project.");
+      setDangerActionLoading(false);
+    }
+  };
 
   return (
     <div className="project-dashboard-home">
@@ -134,6 +183,52 @@ export default function ProjectDashboardPage() {
           </ul>
         )}
       </section>
+
+      {isSuperadmin && (
+        <section className="panel danger-zone">
+          <h3>Superadmin controls</h3>
+          <p className="muted">
+            You can manage this project regardless of membership. Delete actions here are
+            audit-logged.
+          </p>
+          {dangerError && <div className="error-box">{dangerError}</div>}
+
+          <div className="danger-zone-delete">
+            <div>
+              <strong>Delete project workspace</strong>
+              <p className="muted">
+                Moves the project to trash. The owner can restore it from their own Recently
+                Deleted view.
+              </p>
+            </div>
+            <button
+              type="button"
+              onClick={handleSuperadminSoftDelete}
+              disabled={dangerActionLoading}
+              className="primary-button danger-button"
+            >
+              Delete project
+            </button>
+          </div>
+
+          <div className="danger-zone-delete">
+            <div>
+              <strong>Permanently delete</strong>
+              <p className="muted">
+                Irreversible. Also deletes any documents uploaded exclusively to this project.
+              </p>
+            </div>
+            <button
+              type="button"
+              onClick={handleSuperadminHardDelete}
+              disabled={dangerActionLoading}
+              className="primary-button danger-button"
+            >
+              Permanently delete
+            </button>
+          </div>
+        </section>
+      )}
     </div>
   );
 }
