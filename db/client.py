@@ -2431,6 +2431,8 @@ def upsert_action_item(
             entity_type, entity_id, title, evidence, proposed_action
         )
         VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s::jsonb, %s)
+        -- Must match uq_agent_action_items_open_entity for Postgres to infer
+        -- the partial index (migration 026).
         ON CONFLICT (source_agent, kind, entity_type, entity_id)
             WHERE status IN ('open', 'acknowledged')
         DO UPDATE SET evidence   = EXCLUDED.evidence,
@@ -2448,8 +2450,10 @@ def upsert_action_item(
                 severity,
                 blocking,
                 run_id,
-                entity_type,
-                entity_id,
+                # '' rather than NULL so the dedupe index applies to
+                # entity-less items too -- see migration 026.
+                entity_type or "",
+                entity_id or "",
                 title,
                 _json.dumps(evidence or {}),
                 proposed_action,

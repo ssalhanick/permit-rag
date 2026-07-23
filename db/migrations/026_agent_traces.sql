@@ -119,8 +119,13 @@ CREATE TABLE IF NOT EXISTS agent_action_items (
                         CHECK (severity IN ('low', 'medium', 'high', 'critical')),
     blocking        boolean NOT NULL DEFAULT false,
     run_id          uuid REFERENCES agent_runs (id) ON DELETE SET NULL,
-    entity_type     text,
-    entity_id       text,
+    -- NOT NULL DEFAULT '' rather than nullable: NULLs never conflict in a
+    -- unique index, so a nullable entity would silently skip the dedupe guard
+    -- below for exactly the global checks a scheduled sweep produces. '' means
+    -- "no entity". An expression index over COALESCE() would also work, but
+    -- Postgres cannot infer a *partial* index from an expression ON CONFLICT.
+    entity_type     text NOT NULL DEFAULT '',
+    entity_id       text NOT NULL DEFAULT '',
     title           text NOT NULL,
     evidence        jsonb NOT NULL DEFAULT '{}'::jsonb,
     proposed_action text,
@@ -140,7 +145,10 @@ CREATE INDEX IF NOT EXISTS idx_agent_action_items_source
     ON agent_action_items (source_agent, status);
 
 -- Dedupe guard: one open item per (source_agent, kind, entity) so a nightly
--- anomaly sweep or a re-run validation does not pile up duplicates.
+-- anomaly sweep or a re-run validation does not pile up duplicates. Works for
+-- entity-less items too because those columns are NOT NULL DEFAULT '' above.
+-- Resolving or dismissing an item drops it out of the predicate, so the same
+-- condition can legitimately be raised again later.
 CREATE UNIQUE INDEX IF NOT EXISTS uq_agent_action_items_open_entity
     ON agent_action_items (source_agent, kind, entity_type, entity_id)
     WHERE status IN ('open', 'acknowledged');

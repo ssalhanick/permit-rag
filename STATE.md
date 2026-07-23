@@ -35,9 +35,15 @@ site, plus the agent registry. Full plan: [docs/agent_architecture.md](docs/agen
 - [x] **Cost fix**: reranker-rejected chunks no longer reach the model
 - [x] 22 new tests; full suite green (292 passed)
 
-### Verification (NOT run against a database yet — do first next session)
+- [x] Migration 026 dry-run against local Docker Postgres inside a rolled-back
+      transaction: 5 tables create, 15 ceilings seed, dedupe verified for
+      entity-bearing, entity-less, distinct-entity, and re-raise-after-resolve
+      cases. **Caught and fixed a dedupe bug** (nullable entity columns skipped
+      the unique index) before it could be frozen by deployment.
 
-- [ ] `py scripts/apply_migration.py db/migrations/026_agent_traces.sql`
+### Verification (not yet run for real — do first next session)
+
+- [ ] `py scripts/apply_migration.py db/migrations/026_agent_traces.sql` **(local first)**
 - [ ] Issue one `/query/answer` call, then confirm rows land in `agent_runs` +
       `agent_steps` with non-zero `cost_usd`
 - [ ] Confirm `agent_autonomy` seeded 15 rows and that `set_agent_autonomy`
@@ -60,10 +66,39 @@ py -m audit.anomaly --window-hours 24
 
 ## Next tasks
 
-1. Apply migration 026 locally; smoke one query; confirm trace rows
+1. Apply migration 026 **locally**; smoke one query; confirm trace rows
 2. Re-baseline RAGAs after the chunk-leakage fix
 3. Phase 1 — `rag/agent_runtime.py` + `rag/agents/registry.py`
-4. Prod rollout: migration 026 on RDS + deploy
+4. Prod rollout, in this order and not before step 2 passes:
+   **022 first (still missing on RDS)**, then 026, then deploy the code
+
+## Migration drift — check before touching any database
+
+`scripts/apply_migration.py` executes a file and records nothing: there is no
+`schema_migrations` table and no ordering guard. **`scripts/check_migrations.py`
+(new) probes for the artifact each migration creates** and reports corpus size
+alongside it. Run it first on any database.
+
+Confirmed drift as of this session:
+
+| Database | State |
+|----------|-------|
+| Local Docker (this machine) | 018–021, 023–026 applied; **022 missing**, sitting behind applied migrations. Corpus empty (0 docs / 0 chunks). |
+| Prod RDS | 022 not applied per prior sessions; 026 not applied. Verify with the script before assuming. |
+
+Applying 022 to a database that already holds a corpus leaves its new columns
+NULL until `scripts/backfill_source_identity.py` runs — the migration alone is
+not sufficient there.
+
+All of these migrations are additive (`CREATE TABLE IF NOT EXISTS`, `ADD
+COLUMN`), so each is individually low-risk and fast, but the gaps should be
+closed deliberately rather than by accident.
+
+The code and the migration are independently safe to ship in either order:
+tracing degrades to a log line without the tables (verified), and the tables sit
+idle without the code. The thing that is *not* safe to ship blind is the
+chunk-leakage fix — it changes what the model sees, so RAGAs must be re-baselined
+first.
 
 ## Module status
 
