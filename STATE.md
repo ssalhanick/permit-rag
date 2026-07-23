@@ -79,16 +79,37 @@ py -m audit.anomaly --window-hours 24
 (new) probes for the artifact each migration creates** and reports corpus size
 alongside it. Run it first on any database.
 
+`scripts/check_migration_details.py` (new, **read-only**) goes further and
+verifies migration *contents*: whether the applied 026 includes the dedupe fix,
+and whether 022's columns were actually backfilled. Safe to point at prod.
+
 Confirmed drift as of this session:
 
 | Database | State |
 |----------|-------|
-| Local Docker (this machine) | 018–021, 023–026 applied; **022 missing**, sitting behind applied migrations. Corpus empty (0 docs / 0 chunks). |
-| Prod RDS | 022 not applied per prior sessions; 026 not applied. Verify with the script before assuming. |
+| Local Docker (machine A) | 018–021, 023–026 applied; **022 missing** behind them; **026 is the pre-fix version** (nullable entity columns) so 027 is required. Corpus empty. |
+| Machine B local | Unknown — run `py scripts/check_migrations.py --local` |
+| Prod RDS | 018–026 applied **including 022**; 026 is almost certainly the pre-fix version → needs 027. Confirm with `check_migration_details.py`. |
+
+**026 reached production unintentionally.** `bootstrap_env` loads `.env` last
+with `override=True`, and `ENVIRONMENT=production` selects `.env.production`;
+all three dotenv files are gitignored, so the target differs per machine and
+`apply_migration.py` gave no indication of where it was writing. It now prints
+the target host and profile, and requires the hostname to be typed for any
+non-localhost target (`--yes` bypasses for CI; nothing automated calls it).
 
 Applying 022 to a database that already holds a corpus leaves its new columns
 NULL until `scripts/backfill_source_identity.py` runs — the migration alone is
 not sufficient there.
+
+### Duplicate migration number 026
+
+`026_agent_traces.sql` and `026_design_intent_usage_project_fk.sql` (from commit
+`dc802a9`) share a number; the traces migration should have been 027. Recorded
+rather than renamed — both are already applied by name on multiple databases,
+and renaming an applied migration is riskier than the duplicate.
+`check_migrations.py` probes each independently so neither hides the other. The
+dedupe correction is therefore **027_agent_action_item_dedupe.sql**.
 
 All of these migrations are additive (`CREATE TABLE IF NOT EXISTS`, `ADD
 COLUMN`), so each is individually low-risk and fast, but the gaps should be
