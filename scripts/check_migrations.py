@@ -13,45 +13,32 @@ Also reports corpus size, since an empty corpus makes RAGAs scores
 meaningless (zero chunks retrieved scores as unfaithful) and that failure
 looks identical to a quality regression.
 
-Which database it targets is not obvious: `bootstrap_env` loads `.env` last
-with ``override=True``, so a DATABASE_URL there beats `.env.local`, and all
-three dotenv files are gitignored so the target differs per machine. The banner
-below always names the host, and `--local` forces `.env.local`.
+Which database it targets is not obvious -- see scripts/_db_target.py. The
+banner always names the host and the file that supplied it. Note `--local`
+forces `.env.local` but cannot make it point at this machine: if `.env.local`
+was repointed at a remote host, the banner says so rather than pretending.
 
 Usage:
     py scripts/check_migrations.py
-    py scripts/check_migrations.py --local     # ignore .env / .env.production
+    py scripts/check_migrations.py --local
+    py scripts/check_migrations.py --database-url='postgresql://...'
 """
 
 from __future__ import annotations
 
-import os
 import sys
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+sys.path.insert(0, str(Path(__file__).resolve().parent))
 
-from dotenv import dotenv_values
+import _db_target
 
 from api.load_env import bootstrap_env
 
-PROJECT_ROOT = Path(__file__).resolve().parent.parent
-
-if "--local" in sys.argv:
-    # Read .env.local directly so an override elsewhere cannot redirect us.
-    _local = dotenv_values(PROJECT_ROOT / ".env.local")
-    if not _local.get("DATABASE_URL"):
-        print("--local: .env.local has no DATABASE_URL on this machine.")
-        raise SystemExit(1)
-    bootstrap_env()
-    os.environ["DATABASE_URL"] = _local["DATABASE_URL"]
-    PROFILE = "local (forced)"
-else:
-    PROFILE = bootstrap_env()
+TARGET = _db_target.resolve(sys.argv[1:], bootstrap_env)
 
 from db.client import get_conn
-
-_LOCAL_HOSTS = ("localhost", "127.0.0.1", "::1", "host.docker.internal")
 
 # (migration, kind, target, column) -- probed in order.
 #
@@ -104,32 +91,6 @@ _COLUMN_SQL = """
 """
 
 
-def _target_host() -> str:
-    """Return the host:port portion of DATABASE_URL, or '(unset)'."""
-    dsn = os.environ.get("DATABASE_URL", "")
-    if "@" not in dsn:
-        return "(unset)"
-    return dsn.split("@", 1)[1].split("/", 1)[0]
-
-
-def _is_local(host: str) -> bool:
-    """True when the target looks like a developer machine."""
-    return any(host.startswith(prefix) for prefix in _LOCAL_HOSTS)
-
-
-def _banner(host: str) -> None:
-    """Name the target loudly enough that prod is never mistaken for local."""
-    if _is_local(host):
-        print(f"Target: {host}  (profile={PROFILE})  — LOCAL\n")
-        return
-    print("=" * 70)
-    print(f"  TARGET IS NOT LOCAL: {host}")
-    print(f"  profile={PROFILE}")
-    print("  Re-run with --local to inspect this machine's Docker database.")
-    print("=" * 70)
-    print()
-
-
 def _probe(conn, kind: str, target: str, column: str | None) -> bool:
     """Return True when the artifact a migration creates is present."""
     if kind == "table":
@@ -156,7 +117,8 @@ def _corpus_summary(conn) -> tuple[int, int, int]:
 
 def main() -> None:
     """Print migration status and corpus size for the configured database."""
-    _banner(_target_host())
+    _db_target.banner(TARGET)
+    _db_target.ensure_reachable(TARGET, get_conn)
 
     with get_conn() as conn:
         results = [

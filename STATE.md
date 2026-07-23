@@ -98,6 +98,18 @@ all three dotenv files are gitignored, so the target differs per machine and
 the target host and profile, and requires the hostname to be typed for any
 non-localhost target (`--yes` bypasses for CI; nothing automated calls it).
 
+**`.env.local` does not reliably mean localhost.** On machine B it points at a
+campus IP — repointed during remote-debugging work and left that way. So
+`--local` forces the file but cannot force the destination; the banner reports
+the real host and names the file that supplied it rather than trusting the flag.
+`scripts/_db_target.py` holds this resolution logic for both diagnostics and
+supports `--database-url='...'` as a one-off override. Canonical local value,
+from `.env.local.example`:
+
+```
+DATABASE_URL=postgresql://postgres:localdev@localhost:5433/permit_rag
+```
+
 Applying 022 to a database that already holds a corpus leaves its new columns
 NULL until `scripts/backfill_source_identity.py` runs — the migration alone is
 not sufficient there.

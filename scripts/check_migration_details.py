@@ -19,59 +19,26 @@ Checks:
 
 Usage:
     py scripts/check_migration_details.py
-    py scripts/check_migration_details.py --local     # force .env.local
+    py scripts/check_migration_details.py --local
+    py scripts/check_migration_details.py --database-url='postgresql://...'
 """
 
 from __future__ import annotations
 
-import os
 import sys
 from pathlib import Path
 from typing import Any
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+sys.path.insert(0, str(Path(__file__).resolve().parent))
 
-from dotenv import dotenv_values
+import _db_target
 
 from api.load_env import bootstrap_env
 
-PROJECT_ROOT = Path(__file__).resolve().parent.parent
-
-if "--local" in sys.argv:
-    _local = dotenv_values(PROJECT_ROOT / ".env.local")
-    if not _local.get("DATABASE_URL"):
-        print("--local: .env.local has no DATABASE_URL on this machine.")
-        raise SystemExit(1)
-    bootstrap_env()
-    os.environ["DATABASE_URL"] = _local["DATABASE_URL"]
-    PROFILE = "local (forced)"
-else:
-    PROFILE = bootstrap_env()
+TARGET = _db_target.resolve(sys.argv[1:], bootstrap_env)
 
 from db.client import get_conn
-
-_LOCAL_HOSTS = ("localhost", "127.0.0.1", "::1", "host.docker.internal")
-
-
-def _target_host() -> str:
-    """Return the host:port portion of DATABASE_URL, or '(unset)'."""
-    dsn = os.environ.get("DATABASE_URL", "")
-    if "@" not in dsn:
-        return "(unset)"
-    return dsn.split("@", 1)[1].split("/", 1)[0]
-
-
-def _banner() -> None:
-    """Name the target so prod is never mistaken for local."""
-    host = _target_host()
-    local = any(host.startswith(p) for p in _LOCAL_HOSTS)
-    label = "LOCAL" if local else "*** NOT LOCAL ***"
-    print("=" * 72)
-    print(f"  Target : {host}")
-    print(f"  Profile: {PROFILE}   {label}")
-    print("  Mode   : READ-ONLY (no writes issued)")
-    print("=" * 72)
-    print()
 
 
 def _table_exists(conn: Any, name: str) -> bool:
@@ -183,7 +150,8 @@ def check_022(conn: Any) -> list[str]:
 
 def main() -> None:
     """Run every content check and print a consolidated action list."""
-    _banner()
+    _db_target.banner(TARGET)
+    _db_target.ensure_reachable(TARGET, get_conn)
     with get_conn() as conn:
         actions = check_026(conn) + check_022(conn)
 
