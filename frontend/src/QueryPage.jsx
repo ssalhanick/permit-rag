@@ -1,5 +1,5 @@
-import React, { useEffect, useMemo, useState } from "react";
-import { fetchAnswer, fetchProjects } from "./api.js";
+import React, { useEffect, useMemo, useRef, useState } from "react";
+import { fetchAnswer, fetchProjects, fetchQueryHistory } from "./api.js";
 import { useAuth } from "./context/AuthContext.jsx";
 import RoomScansHomePromo from "./components/RoomScansHomePromo.jsx";
 
@@ -10,34 +10,40 @@ import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 
 export default function QueryPage() {
-  const { user } = useAuth();
+  const { user, activeProject } = useAuth();
   const [query, setQuery] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [history, setHistory] = useState([]);
+  const [historyLoading, setHistoryLoading] = useState(false);
   const [activeAnswerId, setActiveAnswerId] = useState(null);
-  
+
   const [projects, setProjects] = useState([]);
-  const [activeProjectId, setActiveProjectId] = useState(() => {
-    const params = new URLSearchParams(window.location.search);
-    return params.get("p") || localStorage.getItem("activeProjectId") || "";
-  });
+
+  // The project selector here defaults to the navbar's active project, but a
+  // manual pick on this page is a local override — it doesn't change the
+  // navbar or the user's persisted active_project_id.
+  const initialOverride = new URLSearchParams(window.location.search).get("p");
+  const manualOverrideRef = useRef(Boolean(initialOverride));
+  const [activeProjectId, setActiveProjectIdState] = useState(initialOverride || "");
+
+  const setActiveProjectId = (id) => {
+    manualOverrideRef.current = true;
+    setActiveProjectIdState(id);
+  };
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     const q = params.get("q");
-    const p = params.get("p");
     if (q) setQuery(q);
-    if (p) setActiveProjectId(p);
   }, []);
 
+  // Track the navbar's active project until the user manually overrides it here.
   useEffect(() => {
-    if (activeProjectId) {
-      localStorage.setItem("activeProjectId", activeProjectId);
-    } else {
-      localStorage.removeItem("activeProjectId");
+    if (!manualOverrideRef.current) {
+      setActiveProjectIdState(activeProject?.id || "");
     }
-  }, [activeProjectId]);
+  }, [activeProject?.id]);
 
   useEffect(() => {
     if (user) {
@@ -52,9 +58,44 @@ export default function QueryPage() {
         .catch(() => {});
     } else {
       setProjects([]);
-      setActiveProjectId("");
+      setActiveProjectIdState("");
     }
   }, [user]);
+
+  // Load persisted query history, scoped to the active project (or all of the
+  // user's history when no project is selected).
+  useEffect(() => {
+    if (!user) {
+      setHistory([]);
+      setActiveAnswerId(null);
+      return;
+    }
+    let cancelled = false;
+    setHistoryLoading(true);
+    fetchQueryHistory(activeProjectId || undefined)
+      .then((res) => {
+        if (cancelled) return;
+        const items = (res.data || []).map((row) => ({
+          id: row.id,
+          createdAt: new Date(row.created_at).toLocaleTimeString(),
+          query: row.query_text,
+          answer: row.answer_text,
+          citations: row.citations,
+          resolved_municipality: row.municipality,
+        }));
+        setHistory(items);
+        setActiveAnswerId(items[0]?.id ?? null);
+      })
+      .catch(() => {
+        if (!cancelled) setHistory([]);
+      })
+      .finally(() => {
+        if (!cancelled) setHistoryLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [user, activeProjectId]);
 
   const canSubmit = useMemo(() => query.trim().length >= 3 && !loading, [query, loading]);
 
@@ -165,7 +206,9 @@ export default function QueryPage() {
               <CardDescription>Previous questions</CardDescription>
             </CardHeader>
             <CardContent className="px-2 max-h-[400px] overflow-y-auto">
-              {history.length ? (
+              {historyLoading ? (
+                <p className="text-sm text-slate-500 text-center py-6">Loading…</p>
+              ) : history.length ? (
                 <div className="space-y-2">
                   {history.map((item) => {
                     const isActive = item.id === activeAnswer?.id;
@@ -194,7 +237,9 @@ export default function QueryPage() {
                   })}
                 </div>
               ) : (
-                <p className="text-sm text-slate-500 text-center py-6">No queries yet.</p>
+                <p className="text-sm text-slate-500 text-center py-6">
+                  {activeProjectId ? "No queries yet for this project." : "No queries yet."}
+                </p>
               )}
             </CardContent>
           </Card>
