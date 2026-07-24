@@ -7,8 +7,9 @@ plus Texas state and federal regulations.
 
 ---
 
-## Current Status (2026-07-21)
+## Current Status (2026-07-24)
 
+- **Agent architecture Phases 0–2 shipped to prod** — trace store, single-call-site runtime + registry, and the Manager + artifact store + Budget Governor. `/query/answer` now runs behind the Manager with zero behaviour change. Phase 3 (metadata validator + dashboard v1) is the active phase. See [docs/agent_architecture.md](docs/agent_architecture.md) and [STATE.md](STATE.md).
 - **On-demand URL pull implemented** — admin Pull-from-URL on `/upload`: page crawl, checksum diff, ingest-new / supersede-changed, migration 022 identity keys. Verification checklist pending: [docs/on_demand_url_pull.md](docs/on_demand_url_pull.md).
 - **Prod corpus seeded** — RDS has 19 active docs / 17,159 embedded chunks.
 - **Sprint 17 wrapped** — Scan → Design → Preview → **Generate image** → Save; AR textures prefer `asset_url` then product photos. See [STATE.md](STATE.md) and [docs/room_generative_preview.md](docs/room_generative_preview.md).
@@ -40,7 +41,7 @@ py -m pytest tests/test_commerce_takeoff.py tests/test_commerce_product_resolver
 ## TODO
 
 ### In Progress
-- [ ] **[Agent Architecture](docs/agent_architecture.md)** — 26-agent roster under one Manager, with prompt routing, a feedback loop, autonomy levels, and a token protocol. **Phases 0 (trace store) and 1 (runtime + registry) are verified on prod. Phase 2 (Manager) is code-complete on machine A; its RAGAs half is unrun.** Phase 3 (metadata validator + dashboard v1) is next. Phases 0–5 are the demo slice.
+- [ ] **[Agent Architecture](docs/agent_architecture.md)** — 26-agent roster under one Manager, with prompt routing, a feedback loop, autonomy levels, and a token protocol. **Phases 0 (trace store), 1 (runtime + registry), and 2 (Manager + artifact store + Budget Governor) are verified and deployed to prod.** Phase 3 (metadata validator + dashboard v1) is the active phase. Phases 0–5 are the demo slice.
 
 ### Planned
 - [ ] [Agent Architecture Phase 3](docs/agent_architecture.md) — Corpus Metadata Validator + 27-doc backfill + superadmin dashboard v1 (action queue). **Includes the metadata source-of-truth redesign**: `documents/metadata/*.json` sidecars are now gitignored (derived, write-only, churned on every ingest); Phase 3 decides whether they survive as a local cache or are replaced by the validator writing corrected metadata straight to the DB + `registry.json` via `governance.py`. `catalog.json` + `registry.json` remain the tracked source/governance artifacts.
@@ -56,7 +57,7 @@ py -m pytest tests/test_commerce_takeoff.py tests/test_commerce_product_resolver
 - [ ] [Cognito Groups RBAC](docs/cognito_groups_rbac.md) — Cognito groups as source of truth for `member` / `admin` / `superadmin`; staff bypass for see-everything; keep project_members + ops token
 
 ### Upcoming
-- [ ] **CI: pytest gate on deploy** — add a `pytest` job to `.github/workflows/deploy.yml` that `deploy-backend` depends on, so a failing suite blocks the deploy. Today the workflow runs only `python -m compileall` (syntax), not the 395-test suite, so a compiling-but-failing commit can ship to prod. (Migrations stay manual — CI has no RDS reach.)
+- [ ] **CI: pytest gate on deploy** — add a `pytest` job to `.github/workflows/deploy.yml` that `deploy-backend` depends on, so a failing suite blocks the deploy. Today the workflow runs only `python -m compileall` (syntax), not the 398-test suite, so a compiling-but-failing commit can ship to prod. (Migrations stay manual — CI has no RDS reach.)
 - [ ] **SerpApi production key** — add `SERPAPI_API_KEY` to ECS task env / SSM after account signup (blocker for live HD prices; mocks work until then)
 - [ ] Add ability to update existing documents
 - [ ] Mobile OAuth deep links (M0-6/M0-7) + Firebase push (`google-services.json`)
@@ -64,8 +65,8 @@ py -m pytest tests/test_commerce_takeoff.py tests/test_commerce_product_resolver
 - [ ] 3D Map Integration — CesiumJS city boundaries + site overlay
 
 ### Completed
-- [x] **Agent Architecture Phase 2 — Manager + artifact store + Budget Governor** ([docs/agent_architecture.md](docs/agent_architecture.md)) — the hand-wired `/query/answer` chain ported behind `rag/agents/manager.py` with **zero behaviour change**: `tests/test_query_answer_route.py` stays green with no edits to its assertions. Adds `rag/agents/artifacts.py` (`ArtifactRef` — the Manager sees ids + summaries, never chunk text, which is what bounds the ReAct loop) and `rag/agents/budget.py` (deterministic Budget Governor: per-request cap, ladder selection, degradation — shipped **uncapped by default**, so it is a no-op this phase). `rag/generator.py`'s inline Anthropic call folded into `run_agent`, the last remaining call site; `LLM_MODEL` is passed as an explicit override so the ladder does not silently swap prod's pinned model. No new migration. Verify with `py scripts/verify_phase2.py --local`. **Machine-A gate closed (395 tests). The RAGAs half of the gate is unrun — Phase 2 is not verified until `ragas_eval --export` + `eval_guard` re-baseline to 0.910 on the corpus machine.**
-- [x] **Agent Architecture Phase 1 — runtime + registry + autonomy enforcement** ([docs/agent_architecture.md](docs/agent_architecture.md)) — `rag/agent_runtime.py` as the single Anthropic call site (native `messages.parse` structured outputs, cheap/mid/top model ladder, measured prompt caching that refuses the silent-no-cache footgun, `count_tokens` budgeting, retries, automatic tracing, and fail-closed autonomy enforcement), plus `rag/agents/registry.py` (`AgentSpec` + lazy binding, rag self-registers, commerce/forms/bids injected by `api/main.py`). `rag/design_intent.py`'s inline Anthropic call folded into the runtime. No new migration. Verify with `py scripts/verify_phase1.py --local`. **Code-complete and verified on local; prod deploy pending.**
+- [x] **Agent Architecture Phase 2 — Manager + artifact store + Budget Governor** ([docs/agent_architecture.md](docs/agent_architecture.md)) — the hand-wired `/query/answer` chain ported behind `rag/agents/manager.py` with **zero behaviour change**: `tests/test_query_answer_route.py` stays green with no edits to its assertions. Adds `rag/agents/artifacts.py` (`ArtifactRef` — the Manager sees ids + summaries, never chunk text, which is what bounds the ReAct loop) and `rag/agents/budget.py` (deterministic Budget Governor: per-request cap, ladder selection, degradation — shipped **uncapped by default**, so it is a no-op this phase). `rag/generator.py`'s inline Anthropic call folded into `run_agent`, the last remaining call site; `LLM_MODEL` is passed as an explicit override so the ladder does not silently swap prod's pinned model. No new migration. **Verified and deployed to prod 2026-07-24**: machine A (398 tests, `test_query_answer_route` unchanged, `verify_phase2 --no-db` 18/18) + machine B (`verify_phase2 --local` 26/26; generator fold shown behaviour-preserving — pre-Phase-2 code scored the RAGAs q6 query *below* Phase 2, so that floor miss is a corpus/judge signal, not the fold). The RAGAs faithfulness number is **not** a gate here — the judge varies ±0.15 on one query.
+- [x] **Agent Architecture Phase 1 — runtime + registry + autonomy enforcement** ([docs/agent_architecture.md](docs/agent_architecture.md)) — `rag/agent_runtime.py` as the single Anthropic call site (native `messages.parse` structured outputs, cheap/mid/top model ladder, measured prompt caching that refuses the silent-no-cache footgun, `count_tokens` budgeting, retries, automatic tracing, and fail-closed autonomy enforcement), plus `rag/agents/registry.py` (`AgentSpec` + lazy binding, rag self-registers, commerce/forms/bids injected by `api/main.py`). `rag/design_intent.py`'s inline Anthropic call folded into the runtime. No new migration. Verify with `py scripts/verify_phase1.py --local`. **Verified and deployed to prod (2026-07-24, `verify_phase1.py` 10/10 against RDS incl. the live caching assertion).**
 - [x] **Agent Architecture Phase 0 — trace store + chunk-leakage fix** ([docs/agent_architecture.md](docs/agent_architecture.md)) — migration 026 (`agent_runs`, `agent_steps`, `agent_corrections`, `agent_action_items`, `agent_autonomy`), the three previously-empty `audit/` modules implemented, `@traced`/`@traced_run` wired onto `generate_answer` and `design_intent`, and reranker-rejected chunks no longer prompted or billed
 - [x] [On-Demand URL Pull](docs/on_demand_url_pull.md) — `ingestion/url_normalize.py`, `ingestion/page_crawler.py`, migration 022 identity keys + backfill script, `POST /admin/documents/pull-page` + job poll, Pull-from-URL tab on `/upload`. End-to-end verification checklist in the plan doc still pending.
 - [x] Sprint 17: Conversational Project Kickoff — Interactive LLM-driven dialog to extract user persona, budget, and materials. Automatically synthesizes a project-specific custom system prompt (migration 020) which is injected into all future compliance queries.
@@ -674,8 +675,8 @@ py -m evaluation.eval_guard --candidate evaluation/results/ragas_20260601_010352
 # Hybrid retrieval validation (feature-flagged)
 $env:RETRIEVAL_HYBRID_ENABLED="true"; py -m rag.pipeline --municipality dallas --top-k 10 "What are the setback requirements for a residential fence in Dallas?"
 $env:RETRIEVAL_HYBRID_ENABLED="true"; py -m rag.pipeline --municipality dallas --top-k 10 "What are the fire sprinkler requirements for new construction in Dallas?"
-$env:RETRIEVAL_HYBRID_ENABLED="true"; $env:RAGAS_ANSWER_CACHE_ENABLED="false"; py -m evaluation.ragas_eval --query 0 1 2 3 5 --export
-$env:RETRIEVAL_HYBRID_ENABLED="true"; $env:RAGAS_ANSWER_CACHE_ENABLED="false"; py -m evaluation.ragas_eval --export
+$env:RETRIEVAL_HYBRID_ENABLED="true"; py -m evaluation.ragas_eval --query 0 1 2 3 5 --export --no-answer-cache
+$env:RETRIEVAL_HYBRID_ENABLED="true"; py -m evaluation.ragas_eval --export --no-answer-cache
 ```
 
 Notes:
@@ -683,7 +684,7 @@ Notes:
 - If `chunk_drop_ratio` exceeds `CHUNK_FILTER_WARN_DROP_RATIO`, review source quality and thresholds.
 - Hybrid mode is rollback-safe: set `RETRIEVAL_HYBRID_ENABLED=false` to return to dense-only retrieval immediately.
 - As of 2026-05-31 latest full run (`ragas_20260531_102544.json`), hybrid faithfulness is `0.852` (gate pass), but q1 remains unstable; keep `RETRIEVAL_HYBRID_ENABLED=false` by default until one more confirmatory full run.
-- `evaluation.eval_guard` defaults to baseline `evaluation/results/ragas_20260531_122639.json` and fails if avg faithfulness drops below `0.85` or q1 faithfulness drops by more than `0.10`.
+- `evaluation.eval_guard` defaults to baseline `evaluation/results/ragas_20260531_122639.json` and fails if avg faithfulness drops below `0.85` or q1 faithfulness drops by more than `0.10`. It also hard-fails a candidate whose rows are all `answer_cache_hit` (a run that never called `generate_answer` measures nothing). **Caveat:** the default baseline is a cached-era run and single-shot RAGAs swings ±0.15 on one query — always compare against a fresh **live** run (`--no-answer-cache`) and treat one number as a signal, not a gate. Re-establishing a clean live baseline is Phase 3 debt (STATE punch list).
 - `evaluation.prod_preflight` loads `.env.production` when `ENVIRONMENT=production`, verifies the URL is prod RDS (not localhost), prints document/chunk counts, exits `1` if the corpus is empty. Run it before prod RAGAs eval; it does not call the live HTTPS site — it reads the same RDS corpus the API uses.
 - Keep `STATE.md` as a compact current snapshot; store dated metric timelines and per-run deltas in `journals/` session logs.
 

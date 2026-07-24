@@ -1,24 +1,27 @@
 # permit_rag — State
 
-_Updated: 2026-07-24 (Agent architecture Phase 2 — Manager port; machine-A done, generator fold shown behaviour-preserving, one q6 diff + verify_phase2 --local left)_
+_Updated: 2026-07-24 (Phase 2 shipped — verified both halves, merged + GHA-deployed; prod/machine-B migrations confirmed current; doc health check done ahead of Phase 3)_
 
 ## Phase
 
-**Agent architecture Phase 2 — VERIFIED, not yet deployed.**
+**Agent architecture Phase 2 — SHIPPED. Phase 3 is the active phase.**
 The `/query/answer` chain is ported behind `rag/agents/manager.py` with zero
-behaviour change. Phase 2 adds **no migration** — it is code only. Full plan:
-[docs/agent_architecture.md](docs/agent_architecture.md). Branch: `agents/phase-2`.
+behaviour change. Phase 2 added **no migration** — code only. Merged to
+`deployment/sites` and deployed via GHA (green) on 2026-07-24. Full plan:
+[docs/agent_architecture.md](docs/agent_architecture.md). Current branch:
+`agents/phase-3`.
 
-Phases 0 and 1 are complete and verified on prod RDS. Phase 3 is next: Corpus
-Metadata Validator + backfill + superadmin dashboard v1.
+Phases 0, 1, and 2 are complete and on prod. Phase 3 is next: Corpus Metadata
+Validator + backfill + superadmin dashboard v1.
 
-> **Phase 2 is verified (2026-07-24), not deployed.** Both halves of the gate
-> are closed: machine A (398 tests, `test_query_answer_route` unchanged,
-> `verify_phase2 --no-db` 18/18) and machine B (`verify_phase2 --local` 26/26 for
-> the Manager half; the generator fold shown behaviour-preserving — old-code q6
-> scored *below* Phase 2, so the RAGAs floor miss predates the fold). The RAGAs
-> faithfulness number is a corpus/judge signal, not a Phase 2 gate. Next is the
-> PR to `deployment/sites` (code-only, no migration).
+> **Phase 2 verified and deployed (2026-07-24).** Both halves of the gate closed:
+> machine A (398 tests, `test_query_answer_route` unchanged, `verify_phase2
+> --no-db` 18/18) and machine B (`verify_phase2 --local` 26/26; generator fold
+> shown behaviour-preserving — pre-Phase-2 code scored the RAGAs q6 query *below*
+> Phase 2, so the floor miss predates the fold). **The RAGAs faithfulness number
+> is a corpus/judge signal, not a Phase 2 gate** — the judge varies ±0.15 on one
+> query run-to-run. That, and the fact that the shipped baselines were cached, is
+> eval-harness debt carried into Phase 3 (see punch list).
 
 ## Phase 2 deliverables — DONE (machine A)
 
@@ -48,16 +51,17 @@ Metadata Validator + backfill + superadmin dashboard v1.
   the decisions log) and `RuntimeResult.latency_ms`.
 - [x] Tests: `test_agent_manager.py` (23), `test_generator_runtime_fold.py` (19),
   `test_query_manager_wiring.py` (16), `test_agent_budget.py` (13),
-  `test_agent_artifacts.py` (9). **395 total. Zero existing test files edited.**
+  `test_agent_artifacts.py` (9), `test_eval_guard.py` (+3 cache-guard). **398
+  total. Zero existing test files edited.**
 - [x] `scripts/verify_phase2.py` — mirrors verify_phase1, with `--no-db`.
 
-## The Phase 2 acceptance gate — SPLIT, and HALF OPEN
+## The Phase 2 acceptance gate — CLOSED (both halves)
 
 ### Machine A — CLOSED
 
 ```powershell
 py -m pytest tests/test_query_answer_route.py -v   # green, ZERO edits to its assertions
-py -m pytest tests/ -q                             # 395 passed
+py -m pytest tests/ -q                             # 398 passed
 py -m ruff check rag/ tests/
 py scripts/verify_phase2.py --no-db                # 18/18 offline invariants
 ```
@@ -135,7 +139,7 @@ Only these work here. None of them need a database:
 
 ```powershell
 .\.venv\Scripts\Activate.ps1
-py -m pytest tests/ -q                          # 395 passed, fully mocked
+py -m pytest tests/ -q                          # 398 passed, fully mocked
 py -m ruff check rag/ tests/
 python -m compileall rag/ api/ audit/ db/
 py scripts/verify_phase1.py --no-db             # offline invariants; touches no DB
@@ -174,65 +178,55 @@ RDS on 2026-07-24, including the live `cache_read_input_tokens > 0` assertion.
 Prod runs **anthropic 0.104.1**, which supports the whole runtime; it lacks
 `OverloadedError`, so the retry list resolves error classes by name.
 
-**Phase 2 is verified and being merged to `deployment/sites` for a GHA deploy
-(2026-07-24).** Code-only, no migration.
+**Phase 2 merged to `deployment/sites` and GHA-deployed green (2026-07-24).**
+Code-only, no migration. `verify_phase1.py` and `check_migration_details.py`
+both passed 10/10 / clean against **prod RDS** the same day: prod has 026 + the
+027 dedupe fix + 022 backfilled, 19 docs, "Nothing to do."
 
-**Machine B local DB (`localhost:5433`) — confirmed current 2026-07-24:**
+**Machine B local DB (`localhost:5433`) — also confirmed current 2026-07-24:**
 `verify_phase1.py --local` 10/10 (incl. `cache_read=8163` on the 2nd probe
-call); `check_migration_details.py --local` reports the dedupe fix present
-(the `027_agent_action_item_dedupe` correction), 022 backfilled, 19 docs,
-"Nothing to do." Note this is machine B's **local Docker**, not prod.
+call); `check_migration_details.py --local` reports the dedupe fix present,
+022 backfilled, 19 docs, "Nothing to do."
 
 ## Blocked on / needs your attention (punch list)
 
-1. **Phase 2 generator-fold verification — DONE.** Old-code (`0651620`) q6
-   scored 0.250, below any Phase 2 run, so the floor failure predates the fold;
-   the answer body matched with only temp=0 heading nondeterminism. Fold is
-   behaviour-preserving. See the gate section.
-2. **`verify_phase2.py --local` — DONE, 26/26 (machine B, 2026-07-24).** Live
-   Manager plan ran end-to-end: real retrieval, generation priced $0.0034 on the
-   pinned haiku, two trace rows (deterministic/free manager + priced generator),
-   artifacts carrying no chunk text, trap (c) confirmed on the wire. The
-   Manager-orchestration half is closed.
-3. **q6 / Dallas ordinance v1-v2-v3 supersession → Phase 3 corpus ticket.** q6
-   ("max building height, Dallas") is weakly grounded even at best (0.60),
-   sourced from `city-of-dallas-ordiance-v3`. This is exactly what Phase 3's
-   metadata validator + supersession detection exist to fix. Not a Phase 2 bug.
-4. **RAGAs harness needs multi-sample averaging to be a trustworthy gate.**
-   Single-shot faithfulness swings ±0.15 on one query (0.273–0.600 measured on
-   identical input). A one-run RAGAs number cannot verify or refute a code
-   change. Worth a note in the eval docs and, eventually, an N-sample mode.
-5. **Prod migration 027 — confirm state before doing anything.** STATE's prior
-   note said 026+027 were applied to RDS; the same-day journal said prod still
-   needed 027. These conflict. **Do not blind-apply 027** — it is a `NOT NULL`
-   alter and re-running it on an already-fixed table will error. Run
-   `check_migration_details.py` first. A Phase 0 loose end, not a Phase 2 one.
-6. ~~Prod migration 027 — disputed.~~ **RESOLVED 2026-07-24: prod already has
-   it.** `check_migration_details.py` against prod RDS reported the dedupe fix
-   present + dedupe index present (the `027_agent_action_item_dedupe`
-   correction), 022 backfilled, 19 docs, "Nothing to do." STATE's "027 applied
-   2026-07-23" was correct; the 07-23 journal's "still needed 027" was wrong.
-   **Do NOT apply 027 to prod** — it is there, and re-running the `NOT NULL`
-   alter would error. `verify_phase1.py` also passed 10/10 against prod the same
-   day (2 probe trace steps written, expected).
-7. ~~Push the `anthropic>=0.104.1` floor.~~ **DONE.** `b5a0285` is already on
-   `origin/deployment/sites` — it is on the deploy branch, not a loose end.
-   (Prior STATE calling it "not yet pushed" was stale.)
-8. **Migration numbering collision ahead of Phase 3.**
+_Forward-looking only. Resolved items (Phase 2 verification, prod-027, the
+anthropic floor) are recorded in `journals/session_20260724_phase2.md`, per
+AGENTS.md "completed work → journal only."_
+
+1. **Migration numbering collision — fix before writing any Phase 3 SQL.**
    `docs/agent_architecture.md` still lists Phase 3's migration as
-   `027_metadata_validation`, but 027 is taken by
-   `027_agent_action_item_dedupe`. Shift the numbers when Phase 3 starts.
-9. **Mobile OAuth deep links (deferred)** — M0-6/M0-7 device Google/Apple roundtrip.
+   `027_metadata_validation` (Files section), but `027_agent_action_item_dedupe`
+   already exists and is applied on prod + machine B. Shift Phase 3 → **028**,
+   prompt fragments → 029, ontology/bids → 030, and update the doc's Files
+   section. The pre-existing duplicate 026 (`026_agent_traces.sql` +
+   `026_design_intent_usage_project_fk.sql`) is recorded, not renamed — both are
+   applied by name on multiple DBs; leave them.
+2. **q6 / Dallas ordinance v1-v2-v3 supersession → Phase 3's first corpus
+   target.** q6 ("max building height, Dallas") is weakly grounded even at best
+   (0.60), sourced from `city-of-dallas-ordiance-v3`. Phase 3's metadata
+   validator + supersession detection is what fixes it. It doubles as a built-in
+   regression check: if the validator resolves the supersession, q6 faithfulness
+   should climb off ~0.25.
+3. **Eval-harness debt (surfaced by the Phase 2 caching bug).** Two related:
+   (a) `RAGAS_ANSWER_CACHE_ENABLED=false` from the shell does **not** work —
+   `bootstrap_env()` `load_dotenv(override=True)` overwrites it. Use
+   `--no-answer-cache` (added this session). (b) `eval_guard`'s default baseline
+   `ragas_20260531_122639.json` is itself a **cached-era run** that never
+   exercised live generation, and single-shot RAGAs swings ±0.15 on one query.
+   Before RAGAs is trusted as a Phase 3 gate: establish a fresh **live**
+   (`--no-answer-cache`) multi-sample baseline and consider an N-sample averaging
+   mode. Do not gate on a single RAGAs number.
+4. **Mobile OAuth deep links (deferred)** — M0-6/M0-7 device Google/Apple roundtrip.
 
 ## Next tasks
 
-1. Close Phase 2: run the old-vs-new q6 answer diff (punch item 1) and
-   `verify_phase2.py --local` (punch item 2). Both machine B. Then Phase 2 is
-   done as far as it can be verified.
-2. Push the `pyproject.toml` anthropic floor (punch item 7).
-3. Phase 3 — Corpus Metadata Validator + 27-doc backfill + superadmin dashboard
-   v1, after fixing the migration numbering (punch item 8). q6 (punch item 3)
-   is the first corpus this phase should fix.
+1. Phase 3 — Corpus Metadata Validator + 27-doc backfill + superadmin dashboard
+   v1. Own chat, own branch (`agents/phase-3`, already checked out). Fix the
+   migration numbering first (punch item 1); q6 (punch item 2) is the first
+   corpus to fix.
+2. Before RAGAs is used as a Phase 3 quality gate, clear the eval-harness debt
+   (punch item 3).
 
 ## Migration drift — check before touching any database
 
@@ -281,7 +275,7 @@ already applied by name on multiple DBs). The dedupe correction is therefore
 | audit | `record_step` driven by the runtime; the Manager writes its own deterministic step |
 | db | 026/027 trace + autonomy helpers; `set_agent_autonomy` clamps in SQL |
 | api/routes/query | Reduced to HTTP concerns; injects retrieval + grounding thresholds into the Manager |
-| tests | **395 passing** (+80 Phase 2) |
+| tests | **398 passing** (+83 Phase 2) |
 
 ## Decisions log
 

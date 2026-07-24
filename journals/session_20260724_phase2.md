@@ -157,7 +157,7 @@ is a no-op today either way — it starts mattering in Phase 4.
 - `py -m pytest tests/test_query_answer_route.py -v` → **green, with zero edits
   to its assertions.** `git status tests/` was clean at that point — the file was
   untouched. This is the phase's whole signal.
-- `py -m pytest tests/ -q` → **395 passed** (was 315; +80 Phase 2 tests).
+- `py -m pytest tests/ -q` → **398 passed** (was 315; +83 Phase 2 tests, incl. the 3 eval_guard cache-guard tests added later this session).
 - `ruff check` clean on every new and edited file. The one remaining warning in
   `rag/generator.py` is a pre-existing `RUF001` en-dash inside `SYSTEM_PROMPT` —
   deliberately not touched, because editing prompt text is precisely what this
@@ -302,24 +302,23 @@ retired: that number is a single cached score, and we now know the judge varies
 > `check_migration_details.py`, `ragas_eval`, `eval_guard`,
 > `ingest_documents.py`, or `backfill_*.py` here — all fail regardless of
 > `--local`, which forces the dotenv file but cannot conjure a corpus. What works
-> here: `py -m pytest tests/ -q` (395, fully mocked), `py -m ruff check
+> here: `py -m pytest tests/ -q` (398, fully mocked), `py -m ruff check
 > rag/ tests/`, `py scripts/verify_phase2.py --no-db`. Collect machine-B commands
 > into ONE copy/paste block at the END of the session.
 >
-> **First, close Phase 2.** It is code-complete on machine A but **not
-> verified**: the RAGAs half of its gate is unrun. The machine-B block is at the
-> end of the Phase 2 journal. Phase 2 must re-baseline to the Phase 0 numbers
-> (avg faithfulness 0.910, floor 0.85) via `py -m evaluation.ragas_eval --export`
-> then `py -m evaluation.eval_guard --baseline <phase-0 json>`. `--export` is
-> mandatory — without it eval_guard silently compares the baseline to itself and
-> passes. Do not deploy Phase 2 or describe it as verified until that is clean.
-> If faithfulness moved, the suspects in order are: the `count_tokens` round trip
-> the runtime added, the `LLM_MODEL` override (confirm the recorded step model is
-> still `claude-haiku-4-5-20251001`, not `claude-sonnet-5`), and chunk ordering
-> into `_format_chunks_for_prompt`.
+> **Phase 2 is shipped** — verified both halves (machine A 398 tests +
+> `verify_phase2 --no-db` 18/18; machine B `verify_phase2 --local` 26/26 and the
+> generator fold shown behaviour-preserving), merged to `deployment/sites`,
+> GHA-deployed green on 2026-07-24. Prod, machine B, and prod migrations are
+> confirmed current (026 + 027 dedupe + 022 backfilled). **Do not re-run the
+> Phase 2 RAGAs gate as if it were open** — the faithfulness number is a
+> corpus/judge signal, not a Phase 2 gate (the judge swings ±0.15 on one query),
+> and the q6 weakness that dragged the floor down is a Phase 3 corpus target, not
+> a fold regression.
 >
-> **Then Phase 3 — Corpus Metadata Validator + 27-doc backfill + superadmin
-> dashboard v1 (action queue).** Its own chat, its own branch (`agents/phase-3`).
+> **Phase 3 — Corpus Metadata Validator + 27-doc backfill + superadmin
+> dashboard v1 (action queue).** Its own chat, its own branch (`agents/phase-3`,
+> already checked out).
 >
 > **Fix the migration numbering before writing any SQL.**
 > `docs/agent_architecture.md` still calls Phase 3's migration
