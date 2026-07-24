@@ -65,7 +65,12 @@ py -m pytest tests/test_agent_runtime.py tests/test_agent_registry.py -v
 py -m pytest tests/ -q                          # full suite: 315 passed, fully mocked
 py -m ruff check rag/ tests/
 python -m compileall rag/ api/ audit/ db/
+py scripts/verify_phase1.py --no-db             # offline invariants; touches no DB
 ```
+
+`--no-db` runs only the pure-Python checks (model ladder, cache thresholds,
+registry self-registration) and prints **PARTIAL RUN** — it is a pre-push smoke
+test, never proof that Phase 1 is verified.
 
 ### Machine B (corpus machine) — everything DB- or corpus-dependent
 

@@ -13,10 +13,17 @@ TWO real haiku calls behind a >4096-token cached system prefix so it can assert
 `cache_read_input_tokens > 0` on the second — the caching guarantee Phase 0
 could not yet verify. Skip it with --no-llm.
 
+Two-machine note: the repo machine has an EMPTY database and no corpus, so the
+autonomy and live checks cannot run there. `--no-db` runs only the pure-Python
+invariants (model ladder, cache thresholds, registry self-registration) and
+touches no database at all -- enough to catch a broken refactor before pushing.
+It is a partial run and never reports Phase 1 as verified.
+
 Usage:
-    py scripts/verify_phase1.py --local
+    py scripts/verify_phase1.py --local              # corpus machine, full run
     py scripts/verify_phase1.py --database-url='postgresql://...'
-    py scripts/verify_phase1.py --local --no-llm
+    py scripts/verify_phase1.py --local --no-llm     # skip the two haiku calls
+    py scripts/verify_phase1.py --no-db              # repo machine, offline
 """
 
 from __future__ import annotations
@@ -163,21 +170,8 @@ def check_live_runtime(conn: Any) -> bool:
     return bool(ok)
 
 
-def main() -> None:
-    """Run every Phase 1 check and exit non-zero on any failure."""
-    _db_target.banner(TARGET, read_only=False)
-    _db_target.ensure_reachable(TARGET)
-    use_llm = "--no-llm" not in sys.argv
-
-    check_runtime_invariants()
-    check_registry()
-    with get_conn() as conn:
-        check_autonomy()
-        if use_llm:
-            check_live_runtime(conn)
-        else:
-            print("\nSingle call site (live)\n  (--no-llm: skipped)")
-
+def _report(offline: bool) -> None:
+    """Print the summary and exit non-zero on any failed check."""
     failed = [name for name, passed, _ in RESULTS if not passed]
     print("\n" + "=" * 72)
     if failed:
@@ -186,8 +180,42 @@ def main() -> None:
             print(f"    - {name}")
         print("=" * 72)
         sys.exit(1)
-    print(f"  All {len(RESULTS)} checks passed — Phase 1 is complete on this database.")
+    if offline:
+        print(f"  {len(RESULTS)} offline checks passed — PARTIAL RUN.")
+        print("  Autonomy and the live call site are NOT verified. Phase 1 is not")
+        print("  confirmed until `py scripts/verify_phase1.py --local` passes on")
+        print("  the corpus machine.")
+    else:
+        print(f"  All {len(RESULTS)} checks passed — Phase 1 is complete on this database.")
     print("=" * 72)
+
+
+def main() -> None:
+    """Run every Phase 1 check and exit non-zero on any failure."""
+    offline = "--no-db" in sys.argv
+    use_llm = "--no-llm" not in sys.argv and not offline
+
+    if offline:
+        print("\n  --no-db: pure-Python invariants only. No database is touched.")
+    else:
+        _db_target.banner(TARGET, read_only=False)
+        _db_target.ensure_reachable(TARGET)
+
+    check_runtime_invariants()
+    check_registry()
+
+    if offline:
+        print("\nAutonomy enforcement (runtime)\n  (--no-db: skipped — reads agent_autonomy)")
+        print("\nSingle call site (live)\n  (--no-db: skipped — needs the corpus machine)")
+    else:
+        with get_conn() as conn:
+            check_autonomy()
+            if use_llm:
+                check_live_runtime(conn)
+            else:
+                print("\nSingle call site (live)\n  (--no-llm: skipped)")
+
+    _report(offline)
 
 
 if __name__ == "__main__":
