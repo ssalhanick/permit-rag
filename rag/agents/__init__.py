@@ -9,8 +9,12 @@ Agents backed by ``commerce/``, ``forms/``, or ``bids/`` are **not** registered
 here — ``rag/`` cannot import those packages (AGENTS.md). ``api/main.py``
 registers them at startup via dependency injection.
 
-Phase 1 adds no new agents. It registers the two Anthropic-backed agents that
-already exist so the registry has a real roster for Phase 2 to route through.
+Phase 1 registered the two Anthropic-backed agents. Phase 2 adds the Manager,
+the Budget Governor, and the deterministic proto-agents the Manager delegates
+to — all of which already existed as loose functions in ``rag/``. **No new
+capability is introduced**: registering an existing function is what lets the
+Manager route to it, and lazy binding is what keeps a monkeypatched module
+attribute (as several tests rely on) still visible at call time.
 """
 
 from __future__ import annotations
@@ -21,6 +25,22 @@ from rag.agents.registry import AgentSpec, lazy, register
 # ── rag-owned agents (self-registered) ───────────────────────
 
 _RAG_AGENTS: tuple[AgentSpec, ...] = (
+    # Tier 0 — control
+    AgentSpec(
+        name="manager",
+        callable=lazy("rag.agents.manager", "run_query_plan"),
+        tier=Tier.CHEAP,
+        parallel_safe=False,  # one orchestrator per run, by definition
+        metrics=("routing_accuracy", "plan_length", "replan_rate", "react_iterations"),
+    ),
+    AgentSpec(
+        name="budget_governor",
+        callable=lazy("rag.agents.budget", "BudgetGovernor"),
+        tier=Tier.CHEAP,  # nominal: the governor is deterministic, never a call
+        parallel_safe=True,
+        metrics=("budget_trips", "degradation_rate"),
+    ),
+    # Tier 1 — answer path
     AgentSpec(
         name="answer_generator",
         callable=lazy("rag.generator", "generate_answer"),
@@ -28,6 +48,42 @@ _RAG_AGENTS: tuple[AgentSpec, ...] = (
         parallel_safe=False,  # terminal step: one answer per run
         metrics=("faithfulness", "answer_relevancy", "citation_density"),
     ),
+    AgentSpec(
+        name="permit_classifier",
+        callable=lazy("rag.permit_classifier", "classify_permit_types"),
+        tier=Tier.CHEAP,  # deterministic today (NLI + keyword), no model call
+        parallel_safe=True,
+        metrics=("permit_type_f1",),
+    ),
+    AgentSpec(
+        name="jurisdiction_resolver",
+        callable=lazy("rag.jurisdiction_resolver", "municipality_from_address"),
+        tier=Tier.CHEAP,
+        parallel_safe=True,
+        metrics=("municipality_accuracy",),
+    ),
+    AgentSpec(
+        name="conflict_detector",
+        callable=lazy("rag.conflict_detector", "detect_conflicts"),
+        tier=Tier.CHEAP,
+        parallel_safe=True,
+        metrics=("detection_precision", "false_alarm_rate"),
+    ),
+    AgentSpec(
+        name="mini_rag_conflicts",
+        callable=lazy("rag.mini_rag", "detect_corpus_upload_conflicts"),
+        tier=Tier.CHEAP,
+        parallel_safe=True,
+        metrics=("detection_precision",),
+    ),
+    AgentSpec(
+        name="project_context",
+        callable=lazy("rag.project_context", "load_project_context"),
+        tier=Tier.CHEAP,
+        parallel_safe=True,
+        metrics=("fact_coverage",),
+    ),
+    # Tier 2 — action agents
     AgentSpec(
         name="design_intent",
         callable=lazy("rag.design_intent", "parse_design_intent"),

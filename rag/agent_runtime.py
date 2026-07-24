@@ -285,6 +285,7 @@ class RuntimeResult:
     stop_reason: str | None
     usage: StepUsage
     autonomy_level: str
+    latency_ms: int = 0
     raw: Any = None
 
 
@@ -297,6 +298,7 @@ def run_agent(
     system: str | Sequence[dict[str, Any]],
     messages: list[dict[str, Any]],
     tier: Tier = Tier.CHEAP,
+    model: str | None = None,
     output_format: type[BaseModel] | None = None,
     effort: str | None = None,
     max_tokens: int = 1024,
@@ -321,8 +323,15 @@ def run_agent(
     and gate their *actions* via :func:`enforce_autonomy`); the resolved level is
     recorded on the step regardless. Raises ``BudgetError`` when the pre-flight
     token count exceeds ``token_budget``.
+
+    ``model`` overrides the tier's ladder rung. It exists for call sites that
+    are mid-migration and must keep sending a model an operator pinned in the
+    environment -- ``rag/generator.py`` reads ``LLM_MODEL``, which is set in
+    production, so folding it into the runtime without this would silently swap
+    the model. Leave it None and the ladder decides, which is the intended
+    steady state.
     """
-    model = model_for_tier(tier)
+    model = model or model_for_tier(tier)
     autonomy_level = (
         enforce_autonomy(agent_name, required_autonomy, scope=autonomy_scope)
         if required_autonomy
@@ -427,5 +436,6 @@ def _finish(
         stop_reason=getattr(resp, "stop_reason", None),
         usage=usage,
         autonomy_level=autonomy_level,
+        latency_ms=latency_ms,
         raw=resp,
     )

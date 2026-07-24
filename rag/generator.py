@@ -4,7 +4,28 @@ rag/generator.py — Provider-backed answer generation with citations
 Takes retrieved chunks and produces a cited answer using the configured LLM.
 
 Import boundary: rag/ → db/, audit/, standard library only (AGENTS.md).
-All model calls go through this module exclusively (AGENTS.md).
+
+**Phase 2 fold.** This module no longer constructs an Anthropic client. Every
+Anthropic call here goes through ``rag/agent_runtime.py::run_agent``, the single
+call site (AGENTS.md). Four things had to be handled deliberately in the fold:
+
+* **The Ollama branch stays local.** ``run_agent`` is Anthropic-only, so
+  ``LLM_PROVIDER=ollama`` still routes to :func:`_generate_with_ollama` and never
+  touches the runtime. Only the Anthropic path was moved.
+* **Tracing moved, it did not double.** ``generate_answer`` used to carry
+  ``@traced("answer_generator")``; ``run_agent`` records a step of its own, so
+  keeping both would have counted every call twice — exactly what
+  ``design_intent`` hit in Phase 1. The decorator now sits on the Ollama helper
+  only, which the runtime never sees, so both paths record exactly one step.
+* **``LLM_MODEL`` still wins.** It is set in production
+  (``terraform/main.tf``: ``claude-haiku-4-5-20251001``). Letting the ladder pick
+  instead would have swapped the model — and, at the MID rung, roughly tripled
+  generation cost — inside the one phase that forbids behaviour changes. The
+  resolved id is passed to ``run_agent`` as an explicit ``model=`` override.
+  Phase 4 drops the override and hands model choice to the Budget Governor.
+* **``max_tokens=1024`` is untouched.** It will truncate ``diy`` and
+  ``hiring_contractor`` answers once the persona fragments land; making it
+  persona-aware is Phase 4's job, not this fold's.
 
 Usage:
     from rag.generator import generate_answer
@@ -20,6 +41,7 @@ from dataclasses import dataclass
 from typing import Any
 
 from audit.logger import traced
+from rag.agent_runtime import Tier, run_agent
 from rag.llm_provider import get_provider_capabilities
 
 log = logging.getLogger(__name__)
@@ -131,22 +153,32 @@ def _env_bool(name: str, default: bool) -> bool:
     return raw.strip().lower() in {"1", "true", "yes", "on"}
 
 
-def _prompt_cache_control() -> dict[str, str] | None:
-    """Build Anthropic cache_control payload from environment."""
-    ttl = os.environ.get("ANTHROPIC_PROMPT_CACHE_TTL", "5m").strip().lower()
-    if ttl not in {"5m", "1h"}:
-        ttl = "5m"
-    cache_control: dict[str, str] = {"type": "ephemeral"}
-    if ttl == "1h":
-        cache_control["ttl"] = "1h"
-    return cache_control
+def _cache_ttl_is_1h() -> bool:
+    """True when ANTHROPIC_PROMPT_CACHE_TTL asks for the 1-hour tier."""
+    return os.environ.get("ANTHROPIC_PROMPT_CACHE_TTL", "5m").strip().lower() == "1h"
 
 
-def _extract_cache_tokens(usage: Any) -> tuple[int, int]:
-    """Return (cache_creation_tokens, cache_read_tokens) from usage."""
-    created = int(getattr(usage, "cache_creation_input_tokens", 0) or 0)
-    read = int(getattr(usage, "cache_read_input_tokens", 0) or 0)
-    return created, read
+def _cache_system_enabled(capabilities: Any) -> bool:
+    """
+    Whether to offer the system block for caching, preserving the old switch.
+
+    This is set deliberately rather than left to the runtime's default. The
+    operator-facing knob (ANTHROPIC_PROMPT_CACHE_ENABLED, default off) keeps its
+    meaning, and the runtime's measurement is the second gate: it attaches a
+    breakpoint only when count_tokens says the block clears the model minimum.
+    Today's ~400-token system prompt is far below the 4096 floor, so this is a
+    no-op either way -- which is exactly why it must be a decision and not an
+    accident. It starts mattering when Phase 4's fragment library makes the
+    prefix large enough to cache.
+    """
+    requested = _env_bool("ANTHROPIC_PROMPT_CACHE_ENABLED", False)
+    if requested and not capabilities.supports_prompt_caching:
+        log.info(
+            "Prompt caching requested but provider '%s' does not support it.",
+            capabilities.provider,
+        )
+        return False
+    return requested
 
 
 def _build_user_message(
@@ -170,6 +202,7 @@ def _build_user_message(
     return "\n".join(parts)
 
 
+@traced("answer_generator", prompt_version=PROMPT_VERSION)
 def _generate_with_ollama(
     query: str,
     chunks: list[dict[str, Any]],
@@ -180,7 +213,14 @@ def _generate_with_ollama(
     project_context: dict[str, Any] | None = None,
     system_prompt_override: str | None = None,
 ) -> GenerationResult:
-    """Generate answer using local Ollama runtime."""
+    """
+    Generate answer using local Ollama runtime.
+
+    Carries @traced because ``run_agent`` never sees this path -- the runtime is
+    Anthropic-only. The decorator lives here rather than on ``generate_answer``
+    so exactly one step is recorded per call on both branches; leaving it on the
+    public function would double-count every Anthropic call.
+    """
     import requests
 
     base_url = os.environ.get("OLLAMA_BASE_URL", "http://localhost:11434").rstrip("/")
@@ -354,7 +394,6 @@ def _extract_citations(
 # ── Core generation function ─────────────────────────────────
 
 
-@traced("answer_generator", prompt_version=PROMPT_VERSION)
 def generate_answer(
     query: str,
     chunks: list[dict[str, Any]],
@@ -402,85 +441,91 @@ def generate_answer(
             project_context=project_context,
             system_prompt_override=system_prompt_override,
         )
+    return _generate_with_runtime(
+        query,
+        chunks,
+        model=model,
+        max_tokens=max_tokens,
+        temperature=temperature,
+        project_context=project_context,
+        system_prompt_override=system_prompt_override,
+        capabilities=capabilities,
+    )
 
-    import anthropic
 
-    api_key = os.environ.get("ANTHROPIC_API_KEY")
-    if not api_key:
+def _generate_with_runtime(
+    query: str,
+    chunks: list[dict[str, Any]],
+    *,
+    model: str | None,
+    max_tokens: int,
+    temperature: float,
+    project_context: dict[str, Any] | None,
+    system_prompt_override: str | None,
+    capabilities: Any,
+) -> GenerationResult:
+    """
+    Generate through ``rag/agent_runtime.py`` — the single Anthropic call site.
+
+    The runtime owns budgeting, the cache decision, retries, autonomy, and the
+    trace step. This function only assembles the prompt and reshapes the result
+    into the ``GenerationResult`` contract every caller already expects. The
+    ``model=`` override is deliberate: see the module docstring.
+    """
+    if not os.environ.get("ANTHROPIC_API_KEY"):
         raise RuntimeError(
             "ANTHROPIC_API_KEY is not set. "
             "Add it to .env before using Anthropic generation."
         )
-
-    model = model or os.environ.get("LLM_MODEL", "claude-haiku-4-5-20251001")
-    cache_requested = _env_bool("ANTHROPIC_PROMPT_CACHE_ENABLED", False)
-    cache_enabled = cache_requested and capabilities.supports_prompt_caching
-    if cache_requested and not capabilities.supports_prompt_caching:
-        log.info(
-            "Prompt caching requested but provider '%s' does not support it.",
-            capabilities.provider,
-        )
-
-    # Format context
-    user_message = _build_user_message(query, chunks, project_context)
-
-    t0 = time.perf_counter()
-
-    client = anthropic.Anthropic(api_key=api_key)
-    cache_control = _prompt_cache_control()
-    system_payload: Any
-    system_prompt_str = _build_system_prompt(project_context, system_prompt_override)
-    if cache_enabled:
-        system_payload = [
-            {
-                "type": "text",
-                "text": system_prompt_str,
-                "cache_control": cache_control,
-            }
-        ]
-    else:
-        system_payload = system_prompt_str
-    response = client.messages.create(
-        model=model,
+    resolved = model or os.environ.get("LLM_MODEL", "claude-haiku-4-5-20251001")
+    result = run_agent(
+        "answer_generator",
+        system=_build_system_prompt(project_context, system_prompt_override),
+        messages=[
+            {"role": "user", "content": _build_user_message(query, chunks, project_context)}
+        ],
+        tier=Tier.MID,
+        model=resolved,
         max_tokens=max_tokens,
         temperature=temperature,
-        system=system_payload,
-        messages=[{"role": "user", "content": user_message}],
+        cache_system=_cache_system_enabled(capabilities),
+        cache_ttl_1h=_cache_ttl_is_1h(),
+        prompt_version=PROMPT_VERSION,
+        input_parts=(query, [c.get("id") for c in chunks]),
     )
+    return _to_generation_result(query, chunks, result)
 
-    latency_ms = int((time.perf_counter() - t0) * 1000)
 
-    answer = response.content[0].text
+def _to_generation_result(
+    query: str, chunks: list[dict[str, Any]], result: Any
+) -> GenerationResult:
+    """Reshape a ``RuntimeResult`` into this module's public contract."""
+    answer = result.text
     citations = _extract_citations(answer, chunks)
-
-    cache_create_tokens, cache_read_tokens = _extract_cache_tokens(response.usage)
-
-    result = GenerationResult(
+    generation = GenerationResult(
         query=query,
         answer=answer,
         citations=citations,
-        model=model,
-        input_tokens=response.usage.input_tokens,
-        output_tokens=response.usage.output_tokens,
-        latency_ms=latency_ms,
+        model=result.model,
+        input_tokens=result.usage.tokens_in,
+        output_tokens=result.usage.tokens_out,
+        latency_ms=result.latency_ms,
         chunk_count=len(chunks),
-        cache_read_input_tokens=cache_read_tokens,
-        cache_creation_input_tokens=cache_create_tokens,
-        stop_reason=getattr(response, "stop_reason", None),
+        cache_read_input_tokens=result.usage.cache_read,
+        cache_creation_input_tokens=result.usage.cache_write,
+        stop_reason=result.stop_reason,
     )
-
     log.info(
         "Generated answer: %d chars, %d citations, %d+%d tokens, %dms, cache create/read=%d/%d",
         len(answer),
         len(citations),
-        result.input_tokens,
-        result.output_tokens,
-        result.latency_ms,
-        cache_create_tokens,
-        cache_read_tokens,
+        generation.input_tokens,
+        generation.output_tokens,
+        generation.latency_ms,
+        generation.cache_creation_input_tokens,
+        generation.cache_read_input_tokens,
     )
-
-    return result
+    return generation
 
 
 def _parse_json_response(content: str) -> dict[str, Any]:
@@ -554,25 +599,21 @@ def generate_kickoff_chat_response(
         content = response.json().get("message", {}).get("content", "")
         return _parse_json_response(content)
 
-    import anthropic
-
-    api_key = os.environ.get("ANTHROPIC_API_KEY")
-    if not api_key:
+    if not os.environ.get("ANTHROPIC_API_KEY"):
         raise RuntimeError("ANTHROPIC_API_KEY is not set.")
 
-    model = os.environ.get("LLM_MODEL", "claude-haiku-4-5-20251001")
-    client = anthropic.Anthropic(api_key=api_key)
-
-    anthropic_messages = []
-    for msg in history:
-        anthropic_messages.append({"role": msg["role"], "content": msg["content"]})
-
-    response = client.messages.create(
-        model=model,
+    # Folded into the runtime alongside generate_answer: this was the second
+    # inline client in this module, and AGENTS.md's rule is not per-function.
+    # Same LLM_MODEL override for the same reason -- the id is pinned in prod.
+    result = run_agent(
+        "kickoff_chat",
+        system=sys_prompt,
+        messages=[{"role": m["role"], "content": m["content"]} for m in history],
+        tier=Tier.CHEAP,
+        model=os.environ.get("LLM_MODEL", "claude-haiku-4-5-20251001"),
         max_tokens=1024,
         temperature=0.0,
-        system=sys_prompt,
-        messages=anthropic_messages,
+        cache_system=False,  # per-project prompt: never a stable cacheable prefix
+        input_parts=(address, municipality, len(history)),
     )
-    content = response.content[0].text
-    return _parse_json_response(content)
+    return _parse_json_response(result.text)

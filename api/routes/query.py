@@ -4,7 +4,19 @@ api/routes/query.py — POST /query and POST /query/answer endpoints
 /query: retrieval only — returns ranked chunks with metadata.
 /query/answer: retrieval + generation — returns a cited answer from Claude.
 
-Import boundary: api/ → rag/, db/, audit/, standard library only (AGENTS.md).
+**Phase 2.** The hand-wired chain that used to live inside ``query_answer`` —
+classify, resolve jurisdiction, retrieve, guard, detect conflicts, load project
+context, generate — now lives in ``rag/agents/manager.py``. This module keeps
+only what is genuinely HTTP's: request identity, the LangSmith root span, the
+mapping from a plan failure to a status code, and response assembly. The port is
+behaviour-preserving by construction; ``tests/test_query_answer_route.py``
+asserts it without a single edit to its expectations.
+
+Retrieval and the grounding thresholds are passed *into* the Manager rather than
+imported by it. ``rag/agents/`` may not depend on ``api/``, and these knobs are
+configured here — so the route, which is allowed to see both sides, injects them.
+
+Import boundary: api/ → rag/, commerce/, db/, audit/, standard library (AGENTS.md).
 """
 
 from __future__ import annotations
@@ -13,13 +25,12 @@ import logging
 import os
 import time
 from datetime import UTC, datetime
-from typing import Annotated, Any
+from typing import Annotated, Any, ClassVar
 from uuid import UUID
 
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Request
 
 from api.auth import get_current_user
-from audit.logger import annotate_run, traced_run
 from api.schemas import (
     AHJDisclaimer,
     AnswerResponse,
@@ -31,9 +42,11 @@ from api.schemas import (
     QueryRequest,
     QueryResponse,
 )
+from audit.logger import annotate_run, traced_run
 from db.client import get_jurisdiction
+from rag.agents.manager import ManagerDeps, ManagerError, ManagerRequest, run_query_plan
 from rag.generator import PROMPT_VERSION
-from rag.retriever import RetrievalResult, retrieve, retrieve_with_project
+from rag.retriever import retrieve, retrieve_with_project
 
 log = logging.getLogger(__name__)
 
@@ -120,6 +133,80 @@ def _end_trace(run: Any, outputs: dict[str, Any] | None = None, error: str | Non
             patched.result()
     except Exception as exc:
         log.warning("LangSmith trace end failed: %s", exc)
+
+
+class _LangSmithObserver:
+    """
+    Bridge the Manager's step callbacks onto this route's LangSmith spans.
+
+    The Manager cannot open spans itself — that would put a LangSmith dependency
+    inside ``rag/agents/``. It announces stage boundaries instead, and this
+    adapter reproduces the exact ``api_retrieval`` / ``api_generation`` children
+    the route emitted before Phase 2.
+    """
+
+    _SPANS: ClassVar[dict[str, tuple[str, str]]] = {
+        "retrieval": ("api_retrieval", "tool"),
+        "generation": ("api_generation", "llm"),
+    }
+
+    def __init__(self, root: Any, *, session_id: str, request_id: str) -> None:
+        """Create spans beneath ``root``, tagging generation with request identity."""
+        self._root = root
+        self._session_id = session_id
+        self._request_id = request_id
+        self._open: dict[str, Any] = {}
+
+    def started(self, stage: str, inputs: dict[str, Any]) -> None:
+        """Open the child span for a stage."""
+        name, run_type = self._SPANS[stage]
+        extra = None
+        if stage == "generation":
+            inputs = {**inputs, "session_id": self._session_id, "request_id": self._request_id}
+            extra = {"metadata": {"prompt_version": PROMPT_VERSION}}
+        self._open[stage] = _start_trace(
+            name=name, run_type=run_type, inputs=inputs, parent=self._root, extra=extra
+        )
+
+    def finished(self, stage: str, outputs: dict[str, Any]) -> None:
+        """Close a stage's span with its outputs."""
+        _end_trace(self._open.pop(stage, None), outputs=outputs)
+
+    def failed(self, stage: str, error: str) -> None:
+        """Close a stage's span with an error."""
+        _end_trace(self._open.pop(stage, None), error=error)
+
+
+def _root_trace_error(exc: ManagerError) -> str:
+    """
+    The string the root span records for a plan failure.
+
+    An empty corpus reports the short form on the trace and the long form to the
+    caller — preserved verbatim from the pre-Phase-2 route.
+    """
+    return "No relevant chunks found." if exc.kind == "empty" else str(exc)
+
+
+def _http_error(exc: ManagerError) -> HTTPException:
+    """Map a plan failure onto the status code the route has always returned."""
+    status = 422 if exc.stage == "grounding" else 500
+    return HTTPException(status_code=status, detail=str(exc))
+
+
+def _build_manager_deps(observer: Any) -> ManagerDeps:
+    """
+    Assemble the Manager's injected collaborators.
+
+    ``retrieve_with_project`` and the two grounding thresholds are read from this
+    module at call time, so an operator's env override — and a test's patch —
+    both still apply.
+    """
+    return ManagerDeps(
+        retrieve=retrieve_with_project,
+        min_chunks=MIN_GROUNDED_CHUNKS,
+        min_top_sim=MIN_GROUNDED_TOP_SIM,
+        observer=observer,
+    )
 
 
 @router.post(
@@ -218,9 +305,6 @@ def query_answer(
     current_user: Annotated[dict, Depends(get_current_user)],
 ) -> AnswerResponse:
     """Retrieve chunks and generate a cited answer via Claude."""
-    from rag.generator import generate_answer
-    from rag.permit_classifier import classify_permit_types
-
     started_at = time.perf_counter()
     session_id = request.headers.get("X-Client-Session-Id", "").strip() or "unknown"
     request_id = request.headers.get("X-Client-Request-Id", "").strip() or f"api-{int(time.time() * 1000)}"
@@ -241,33 +325,6 @@ def query_answer(
         project_id=body.project_id,
         session_id=session_id,
     )
-
-    # Sprint 3 Task 11: classify permit types (non-blocking)
-    try:
-        permit_types = classify_permit_types(body.query)
-        log.info("permit_types detected: %s", permit_types)
-    except Exception as exc:
-        log.warning("permit_classifier failed (%s) — defaulting to []", exc)
-        permit_types = []
-
-    # Sprint 5 Task 14C: auto-resolve municipality from address when not explicit
-    resolved_municipality: str | None = None
-    effective_municipality = body.municipality
-    if not effective_municipality and body.address:
-        try:
-            from rag.jurisdiction_resolver import municipality_from_address
-            resolved = municipality_from_address(body.address)
-            if resolved:
-                resolved_municipality = resolved
-                effective_municipality = resolved
-                log.info(
-                    "address geocoded to municipality='%s' for address=%r",
-                    resolved, body.address,
-                )
-            else:
-                log.info("address geocoding returned no match for %r", body.address)
-        except Exception as exc:
-            log.warning("jurisdiction_resolver failed (%s) — skipping auto-municipality", exc)
 
     metadata = {"prompt_version": PROMPT_VERSION}
     if current_user and isinstance(current_user, dict):
@@ -292,178 +349,32 @@ def query_answer(
         extra={"metadata": metadata} if metadata else None,
     ) if tracing_on else None
 
-    # 1. Retrieve
-    retrieval_trace = _start_trace(
-        name="api_retrieval",
-        run_type="tool",
-        inputs={"query": body.query, "municipality": effective_municipality, "top_k": body.top_k},
-        parent=root_trace,
+    # 1-2. Delegate the whole chain to the Manager (Phase 2). Ordering, logging,
+    # non-blocking failure handling, and the grounding guard all live there now.
+    observer = _LangSmithObserver(
+        root_trace, session_id=session_id, request_id=request_id
     ) if tracing_on else None
     try:
-        if body.chunk_ids:
-            from uuid import UUID
-
-            from db.client import get_chunks_by_ids
-
-            ids = [UUID(cid) for cid in body.chunk_ids]
-            chunk_rows = get_chunks_by_ids(ids)
-            result = RetrievalResult(
+        plan = run_query_plan(
+            ManagerRequest(
                 query=body.query,
-                chunks=chunk_rows,
                 top_k=body.top_k,
-                municipality=effective_municipality,
-                latency_ms=0,
-            )
-        else:
-            result = retrieve_with_project(
-                body.query,
-                project_id=body.project_id,
-                top_k=body.top_k,
-                municipality=effective_municipality,
+                municipality=body.municipality,
+                address=body.address,
                 min_similarity=body.min_similarity,
-            )
-        _end_trace(
-            retrieval_trace,
-            outputs={
-                "num_results": result.num_results,
-                "top_similarity": result.top_similarity,
-                "latency_retrieval_ms": result.latency_ms,
-                "unique_doc_ids": result.unique_documents,
-            },
+                project_id=body.project_id,
+                chunk_ids=body.chunk_ids,
+            ),
+            _build_manager_deps(observer),
         )
-    except Exception as exc:
-        log.exception("Retrieval failed for query: %s", body.query)
-        _end_trace(retrieval_trace, error=f"Retrieval error: {exc}")
-        _end_trace(root_trace, error=f"Retrieval error: {exc}")
-        raise HTTPException(
-            status_code=500,
-            detail=f"Retrieval error: {exc}",
-        ) from exc
+    except ManagerError as exc:
+        _end_trace(root_trace, error=_root_trace_error(exc))
+        raise _http_error(exc) from exc
 
-    if not result.chunks:
-        _end_trace(root_trace, error="No relevant chunks found.")
-        raise HTTPException(
-            status_code=422,
-            detail="No relevant chunks found for this query.",
-        )
-
-    if (
-        result.num_results < MIN_GROUNDED_CHUNKS
-        or result.top_similarity < MIN_GROUNDED_TOP_SIM
-    ):
-        low_conf_msg = (
-            "Insufficient retrieval confidence for grounded answer. "
-            f"chunks={result.num_results}, top_similarity={result.top_similarity:.4f}, "
-            f"required_chunks>={MIN_GROUNDED_CHUNKS}, "
-            f"required_top_similarity>={MIN_GROUNDED_TOP_SIM:.2f}"
-        )
-        _end_trace(root_trace, error=low_conf_msg)
-        raise HTTPException(
-            status_code=422,
-            detail=low_conf_msg,
-        )
-
-    # Sprint 5 Task 15: lightweight conflict detection (non-blocking)
-    conflict_warnings: list[ConflictWarning] = []
-    try:
-        from rag.conflict_detector import detect_conflicts
-        raw_conflicts = detect_conflicts(result.chunks)
-        conflict_warnings = [
-            ConflictWarning(
-                subject=c.subject,
-                chunk_a_doc_id=c.chunk_a.get("doc_id", ""),
-                chunk_a_index=int(c.chunk_a.get("chunk_index", 0)),
-                chunk_a_authority=str(c.chunk_a.get("authority_level", "")),
-                chunk_b_doc_id=c.chunk_b.get("doc_id", ""),
-                chunk_b_index=int(c.chunk_b.get("chunk_index", 0)),
-                chunk_b_authority=str(c.chunk_b.get("authority_level", "")),
-                detail=c.detail,
-            )
-            for c in raw_conflicts
-        ]
-        if conflict_warnings:
-            log.info("conflict_warnings: %d conflict(s) detected", len(conflict_warnings))
-    except Exception as exc:
-        log.warning("conflict_detector failed (%s) — skipping", exc)
-
-    if body.project_id:
-        try:
-            from rag.mini_rag import detect_corpus_upload_conflicts
-
-            corpus_only = [c for c in result.chunks if int(c.get("source_tier", 1)) == 1]
-            project_only = [c for c in result.chunks if int(c.get("source_tier", 1)) >= 2]
-            for warn in detect_corpus_upload_conflicts(corpus_only, project_only):
-                conflict_warnings.append(
-                    ConflictWarning(
-                        subject=warn["subject"],
-                        chunk_a_doc_id=corpus_only[0].get("doc_id", "") if corpus_only else "",
-                        chunk_a_index=int(corpus_only[0].get("chunk_index", 0)) if corpus_only else 0,
-                        chunk_a_authority=str(corpus_only[0].get("authority_level", "")) if corpus_only else "",
-                        chunk_b_doc_id=project_only[0].get("doc_id", "") if project_only else "",
-                        chunk_b_index=int(project_only[0].get("chunk_index", 0)) if project_only else 0,
-                        chunk_b_authority=str(project_only[0].get("authority_level", "")) if project_only else "",
-                        detail=warn["detail"],
-                    )
-                )
-        except Exception as exc:
-            log.warning("mini_rag conflict check failed (%s)", exc)
-
-    # 2. Generate answer
-    project_context = None
-    if body.project_id:
-        try:
-            from rag.project_context import load_project_context
-
-            project_context = load_project_context(body.project_id)
-        except Exception as exc:
-            log.warning("project_context load failed (%s)", exc)
-
-    generation_trace = _start_trace(
-        name="api_generation",
-        run_type="llm",
-        inputs={
-            "query": body.query,
-            "session_id": session_id,
-            "request_id": request_id,
-            "num_chunks": result.num_results,
-            "num_chunks_prompted": len(result.passing_chunks),
-        },
-        parent=root_trace,
-        extra={"metadata": {"prompt_version": PROMPT_VERSION}},
-    ) if tracing_on else None
-    try:
-        # passing_chunks only: reranker-rejected chunks must not be prompted
-        # or billed. generate_answer re-filters defensively for other callers.
-        gen = generate_answer(
-            body.query, result.passing_chunks, project_context=project_context
-        )
-        _end_trace(
-            generation_trace,
-            outputs={
-                "model": gen.model,
-                "input_tokens": gen.input_tokens,
-                "output_tokens": gen.output_tokens,
-                "latency_generation_ms": gen.latency_ms,
-                "citation_count": len(gen.citations),
-            },
-        )
-    except RuntimeError as exc:
-        # ANTHROPIC_API_KEY not set
-        log.error("Generator config error: %s", exc)
-        _end_trace(generation_trace, error=str(exc))
-        _end_trace(root_trace, error=str(exc))
-        raise HTTPException(
-            status_code=500,
-            detail=str(exc),
-        ) from exc
-    except Exception as exc:
-        log.exception("Generation failed for query: %s", body.query)
-        _end_trace(generation_trace, error=f"Generation error: {exc}")
-        _end_trace(root_trace, error=f"Generation error: {exc}")
-        raise HTTPException(
-            status_code=500,
-            detail=f"Generation error: {exc}",
-        ) from exc
+    result = plan.retrieval
+    gen = plan.generation
+    permit_types = plan.permit_types
+    conflict_warnings = [ConflictWarning(**w) for w in plan.conflict_warnings]
 
     # 3. Build response
     all_chunks = [
@@ -559,8 +470,8 @@ def query_answer(
         chunks=cited_chunks,
         diagnostics=diagnostics,
         permit_types=permit_types,
-        ahj_disclaimer=_build_ahj_disclaimer(effective_municipality),
-        resolved_municipality=resolved_municipality,
+        ahj_disclaimer=_build_ahj_disclaimer(plan.effective_municipality),
+        resolved_municipality=plan.resolved_municipality,
         conflict_warnings=conflict_warnings,
     )
     # Insert query log in Postgres (background, non-blocking)
