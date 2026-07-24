@@ -103,8 +103,11 @@ def _print_summary(reports: list) -> None:
         if any(p.field == "doc_type" and p.current in (None, "", "other") for p in r.proposals):
             catchall += 1
 
+    errored = by_result.get("error", 0)
     print("=" * 60)
-    print(f"  Documents validated : {total}")
+    print(f"  Documents validated : {total - errored} / {total}")
+    if errored:
+        print(f"  ERRORED (dropped)   : {errored}  <-- see per-doc detail")
     print(f"  Results             : {by_result}")
     print(f"  Null effective_date : {null_dates}")
     print(f"  Empty subject_tags  : {empty_tags}")
@@ -120,8 +123,10 @@ def _print_detail(reports: list) -> None:
     print("\nPer-document detail")
     print("-" * 60)
     for r in reports:
-        icon = {"pass": "✅", "needs_review": "📝", "fail": "❌"}.get(r.result, "❓")
+        icon = {"pass": "✅", "needs_review": "📝", "fail": "❌", "error": "💥"}.get(r.result, "❓")
         print(f"{icon} {r.doc_id}  [{r.result}]")
+        if getattr(r, "error", None):
+            print(f"    error: {r.error}")
         if r.enum_failures:
             print(f"    enum: {'; '.join(r.enum_failures)}")
         if r.completeness_failures:

@@ -201,9 +201,10 @@ class ValidationReport:
     supersession_candidates: list[str] = field(default_factory=list)
     contradictions: list[str] = field(default_factory=list)
     llm_used: bool = False
-    result: str = "pass"  # 'pass' | 'needs_review' | 'fail'
+    result: str = "pass"  # 'pass' | 'needs_review' | 'fail' | 'error'
     action_item_ids: list[str] = field(default_factory=list)
     drafted: bool = False
+    error: str | None = None  # set only on result == 'error' (the LLM/DB blew up)
 
     def to_detail(self) -> dict[str, Any]:
         """Serialise for the ingestion_verifications.detail JSONB column."""
@@ -217,6 +218,7 @@ class ValidationReport:
             "contradictions": self.contradictions,
             "llm_used": self.llm_used,
             "drafted": self.drafted,
+            "error": self.error,
         }
 
 
@@ -383,7 +385,10 @@ def assess_with_llm(
         messages=[{"role": "user", "content": _build_assessment_prompt(doc, sampled)}],
         tier=Tier.MID,  # content-vs-metadata inference is a sonnet-class task
         output_format=MetadataAssessment,
-        max_tokens=1024,
+        # Four proposals, each with an excerpt + rationale: 1024 truncates the
+        # structured JSON on verbose docs, which fails the parse and drops the
+        # document. 2048 gives the schema headroom.
+        max_tokens=2048,
         temperature=0.0,
         input_parts=(doc.get("doc_id"), [c.get("id") for c in sampled]),
         client=client,
@@ -664,5 +669,10 @@ def validate_corpus(
                 save_verification=save_verification, client=client, all_doc_ids=all_ids,
             ))
         except Exception as exc:  # one bad doc must not abort the sweep
+            # Record it as an error report rather than dropping it silently —
+            # a swallowed doc looks identical to a clean pass in the totals.
             log.error("validate_document failed for %s: %s", doc_id, exc)
+            reports.append(ValidationReport(
+                doc_id=doc_id, result="error", error=f"{type(exc).__name__}: {exc}",
+            ))
     return reports

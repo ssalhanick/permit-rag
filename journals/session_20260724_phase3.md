@@ -137,6 +137,18 @@ temperature unchanged. Tests: `test_agent_runtime.py` +2 (retry-then-succeed;
 learned-model-skips-from-start). Suite now **438**. `verify_phase2 --no-db` still
 18/18. **Machine B must pull `agents/phase-3` and re-run the backfill.**
 
+Second machine-B finding: the first clean LLM run validated only **11 of 19**
+docs — 8 errored in the model call and `validate_corpus` swallowed them (looked
+identical to a pass in the totals). Two fixes: (1) the assessment `max_tokens`
+was 1024, which truncates the 4-proposal structured JSON on verbose docs and
+fails the parse → raised to **2048**; (2) `validate_corpus` now records a
+`result="error"` report (with the exception string) instead of dropping the doc,
+and the backfill report prints errored docs as 💥 with an "ERRORED (dropped)"
+count. A silent drop can no longer masquerade as a clean sweep. Corpus is **19
+docs** on machine B (the arch doc's "27" is stale). Deterministic pass: 19/19
+`needs_review`, all missing `effective_date` + `checksum_sha256` (checksums are a
+separate source-identity backfill, not the validator's job).
+
 ## Still open at session end (machine B)
 
 - Apply migration 028; run the live validator + backfill; verify the dashboard
