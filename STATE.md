@@ -50,25 +50,57 @@ behaviour change.
   + DB autonomy checks + a live 2-call probe that asserts
   `cache_read_input_tokens > 0` on the second call (the caching guarantee).
 
-## Verification — LOCAL
+## Verification — which machine runs what
+
+**This split is the single biggest time-waster in this project. Check it before
+proposing any command.**
+
+### Machine A (repo machine) — EMPTY database, no `documents/raw/`
+
+Only these work here. None of them need a database:
 
 ```powershell
 .\.venv\Scripts\Activate.ps1
 py -m pytest tests/test_agent_runtime.py tests/test_agent_registry.py -v
-py -m pytest tests/ -q                          # full suite: 315 passed
+py -m pytest tests/ -q                          # full suite: 315 passed, fully mocked
+py -m ruff check rag/ tests/
+python -m compileall rag/ api/ audit/ db/
+```
+
+### Machine B (corpus machine) — everything DB- or corpus-dependent
+
+These **fail on machine A regardless of the `--local` flag**, because `--local`
+forces the dotenv file but cannot conjure a corpus: `verify_phase0.py`,
+`verify_phase1.py`, `check_migrations.py`, `check_migration_details.py`,
+`ragas_eval`, `eval_guard`, `ingest_documents.py`, `backfill_*.py`.
+
+```powershell
 py scripts/verify_phase1.py --local             # runtime + registry + live probe
-py scripts/verify_phase1.py --local --no-llm     # skip the two real haiku calls
+py scripts/verify_phase1.py --local --no-llm    # skip the two real haiku calls
+py scripts/verify_phase0.py --local             # Phase 0 regression
+py scripts/check_migrations.py --local          # migration drift + corpus size
+py -m evaluation.ragas_eval --export            # --export or eval_guard self-compares
 ```
 
 The live probe in `verify_phase1.py` makes **two** real haiku calls (fractions
 of a cent) behind a >4096-token cached prefix, so it can prove caching works.
 Needs the trace tables (026/027) and `ANTHROPIC_API_KEY`. `--no-llm` skips it.
 
-## Verification — PROD: not started for Phase 1
+**Status:** `verify_phase1.py` passed 10/10 on both the machine-B local DB and
+prod RDS on 2026-07-24, including the `cache_read_input_tokens > 0` assertion.
 
-Phase 1 is backend code with **no migration**, so the prod path is: run pytest
-by hand, merge to `deployment/sites`, let GHA deploy the backend. See the
-deploy-command block at the bottom.
+## Verification — PROD: DONE for Phase 1 (2026-07-24)
+
+Phase 1 is backend code with **no migration**. Deployed via GHA (push to
+`deployment/sites`, green) and `py scripts/verify_phase1.py` passed 10/10
+against prod RDS, including the live caching assertion.
+
+Prod runs **anthropic 0.104.1**, which was confirmed to support the whole
+runtime — `messages.parse(output_format=...)`, `.parsed_output`, `count_tokens`,
+`output_config`. It does **not** have `OverloadedError`; the retry list now
+resolves error classes by name so it degrades cleanly across SDK versions.
+
+**Not yet pushed:** the `anthropic>=0.104.1` floor in `pyproject.toml`.
 
 ## Blocked on / needs your attention (punch list)
 
@@ -79,20 +111,25 @@ deploy-command block at the bottom.
    it on an already-fixed table will error. Run the check command first (below)
    and only apply if it reports the fix missing. This is a Phase 0 loose end, not
    a Phase 1 dependency.
-2. **Live caching assertion is unverified on this machine** — this repo's DB is
-   empty and it has no `ANTHROPIC_API_KEY` wired for a spend. Run
-   `py scripts/verify_phase1.py --local` on the **corpus machine** to confirm
-   `cache_read_input_tokens > 0`. The unit test proves the *decision* logic; only
-   a live call proves the API honours the breakpoint.
+2. **Push the `anthropic>=0.104.1` floor** in `pyproject.toml` (commit written,
+   not yet pushed). The Dockerfile reads deps straight from `pyproject.toml`, so
+   the old `>=0.25.0` pin let a build resolve a version with no `messages.parse`
+   — design_intent would fail at runtime instead of at build time.
 3. **Mobile OAuth deep links (deferred)** — M0-6/M0-7 device Google/Apple roundtrip.
+
+_(Resolved 2026-07-24: the live caching assertion is no longer open —
+`verify_phase1.py` passed 10/10 on the corpus machine and on prod.)_
 
 ## Next tasks
 
-1. Run `py scripts/verify_phase1.py --local` on the corpus machine (live caching).
+1. Push the `pyproject.toml` anthropic floor (punch item 2).
 2. Phase 2 — Manager + artifact store + Budget Governor, porting
-   `api/routes/query.py` behind the Manager with **zero behaviour change**
-   (`tests/test_query_answer_route.py` and RAGAs must be identical).
-3. Confirm/close the prod 027 loose end (punch item 1).
+   `api/routes/query.py` behind the Manager with **zero behaviour change**, in
+   its own chat and its own branch (`agents/phase-2`). Also folds
+   `rag/generator.py`'s inline Anthropic call into `run_agent` — the last
+   remaining call site. Gate is split: `tests/test_query_answer_route.py` on
+   machine A, RAGAs on machine B.
+3. Confirm/close the prod 027 loose end (punch item 1) — machine B.
 
 ## Migration drift — check before touching any database
 
@@ -162,7 +199,10 @@ already applied by name on multiple DBs). The dedupe correction is therefore
 ## Canonical validation
 
 ```powershell
+# Machine A (repo machine) — no DB needed
 py -m pytest tests/test_agent_runtime.py tests/test_agent_registry.py -v
+
+# Machine B (corpus machine) — needs the corpus + trace tables
 py scripts/verify_phase1.py --local
 # Prod corpus smoke: GET https://permits.scottsalhanick.com/api/documents  (not [])
 ```
