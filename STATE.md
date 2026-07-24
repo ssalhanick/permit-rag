@@ -77,9 +77,15 @@ and warns when the candidate predates the baseline (tests added).
 
 ### Verification — PROD: not started
 
+Deploy via **GitHub Actions** (`.github/workflows/deploy.yml`), not `deploy.ps1`.
+GHA triggers on push to `deployment/sites` (or manual `workflow_dispatch`) and is
+path-filtered: Phase 0 is backend-only, so deploy-backend runs and deploy-frontend
+is skipped. **GHA does NOT run migrations or pytest** — do both by hand first.
+
 - [x] RAGAs gate — avg 0.910, q1 improved by 0.188 (see above)
-- [ ] `py scripts/apply_migration.py db/migrations/027_agent_action_item_dedupe.sql`
-- [ ] `.\scripts\deploy.ps1 -BackendOnly`
+- [ ] `py -m pytest tests/ -q` (GHA only runs `compileall`, not the suite)
+- [ ] `py scripts/apply_migration.py db/migrations/027_agent_action_item_dedupe.sql` (GHA never touches RDS)
+- [ ] Merge `agents/init` → `deployment/sites` and push → GHA deploys backend
 - [ ] `py scripts/verify_phase0.py` (no `--local`; confirm the banner names RDS)
 
 ## Verification commands

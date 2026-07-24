@@ -58,6 +58,7 @@ py -m pytest tests/test_commerce_takeoff.py tests/test_commerce_product_resolver
 - [ ] [Cognito Groups RBAC](docs/cognito_groups_rbac.md) — Cognito groups as source of truth for `member` / `admin` / `superadmin`; staff bypass for see-everything; keep project_members + ops token
 
 ### Upcoming
+- [ ] **CI: pytest gate on deploy** — add a `pytest` job to `.github/workflows/deploy.yml` that `deploy-backend` depends on, so a failing suite blocks the deploy. Today the workflow runs only `python -m compileall` (syntax), not the 292-test suite, so a compiling-but-failing commit can ship to prod. (Migrations stay manual — CI has no RDS reach.)
 - [ ] **SerpApi production key** — add `SERPAPI_API_KEY` to ECS task env / SSM after account signup (blocker for live HD prices; mocks work until then)
 - [ ] Add ability to update existing documents
 - [ ] Mobile OAuth deep links (M0-6/M0-7) + Firebase push (`google-services.json`)
