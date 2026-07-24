@@ -40,7 +40,7 @@ py -m pytest tests/test_commerce_takeoff.py tests/test_commerce_product_resolver
 ## TODO
 
 ### In Progress
-- [ ] **[Agent Architecture](docs/agent_architecture.md)** — 26-agent roster under one Manager, with prompt routing, a feedback loop, autonomy levels, and a token protocol. **Phase 0 (trace store) is done**; Phase 1 is the agent runtime + registry. Phases 0–5 are the demo slice.
+- [ ] **[Agent Architecture](docs/agent_architecture.md)** — 26-agent roster under one Manager, with prompt routing, a feedback loop, autonomy levels, and a token protocol. **Phase 0 (trace store) is verified on local** via `py scripts/verify_phase0.py --local`; prod push is gated on a RAGAs re-baseline. Phase 1 is the agent runtime + registry. Phases 0–5 are the demo slice.
 
 ### Planned
 - [ ] [Agent Architecture Phase 1](docs/agent_architecture.md) — `rag/agent_runtime.py` as the single Anthropic call site (structured outputs, model ladder, caching, autonomy enforcement, automatic tracing) plus the `AgentSpec` registry

@@ -69,6 +69,19 @@ def run_guard(
     max_q1_drop: float,
 ) -> tuple[bool, list[str]]:
     """Evaluate candidate export against avg and q1 faithfulness guardrails."""
+    # Comparing an export to itself yields drop=0.000 and passes while proving
+    # nothing. The usual cause is running `ragas_eval` without --export, so no
+    # new file is written and _latest_ragas_export falls back to the baseline.
+    if candidate_path.resolve() == baseline_path.resolve():
+        return False, [
+            f"Candidate: {candidate_path}",
+            f"Baseline:  {baseline_path}",
+            "FAIL: candidate and baseline are the same file — nothing was compared.",
+            "  RAGAs writes a results file only when --export is passed:",
+            "    py -m evaluation.ragas_eval --export",
+            "  then re-run this guard.",
+        ]
+
     candidate = _load_payload(candidate_path)
     baseline = _load_payload(baseline_path)
 
@@ -80,6 +93,15 @@ def run_guard(
     messages = [
         f"Candidate: {candidate_path}",
         f"Baseline:  {baseline_path}",
+    ]
+    # An auto-selected candidate older than the baseline usually means the
+    # latest run was not exported, so an earlier file was picked up instead.
+    if candidate_path.stat().st_mtime < baseline_path.stat().st_mtime:
+        messages.append(
+            "WARNING: candidate is older than the baseline — did the latest "
+            "`ragas_eval` run use --export?"
+        )
+    messages += [
         f"avg faithfulness={candidate_avg:.3f} (min={min_avg_faithfulness:.3f})",
         f"q{q1_index} faithfulness={candidate_q1:.3f} "
         f"(baseline={baseline_q1:.3f}, drop={q1_drop:.3f}, max_drop={max_q1_drop:.3f})",

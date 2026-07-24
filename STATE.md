@@ -1,18 +1,38 @@
 # permit_rag — State
 
-_Updated: 2026-07-23 (Agent architecture Phase 0 — trace store)_
+_Updated: 2026-07-23 (Agent architecture Phase 0 — verified on local)_
 
 ## Phase
 
-**Agent architecture, Phase 0 complete.** The trace store exists and records every
-model call. Next is Phase 1: `rag/agent_runtime.py` as the single Anthropic call
-site, plus the agent registry. Full plan: [docs/agent_architecture.md](docs/agent_architecture.md).
+**Agent architecture Phase 0 — complete and verified on local.**
+`py scripts/verify_phase0.py --local` passes every check: schema, autonomy
+enforcement, corpus, and the trace store writing a step row with non-zero
+`cost_usd`. Full plan: [docs/agent_architecture.md](docs/agent_architecture.md).
+
+Not yet on prod. Two gates below, then Phase 1 (`rag/agent_runtime.py` as the
+single Anthropic call site, plus the agent registry).
+
+## RAGAs gate — PASSED (the chunk-leakage fix improved quality)
+
+Ran `ragas_eval --export` then `eval_guard --baseline
+evaluation/results/ragas_20260721_183712.json` on the corpus machine:
+
+- **avg faithfulness 0.910** (floor 0.85)
+- **q1 drop −0.188** — negative is an *improvement*; q1 faithfulness rose 0.188
+
+This is the predicted good outcome: dropping reranker-rejected chunks removed
+noise from the model's context rather than signal. The fix is validated, not
+just neutral. Prod is unblocked.
+
+Note the guard tooling itself had a trap — running `ragas_eval` without
+`--export` writes no file, so `eval_guard` silently compared the baseline to
+itself and passed with drop=0.000. `eval_guard` now refuses a self-comparison
+and warns when the candidate predates the baseline (tests added).
 
 ## Blocked on
 
-1. **Migration 026 not yet applied** — code degrades gracefully without it (tracing
-   logs a warning and continues), but no rows are written until it runs. Local +
-   RDS commands below.
+1. **Migration 027 not applied to prod** — 026 is up there in its pre-fix form,
+   so entity-less action items skip dedupe until 027 lands.
 2. **Mobile OAuth deep links (deferred)** — M0-6/M0-7 device Google/Apple roundtrip
 
 ## Deliverables checklist
@@ -41,36 +61,47 @@ site, plus the agent registry. Full plan: [docs/agent_architecture.md](docs/agen
       cases. **Caught and fixed a dedupe bug** (nullable entity columns skipped
       the unique index) before it could be frozen by deployment.
 
-### Verification (not yet run for real — do first next session)
+### Verification — LOCAL: all checks pass
 
-- [ ] `py scripts/apply_migration.py db/migrations/026_agent_traces.sql` **(local first)**
-- [ ] Issue one `/query/answer` call, then confirm rows land in `agent_runs` +
-      `agent_steps` with non-zero `cost_usd`
-- [ ] Confirm `agent_autonomy` seeded 15 rows and that `set_agent_autonomy`
-      refuses a level above `max_level`
-- [ ] **Re-baseline RAGAs.** The chunk-leakage fix changes what the model sees,
-      so faithfulness/precision will move. That is expected, not a regression —
-      capture the new baseline before Phase 2 uses it as its no-change gate.
-- [ ] Prod: migration 026 against RDS, then deploy
+`py scripts/verify_phase0.py --local`
+
+- [x] Migrations 018–027 applied; corpus ingested, embedded, and 022-backfilled
+- [x] 026's five tables present; 027 dedupe fix applied (entity columns NOT NULL)
+- [x] `agent_autonomy` seeded (15 rows); an L3 request on
+      `web_form_navigator/submit` is **refused by the SQL clamp**, not merely
+      hidden in a future UI
+- [x] Retrieval returns chunks; `filtered_out` chunks dropped before prompting
+- [x] Trace store writes a run + step with non-zero `cost_usd` — Phase 0's
+      actual deliverable
+- [x] 292 tests green
+
+### Verification — PROD: not started
+
+- [x] RAGAs gate — avg 0.910, q1 improved by 0.188 (see above)
+- [ ] `py scripts/apply_migration.py db/migrations/027_agent_action_item_dedupe.sql`
+- [ ] `.\scripts\deploy.ps1 -BackendOnly`
+- [ ] `py scripts/verify_phase0.py` (no `--local`; confirm the banner names RDS)
 
 ## Verification commands
 
 ```powershell
 .\.venv\Scripts\Activate.ps1
-py -m pytest tests/test_audit_logger.py tests/test_generator_chunk_filter.py -v
-py -m pytest tests/test_query_answer_route.py tests/test_sprint8.py -v
-py scripts/apply_migration.py db/migrations/026_agent_traces.sql
+py scripts/verify_phase0.py --local          # full Phase 0 acceptance
+py scripts/check_migrations.py --local       # migration drift + corpus size
+py -m pytest tests/ -q
 py -m evaluation.ragas_eval
 py -m audit.anomaly --window-hours 24
 ```
 
+`verify_phase0.py` makes one real model call (fractions of a cent) and writes a
+run + step under the `verify_phase0` entrypoint — that is the trace tables doing
+their job. `--no-llm` skips it, but then the trace store is not verified.
+
 ## Next tasks
 
-1. Apply migration 026 **locally**; smoke one query; confirm trace rows
-2. Re-baseline RAGAs after the chunk-leakage fix
+1. **RAGAs gate** — re-baseline, confirm ≥0.85, quantify the chunk-leakage delta
+2. Prod: apply 027 → `deploy.ps1 -BackendOnly` → `verify_phase0.py` against RDS
 3. Phase 1 — `rag/agent_runtime.py` + `rag/agents/registry.py`
-4. Prod rollout, in this order and not before step 2 passes:
-   **022 first (still missing on RDS)**, then 026, then deploy the code
 
 ## Migration drift — check before touching any database
 
