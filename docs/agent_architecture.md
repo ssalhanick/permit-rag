@@ -366,6 +366,24 @@ Auth already exists: `is_superadmin()` (`api/auth.py:138`), `require_admin(min_r
 
 **Crystallizer target:** steps 1–2 are already deterministic; step 3's `doc_type` inference is the cleanest crystallization candidate in the system.
 
+**Metadata source-of-truth redesign (owned by this phase).** Today the per-doc
+sidecars in `documents/metadata/*.json` are a muddle: partly source, partly
+derived. They mix hand-relevant fields (municipality, authority_level, doc_type,
+subject_tags — which really originate in `documents/catalog.json`) with
+per-ingest artifacts (ingested_at, review_due, checksums, verifications). They
+are write-only (no runtime reader; the corpus lives in the DB), yet were tracked
+in git, so every ingest produced churn. As of Phase 0 groundwork they are
+**gitignored** (`catalog.json` + `registry.json` stay tracked). This phase must
+settle the model properly:
+- The DB is the corpus's source of truth; `catalog.json` is the source of the
+  hand-curated fields; `registry.json` is the governance master.
+- Decide whether the sidecars survive at all, or are replaced by the validator
+  writing corrected metadata straight to the DB + `registry.json` via
+  `governance.py`. If they survive as a local cache, keep them ignored.
+- The validator's corrected `effective_date` / `doc_type` / `subject_tags` must
+  land in the DB and the governance registry, **not** in an untracked sidecar
+  that no one reads.
+
 ---
 
 ## Prompt Router (agent #2)

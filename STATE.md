@@ -31,9 +31,18 @@ and warns when the candidate predates the baseline (tests added).
 
 ## Blocked on
 
-1. **Migration 027 not applied to prod** — 026 is up there in its pre-fix form,
-   so entity-less action items skip dedupe until 027 lands.
-2. **Mobile OAuth deep links (deferred)** — M0-6/M0-7 device Google/Apple roundtrip
+1. **Mobile OAuth deep links (deferred)** — M0-6/M0-7 device Google/Apple roundtrip
+
+## Prod migration status (2026-07-23)
+
+Applied 026 (current file — already has the NOT NULL entity-column fix inline)
+and 027 to RDS. Prod's agent tables are correct.
+
+**Correction to an earlier note in this file:** a prior claim that "026 reached
+prod by accident" was wrong. Prod had *no* agent tables until they were applied
+deliberately today — the earlier "aws had everything through 26" reading was a
+drifted target (a different database), not prod. The target-drift tooling and
+guards remain justified; only that specific claim was mistaken.
 
 ## Deliverables checklist
 
@@ -124,14 +133,15 @@ Confirmed drift as of this session:
 
 | Database | State |
 |----------|-------|
-| Local Docker (machine A) | 018–021, 023–026 applied; **022 missing** behind them; **026 is the pre-fix version** (nullable entity columns) so 027 is required. Corpus empty. |
-| Machine B local | Unknown — run `py scripts/check_migrations.py --local` |
-| Prod RDS | 018–026 applied **including 022**; 026 is almost certainly the pre-fix version → needs 027. Confirm with `check_migration_details.py`. |
+| Local Docker (machine A, this repo) | 018–021, 023–026 applied; **022 missing** behind them; 026 is the pre-fix version (nullable entity columns) so 027 is required here. Corpus empty. |
+| Machine B local (corpus machine) | Corpus ingested + backfilled; migrations current. Run `py scripts/check_migrations.py --local` to reconfirm. |
+| Prod RDS | 026 + 027 applied deliberately on 2026-07-23; agent tables correct. |
 
-**026 reached production unintentionally.** `bootstrap_env` loads `.env` last
+**Why target confusion kept happening.** `bootstrap_env` loads `.env` last
 with `override=True`, and `ENVIRONMENT=production` selects `.env.production`;
 all three dotenv files are gitignored, so the target differs per machine and
-`apply_migration.py` gave no indication of where it was writing. It now prints
+`apply_migration.py` originally gave no indication of where it was writing. It
+now prints
 the target host and profile, and requires the hostname to be typed for any
 non-localhost target (`--yes` bypasses for CI; nothing automated calls it).
 

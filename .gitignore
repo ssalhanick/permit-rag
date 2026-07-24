@@ -37,3 +37,8 @@ evaluation/cache/
 *.tfstate
 *.tfstate.backup
 .terraform.lock.hcl
+# Derived per-doc metadata sidecars — rewritten on every ingest (ingested_at,
+# review_due, checksums, verifications). Write-only; nothing reads them at
+# runtime, the corpus lives in the DB. catalog.json + registry.json stay
+# tracked. Metadata source-of-truth is redesigned in agent architecture Phase 3.
+documents/metadata/
