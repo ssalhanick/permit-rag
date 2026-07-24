@@ -147,6 +147,11 @@ class EvalResult:
     most_relevant_chunk_id: Optional[str] = None
     most_relevant_doc_id: Optional[str] = None
     answer_cache_hit: Optional[bool] = None
+    # Why a faithfulness collapse needs this: an answer cut off at max_tokens
+    # loses its closing citations and reads as a pile of unsupported claims, so
+    # it is indistinguishable from hallucination in the score alone. None on a
+    # cache hit, since no generation happened.
+    stop_reason: str | None = None
     error: Optional[str] = None
 
 
@@ -653,6 +658,7 @@ def evaluate_query(
                 answer = gen.answer
                 eval_result.answer_cache_hit = False if cache_enabled else None
                 eval_result.latency_generation_ms = gen.latency_ms
+                eval_result.stop_reason = getattr(gen, "stop_reason", None)
                 if cache_enabled:
                     answer_cache[cache_key] = {
                         "answer": answer,
@@ -1028,6 +1034,11 @@ def export_results(
             "most_relevant_chunk_id": r.most_relevant_chunk_id,
             "most_relevant_doc_id": r.most_relevant_doc_id,
             "answer_cache_hit": r.answer_cache_hit,
+            # Both new: a faithfulness collapse is undiagnosable from a score
+            # alone. stop_reason separates truncation from hallucination, and
+            # the preview shows what was actually scored.
+            "stop_reason": r.stop_reason,
+            "answer_preview": r.answer_preview,
             "error": r.error,
         })
 
