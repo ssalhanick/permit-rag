@@ -5,13 +5,17 @@ Run from project root:
     py -m scripts.run_chunk_verify
 """
 
+from __future__ import annotations
+
 import logging
 import sys
 from pathlib import Path
 
-from dotenv import load_dotenv
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-load_dotenv()
+from api.load_env import bootstrap_env
+
+bootstrap_env()
 
 logging.basicConfig(
     level=logging.INFO,
