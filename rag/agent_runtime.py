@@ -154,16 +154,25 @@ def enforce_autonomy(
 # Transient failures worth a backoff-and-retry. A 4xx (bad request, auth) is not
 # here — retrying it just wastes time.
 def _retryable_errors() -> tuple[type[Exception], ...]:
-    """Anthropic exception classes that a retry might clear (import-lazy)."""
+    """
+    Anthropic exception classes that a retry might clear (import-lazy).
+
+    Resolved by name so the tuple degrades gracefully across SDK versions --
+    older anthropic releases lack ``OverloadedError`` / ``InternalServerError``,
+    and referencing them directly raised ``AttributeError`` at call time.
+    """
     import anthropic
 
-    return (
-        anthropic.RateLimitError,
-        anthropic.APIConnectionError,
-        anthropic.APITimeoutError,
-        anthropic.InternalServerError,
-        anthropic.OverloadedError,
+    names = (
+        "RateLimitError", "APIConnectionError", "APITimeoutError",
+        "InternalServerError", "OverloadedError",
     )
+    resolved: list[type[Exception]] = []
+    for name in names:
+        cls = getattr(anthropic, name, None)
+        if isinstance(cls, type):
+            resolved.append(cls)
+    return tuple(resolved) or (anthropic.APIError,)
 
 
 def _build_client(client: Any | None) -> Any:
