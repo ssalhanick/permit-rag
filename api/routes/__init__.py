@@ -5,6 +5,7 @@ Import routers here so main.py has a single include point.
 """
 
 from api.routes.admin import router as admin_router
+from api.routes.agents_admin import router as agents_admin_router
 from api.routes.auth import router as auth_router
 from api.routes.commerce import router as commerce_router
 from api.routes.corpus import router as corpus_router
@@ -16,6 +17,7 @@ from api.routes.upload import router as upload_router
 
 __all__ = [
     "admin_router",
+    "agents_admin_router",
     "auth_router",
     "commerce_router",
     "corpus_router",

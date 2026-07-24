@@ -65,6 +65,15 @@ export default function Nav() {
               >
                 Profile
               </NavLink>
+              {user.role === "superadmin" && (
+                <NavLink
+                  to="/admin/agents"
+                  className={({ isActive }) => "nav-link" + (isActive ? " nav-link-active" : "")}
+                  onClick={closeMenu}
+                >
+                  Agents
+                </NavLink>
+              )}
             </>
           )}
         </div>

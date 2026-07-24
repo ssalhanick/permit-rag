@@ -49,14 +49,16 @@ create type verification_stage as enum (
     'download',
     'extraction',
     'chunking',
-    'embedding'
+    'embedding',
+    'metadata'          -- migration 028: Corpus Metadata Validator (agent #13)
 );
 
 create type verification_result as enum (
     'pass',
     'fail',
     'skip',
-    'needs_ocr'
+    'needs_ocr',
+    'needs_review'      -- migration 028: metadata proposal awaiting human approval
 );
 
 -- ─────────────────────────────────────────────────────────

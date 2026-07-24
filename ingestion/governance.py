@@ -25,7 +25,7 @@ from __future__ import annotations
 import hashlib
 import logging
 from dataclasses import dataclass, field
-from datetime import UTC, datetime
+from datetime import UTC, date, datetime
 from enum import Enum
 from pathlib import Path
 from typing import Any
@@ -174,6 +174,117 @@ def run_supersession_flow(
         updated.get("retrieval_weight"),
     )
     return dict(updated)
+
+
+# ════════════════════════════════════════════════
+#  METADATA CORRECTION (Corpus Metadata Validator, agent #13)
+# ════════════════════════════════════════════════
+# The validator (ingestion/metadata_agent.py) proposes; a human approves in the
+# superadmin dashboard; the approved correction is written *here*. These are the
+# only functions that write corrected corpus metadata, so the governance rule
+# "registry.json / the corpus is modified only via governance.py" holds by
+# construction — the validator itself calls neither db.client nor these with
+# side effects until a human has signed off.
+
+
+def apply_metadata_correction(
+    doc_id: str,
+    *,
+    effective_date: date | None = None,
+    doc_type: str | None = None,
+    authority_level: str | None = None,
+    subject_tags: list[str] | None = None,
+    actor: str | None = None,
+) -> dict[str, Any]:
+    """
+    Write an approved metadata correction to the corpus. The single write path.
+
+    Called by the dashboard's metadata-review approve endpoint after a superadmin
+    has reviewed the validator's proposal (the L1 "human approves, then execute"
+    flow). The validator never calls this directly with unreviewed values — that
+    is what keeps corrected metadata out of an untracked sidecar no one reads and
+    inside the DB, which is the corpus's source of truth.
+
+    Autonomy note: application is gated by the human approval in the dashboard,
+    not by ``enforce_autonomy`` here. The runtime ceiling (metadata_validator /
+    semantic = L1) governs *auto*-application, which this phase never does.
+
+    Raises RuntimeError if the document does not exist.
+    """
+    from db.client import get_document_by_doc_id, update_document_metadata_fields
+
+    if get_document_by_doc_id(doc_id) is None:
+        raise RuntimeError(f"apply_metadata_correction: doc_id={doc_id!r} not found")
+
+    updated = update_document_metadata_fields(
+        doc_id,
+        effective_date=effective_date,
+        doc_type=doc_type,
+        authority_level=authority_level,
+        subject_tags=subject_tags,
+    )
+    if updated is None:
+        raise RuntimeError(f"apply_metadata_correction: update failed for {doc_id!r}")
+
+    log.info(
+        "metadata correction applied to %s by %s (effective_date=%s doc_type=%s "
+        "authority_level=%s tags=%s)",
+        doc_id, actor or "unknown", effective_date, doc_type, authority_level,
+        subject_tags if subject_tags is None else len(subject_tags),
+    )
+    return dict(updated)
+
+
+def flag_document_for_review(
+    doc_id: str,
+    *,
+    kind: str,
+    title: str,
+    evidence: dict[str, Any] | None = None,
+    proposed_action: str | None = None,
+    severity: str = "high",
+    blocking: bool = True,
+    set_draft: bool = False,
+    run_id: UUID | None = None,
+) -> dict[str, Any]:
+    """
+    File a human-review action item for a document, optionally moving it to draft.
+
+    AGENTS.md: a document that fails metadata cannot go live, but must not block
+    the corpus — a failed doc sits in ``draft`` (a valid document_status) with a
+    blocking action item. ``set_draft`` gates that move:
+
+    * ``set_draft=True``  — the *ingest-time* path: a brand-new upload whose
+      metadata is incomplete must not become retrievable, so it is drafted.
+    * ``set_draft=False`` — the *backfill* path over the existing live corpus:
+      drafting all 27 currently-null-``effective_date`` docs would empty
+      retrieval. Here the validator only files a ``needs_review`` proposal and
+      leaves the live doc in place until a human approves the fix.
+
+    The action item deduplicates on (source_agent, kind, entity) so re-running
+    the validator refreshes evidence rather than piling up duplicates.
+
+    Returns the upserted action-item row (or an empty dict if tracing is off).
+    """
+    from db.client import update_document_admin_fields, upsert_action_item
+
+    if set_draft:
+        update_document_admin_fields(doc_id, document_status="draft")
+        log.info("flag_document_for_review: %s moved to draft (blocking review)", doc_id)
+
+    item = upsert_action_item(
+        source_agent="metadata_validator",
+        kind=kind,
+        title=title,
+        severity=severity,
+        blocking=blocking,
+        run_id=run_id,
+        entity_type="document",
+        entity_id=doc_id,
+        evidence=evidence or {},
+        proposed_action=proposed_action,
+    )
+    return dict(item) if item else {}
 
 
 # ════════════════════════════════════════════════

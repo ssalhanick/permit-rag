@@ -371,7 +371,8 @@ def print_verification_summary(
     print(f"{'─'*50}")
 
     for r in results:
-        emoji = {"pass": "✅", "fail": "❌", "needs_ocr": "🔍", "skip": "⏭️"}
+        emoji = {"pass": "✅", "fail": "❌", "needs_ocr": "🔍",
+                 "skip": "⏭️", "needs_review": "📝"}
         icon = emoji.get(r.result, "❓")
         print(f"  {icon} {r.stage:<12} {r.result:<10} {r.doc_id}")
         if "error" in r.detail:

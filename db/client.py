@@ -313,6 +313,58 @@ def update_document_admin_fields(
     return row
 
 
+def update_document_metadata_fields(
+    doc_id: str,
+    *,
+    effective_date: date | None = None,
+    doc_type: str | None = None,
+    authority_level: str | None = None,
+    subject_tags: list[str] | None = None,
+) -> dict[str, Any] | None:
+    """
+    Correct a document's retrieval-driving metadata by doc_id.
+
+    These four fields — effective_date, doc_type, authority_level, subject_tags —
+    are exactly what the reranker and retrieval filters read, and are the fields
+    the Corpus Metadata Validator (agent #13) proposes fixes for. They are kept
+    out of ``update_document_admin_fields`` (which owns governance/lifecycle
+    fields) so the two write paths stay separate. Per AGENTS.md the validator
+    never calls this directly — it flows through ``ingestion/governance.py``,
+    which is the only writer of corrected corpus metadata.
+
+    Only non-None fields are written; passing all None re-reads the row.
+    """
+    assignments: list[str] = []
+    params: dict[str, Any] = {"doc_id": doc_id}
+
+    if effective_date is not None:
+        assignments.append("effective_date = %(effective_date)s")
+        params["effective_date"] = effective_date
+    if doc_type is not None:
+        assignments.append("doc_type = %(doc_type)s::doc_type")
+        params["doc_type"] = doc_type
+    if authority_level is not None:
+        assignments.append("authority_level = %(authority_level)s::authority_level")
+        params["authority_level"] = authority_level
+    if subject_tags is not None:
+        assignments.append("subject_tags = %(subject_tags)s")
+        params["subject_tags"] = subject_tags
+
+    if not assignments:
+        return get_document_by_doc_id(doc_id)
+
+    sql = (
+        "UPDATE documents "
+        f"SET {', '.join(assignments)} "
+        "WHERE doc_id = %(doc_id)s "
+        "RETURNING *;"
+    )
+    with get_conn() as conn:
+        row = conn.execute(sql, params).fetchone()
+        conn.commit()
+    return row
+
+
 def supersede_document(
     old_doc_id: str,
     replacement_doc_id: str,
@@ -821,9 +873,10 @@ def insert_verification(
     """
     Log a verification result for an ingestion stage.
 
-    stage:  'download' | 'extraction' | 'chunking' | 'embedding'
-    result: 'pass' | 'fail' | 'skip' | 'needs_ocr'
+    stage:  'download' | 'extraction' | 'chunking' | 'embedding' | 'metadata'
+    result: 'pass' | 'fail' | 'skip' | 'needs_ocr' | 'needs_review'
     detail: arbitrary JSON payload with stage-specific metrics
+            ('metadata' + 'needs_review' added in migration 028)
     """
     sql = """
         INSERT INTO ingestion_verifications

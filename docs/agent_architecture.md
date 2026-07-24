@@ -522,7 +522,7 @@ Port the existing chain behind the Manager. Same inputs, same outputs.
 **Why deliberately capability-free.** The only phase where you can prove the abstraction didn't regress quality — `tests/test_query_answer_route.py` and RAGAs must be identical. Introduce the Manager *and* new agents together and a faithfulness drop is unattributable.
 
 ### Phase 3 — Metadata Validator + backfill + **dashboard v1**
-Verification enum extensions, migration 027, `ingestion/metadata_agent.py`, backfill script, and the first dashboard slice: **action queue + metadata review**, gated on `is_superadmin()`.
+Verification enum extensions, migration 028, `ingestion/metadata_agent.py`, backfill script, and the first dashboard slice: **action queue + metadata review**, gated on `is_superadmin()`.
 
 **Why the validator this early.** `doc_type`, `authority_level`, `municipality`, `subject_tags` are retrieval filters and reranker inputs. Building the measurement layer on a corpus you know is wrong means measuring the wrong thing precisely.
 
@@ -531,7 +531,7 @@ Verification enum extensions, migration 027, `ingestion/metadata_agent.py`, back
 **Tradeoff accepted.** The dashboard ships in two passes, touching the same frontend route twice.
 
 ### Phase 4 — Prompt Router + fragment library + Media Curator
-Migration 028. Author the persona playbooks, jurisdiction and intent fragments. Demote `custom_system_prompt` to bounded notes. Wire the `research` default + Clarification nudge. **Make `max_tokens` persona/intent-aware** (`generate_answer` hard-codes 1024 at `rag/generator.py:339`, which will truncate `diy` and `hiring_contractor` answers), and make `stop_reason == "max_tokens"` a Guardrail trip that files an action item.
+Migration 029. Author the persona playbooks, jurisdiction and intent fragments. Demote `custom_system_prompt` to bounded notes. Wire the `research` default + Clarification nudge. **Make `max_tokens` persona/intent-aware** (`generate_answer` hard-codes 1024 at `rag/generator.py:339`, which will truncate `diy` and `hiring_contractor` answers), and make `stop_reason == "max_tokens"` a Guardrail trip that files an action item.
 
 **Why before the new answer agents.** (1) The Router changes every downstream agent's system prompt — build them first and you rewrite their prompts here anyway. (2) It fixes the cross-project cache defeat, paying for itself in tokens immediately. (3) Highest demo-value-per-token: one question as a DIYer, a contractor, and someone hiring a contractor returning three genuinely different answers is the most legible demonstration of "agents" to a non-technical audience.
 
@@ -547,7 +547,7 @@ Query Deconstructor, Citation Verifier, Permit Strategy, `agent_eval.py`, `perf_
 **This is the course cut line.** Phases 0–5 are the demo.
 
 ### Phase 6 — Bid Evaluator (+ ontology mappings)
-Migration 029. Extraction, three analyses, comparison view, disclaimer, README limitations section.
+Migration 030. Extraction, three analyses, comparison view, disclaimer, README limitations section.
 
 **What the Field Ontology actually is** — seven parts, very different costs:
 
@@ -645,7 +645,12 @@ Bundled, the PDF agent is hostage to the Navigator's risk — one CAPTCHA proble
 - `evaluation/agent_eval.py`, `evaluation/perf_review.py`, `evaluation/optimizer.py`, `evaluation/crystallizer.py`
 - `api/routes/agents_admin.py` — dashboard, action queue, feedback, autonomy endpoints; `require_admin(min_role="superadmin")`
 - `frontend/src/admin/` — `AgentDashboardPage.jsx`, `ActionQueue.jsx`, `AgentScorecard.jsx`, `TraceExplorer.jsx`, `AutonomyControls.jsx`, `FeedbackControls.jsx`
-- `db/migrations/026_agent_traces.sql`, `027_metadata_validation.sql`, `028_prompt_fragments.sql`, `029_ontology_and_bids.sql`
+- `db/migrations/026_agent_traces.sql`, `028_metadata_validation.sql`, `029_prompt_fragments.sql`, `030_ontology_and_bids.sql`
+  - Numbering note: `026` is a pre-existing duplicate (`026_agent_traces.sql` +
+    `026_design_intent_usage_project_fk.sql`) — recorded, not renamed, both
+    applied by name on prod + machine B. `027` is taken by
+    `027_agent_action_item_dedupe.sql` (also applied). So Phase 3's metadata
+    migration is **028**, and prompt fragments / ontology cascade to **029 / 030**.
 - `docs/agent_architecture.md`
 - Mirrored tests
 

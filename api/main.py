@@ -30,6 +30,7 @@ from fastapi.responses import JSONResponse
 
 from api.routes import (
     admin_router,
+    agents_admin_router,
     auth_router,
     commerce_router,
     corpus_router,
@@ -44,6 +45,34 @@ from db import graph_client as _graph_client
 from db.client import close_pool, ping
 
 log = logging.getLogger(__name__)
+
+
+# ── Dependency-injected agents ───────────────────────────────
+# rag/ may not import ingestion/, commerce/, forms/, or bids/ (AGENTS.md), so
+# agents backed by those packages are registered here at startup — api/ is the
+# one layer allowed to import everything. The callable is bound lazily so this
+# import stays cheap; the heavy module loads only when the agent actually runs.
+
+
+def _register_di_agents() -> None:
+    """Register cross-boundary agents in the shared registry (idempotent)."""
+    from rag.agent_runtime import Tier
+    from rag.agents.registry import AgentSpec, lazy, register
+
+    register(
+        AgentSpec(
+            name="metadata_validator",
+            callable=lazy("ingestion.metadata_agent", "validate_document"),
+            tier=Tier.MID,  # content-vs-metadata inference is a sonnet-class task
+            parallel_safe=True,  # documents validate independently
+            metrics=("metadata_field_precision", "date_extraction_accuracy",
+                     "false_flag_rate"),
+        ),
+        replace=True,
+    )
+
+
+_register_di_agents()
 
 LOCALHOST_CORS_REGEX = r"https?://(localhost|127\.0\.0\.1)(:\d+)?"
 
@@ -142,6 +171,7 @@ api_router = APIRouter(prefix="/api")
 api_router.include_router(query_router)
 api_router.include_router(documents_router)
 api_router.include_router(admin_router)
+api_router.include_router(agents_admin_router)
 api_router.include_router(upload_router)
 api_router.include_router(pull_router)
 api_router.include_router(auth_router)

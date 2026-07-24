@@ -26,6 +26,8 @@ import ProjectDocumentsPage from "./projects/pages/ProjectDocumentsPage.jsx";
 import ProjectMembersPage from "./projects/pages/ProjectMembersPage.jsx";
 import ProjectTrashPage from "./projects/pages/ProjectTrashPage.jsx";
 import ProtectedRoute from "./components/ProtectedRoute.jsx";
+import SuperadminRoute from "./admin/SuperadminRoute.jsx";
+import AgentDashboardPage from "./admin/AgentDashboardPage.jsx";
 import NotFoundPage from "./components/NotFoundPage.jsx";
 import OfflineBanner from "./components/OfflineBanner.jsx";
 import BiometricGate from "./components/BiometricGate.jsx";
@@ -147,6 +149,14 @@ ReactDOM.createRoot(document.getElementById("root")).render(
               <ProtectedRoute>
                 <ProjectKickoffPage />
               </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/admin/agents"
+            element={
+              <SuperadminRoute>
+                <AgentDashboardPage />
+              </SuperadminRoute>
             }
           />
           <Route path="/auth" element={<AuthPage />} />

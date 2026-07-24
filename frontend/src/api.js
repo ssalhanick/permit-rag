@@ -450,4 +450,33 @@ export async function purgeDocumentAdmin(docId) {
   });
 }
 
+// ── Superadmin Agent Dashboard (Phase 3) ─────────────────────
+// All routes are superadmin-only; the backend returns 403 otherwise. Auth rides
+// on requestJson's automatic Bearer header.
+
+export async function listAgentActionItems({ status = "open", sourceAgent = null } = {}) {
+  const params = new URLSearchParams({ status });
+  if (sourceAgent) params.set("source_agent", sourceAgent);
+  return await requestJson(`/admin/agents/action-items?${params.toString()}`);
+}
+
+export async function resolveAgentActionItem(itemId, body) {
+  return await requestJson(`/admin/agents/action-items/${encodeURIComponent(itemId)}/resolve`, {
+    method: "POST",
+    body,
+  });
+}
+
+export async function listMetadataReview({ status = "open" } = {}) {
+  const params = new URLSearchParams({ status });
+  return await requestJson(`/admin/agents/metadata-review?${params.toString()}`);
+}
+
+export async function applyMetadataCorrection(docId, body) {
+  return await requestJson(`/admin/agents/metadata-review/${encodeURIComponent(docId)}/apply`, {
+    method: "POST",
+    body,
+  });
+}
+
 export { API_BASE_URL, DEFAULT_BASE_URL };
