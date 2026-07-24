@@ -1,6 +1,6 @@
 # permit_rag — State
 
-_Updated: 2026-07-24 (Phase 3 code built + mocked-tested on machine A — 436 tests; migration numbering fixed to 028; pending machine-B verification + deploy)_
+_Updated: 2026-07-24 (Phase 3 code built + mocked-tested on machine A — 438 tests; migration numbering fixed to 028; pending machine-B verification + deploy)_
 
 ## Phase
 
@@ -62,15 +62,18 @@ Full record: `journals/session_20260724_phase2.md`.
 - [x] `frontend/src/admin/` — `SuperadminRoute` (new frontend guard),
   `AgentDashboardPage`, `ActionQueue`, `MetadataReviewPane` (renders each
   proposal with its citation). `/admin/agents` route + superadmin nav link.
+- [x] `rag/agent_runtime.py` — `_dispatch` learns models that 400 on
+  `temperature` (Sonnet 5, Opus 4.8, …) and retries without it. See decisions log.
 - [x] Tests: `test_metadata_agent.py` (24), `test_agents_admin_routes.py` (10),
-  `test_governance_metadata.py` (4). **436 total. Zero existing test files edited.**
+  `test_governance_metadata.py` (4), + 2 in `test_agent_runtime.py` (the
+  temperature fallback). **438 total.**
 
 ## The Phase 3 acceptance gate
 
 ### Machine A — PASSED
 
 ```powershell
-py -m pytest tests/ -q                 # 436 passed (was 398; +38 Phase 3)
+py -m pytest tests/ -q                 # 438 passed (was 398; +40 Phase 3)
 py -m ruff check rag/ tests/           # clean on new files
 py scripts/verify_phase2.py --no-db    # 18/18, incl. the no-inline-anthropic grep
 ```
@@ -86,7 +89,7 @@ py scripts/check_migration_details.py --local                       # read-only,
 py scripts/apply_migration.py db/migrations/028_metadata_validation.sql
 py scripts/backfill_document_metadata.py --local --dry-run --report # no writes
 py scripts/backfill_document_metadata.py --local --apply --report   # file items
-py -m pytest tests/ -q                                              # 436 still green
+py -m pytest tests/ -q                                              # 438 still green
 ```
 
 Acceptance (docs/agent_architecture.md): `effective_date` populated or marked
@@ -164,7 +167,7 @@ per AGENTS.md "completed work → journal only."_
 1. **Phase 3 machine-B verification not yet run.** The code is built + mocked on
    machine A but the corpus half is untouched: apply migration 028, dry-run then
    `--apply` the backfill, review + approve proposals in the dashboard, confirm
-   436 tests still pass. Block is in `journals/session_20260724_phase3.md`.
+   438 tests still pass. Block is in `journals/session_20260724_phase3.md`.
 2. **q6 / Dallas ordinance v1-v2-v3 supersession.** Now *detectable*:
    `detect_supersession_candidates` flags the `city-of-dallas-ordiance-v1/v2/v3`
    family for human review (never auto-supersede). Resolving it is a review
@@ -181,7 +184,7 @@ per AGENTS.md "completed work → journal only."_
 ## Next tasks
 
 1. Run the Phase 3 machine-B block (`journals/session_20260724_phase3.md`): apply
-   028, backfill dry-run → `--apply`, confirm 436 tests + `verify_phase2
+   028, backfill dry-run → `--apply`, confirm 438 tests + `verify_phase2
    --no-db`. Then review/approve proposals in `/admin/agents`.
 2. After machine-B verification: merge `agents/phase-3` → `deployment/sites`,
    GHA-deploy (028 is additive/safe), then move Phase 3 README Planned → Completed.
@@ -234,7 +237,7 @@ already applied by name on multiple DBs). The dedupe correction is therefore
 | rag/agents/artifacts | **New (Phase 2).** `ArtifactRef` + `ArtifactStore`; bounds the Manager's context |
 | rag/agents/budget | **New (Phase 2).** Deterministic Budget Governor; uncapped default = no-op |
 | rag/agents/registry | Roster is 10 specs, all lazily bound (Phase 3 added `metadata_validator` via api DI) |
-| rag/agent_runtime | Single Anthropic call site. Phase 2 added a `model=` override + `RuntimeResult.latency_ms` |
+| rag/agent_runtime | Single Anthropic call site. Phase 3: `_dispatch` learns models that reject `temperature` and retries without it |
 | rag/generator | **Folded into the runtime.** No inline Anthropic client remains anywhere in `rag/` |
 | rag/design_intent | Folded in Phase 1; contract unchanged |
 | ingestion/metadata_agent | **New (Phase 3).** Corpus Metadata Validator (agent #13). Deterministic-first; one structured `run_agent` call; cited proposals; writes nothing (via governance only) |
@@ -244,7 +247,7 @@ already applied by name on multiple DBs). The dedupe correction is therefore
 | audit | `record_step` driven by the runtime; the Manager writes its own deterministic step |
 | db | 026/027 trace + autonomy helpers; Phase 3 added `update_document_metadata_fields` |
 | api/routes/query | Reduced to HTTP concerns; injects retrieval + grounding thresholds into the Manager |
-| tests | **436 passing** (+38 Phase 3) |
+| tests | **438 passing** (+40 Phase 3) |
 
 ## Decisions log
 
@@ -275,12 +278,13 @@ already applied by name on multiple DBs). The dedupe correction is therefore
 | **Metadata write path (Phase 3)** | Corrected metadata lands in the DB (the corpus's source of truth) via `ingestion/governance.apply_metadata_correction` **only** — the single writer. Sidecars stay gitignored local cache. The validator writes nothing; it files cited `needs_review` proposals |
 | **Validator autonomy (Phase 3)** | `apply_metadata_correction` is **not** gated by `enforce_autonomy` — the superadmin approving in the dashboard is the L1 human gate. The runtime ceiling (`metadata_validator/semantic` = L1) governs *auto*-application, which this phase never does |
 | Validator registration (Phase 3) | `metadata_validator` registered by `api/main._register_di_agents()` (rag/ can't import ingestion/), lazily bound, `Tier.MID` |
+| **`temperature` deprecation (Phase 3)** | The newer generation (Sonnet 5, Opus 4.8, …) 400s on the `temperature` param; Haiku 4.5 still accepts it — so the validator's first `Tier.MID` call failed on machine B. `run_agent._dispatch` now **learns** it: on a "temperature deprecated" 400 it records the model in `_TEMPERATURE_UNSUPPORTED`, retries without the param, and skips it for every later call in the process (one wasted call, once). No hard-coded model list to rot |
 
 ## Canonical validation
 
 ```powershell
 # Machine A (repo machine) — no DB needed
-py -m pytest tests/ -q                                # 436 passed
+py -m pytest tests/ -q                                # 438 passed
 py -m ruff check rag/ tests/
 py scripts/verify_phase2.py --no-db                   # 18/18, incl. anthropic grep
 

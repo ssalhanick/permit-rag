@@ -86,9 +86,9 @@ may import only `rag/agent_runtime` from `rag/`; every model call through
 
 ## Verification performed (machine A)
 
-- `py -m pytest tests/ -q` → **436 passed** (was 398; +38 Phase 3:
-  `test_metadata_agent.py` 24, `test_agents_admin_routes.py` 10,
-  `test_governance_metadata.py` 4). Zero existing test files edited.
+- `py -m pytest tests/ -q` → **438 passed** (was 398; +40: `test_metadata_agent.py`
+  24, `test_agents_admin_routes.py` 10, `test_governance_metadata.py` 4,
+  `test_agent_runtime.py` +2 temperature). Zero existing test files edited.
 - `py scripts/verify_phase2.py --no-db` → **18/18**, including the grep that
   proves no inline `anthropic.Anthropic(` in `rag/` (the validator uses
   `run_agent`, and it lives in `ingestion/`, not `rag/`).
@@ -122,6 +122,21 @@ may import only `rag/agent_runtime` from `rag/`; every model call through
    pre-existing I001/SIM issues across the repo that machine A's gate does not.
    Only my new files matter; they are clean under both.
 
+## Machine-B follow-up fix — `temperature` deprecated on Sonnet 5
+
+First live backfill run 400'd on **every** doc:
+`` `temperature` is deprecated for this model. `` The validator's `Tier.MID`
+call hits `claude-sonnet-5`, which dropped the `temperature` param; Haiku 4.5
+(all of Phase 1/2) still accepts it, so this was the first time it surfaced.
+
+Fixed in the single call site, not the validator: `run_agent._dispatch` now
+**learns** unsupported models — on a "temperature deprecated" 400 it records the
+model in `_TEMPERATURE_UNSUPPORTED`, retries without the param, and omits it for
+every later call in the process. No hard-coded list to rot; Haiku still sends
+temperature unchanged. Tests: `test_agent_runtime.py` +2 (retry-then-succeed;
+learned-model-skips-from-start). Suite now **438**. `verify_phase2 --no-db` still
+18/18. **Machine B must pull `agents/phase-3` and re-run the backfill.**
+
 ## Still open at session end (machine B)
 
 - Apply migration 028; run the live validator + backfill; verify the dashboard
@@ -145,7 +160,7 @@ py scripts/backfill_document_metadata.py --local --no-llm --report
 # 4. When the proposals look right, file action items (still no corpus writes).
 py scripts/backfill_document_metadata.py --local --apply --report
 # 5. Regression + offline invariants.
-py -m pytest tests/ -q                 # expect 436 passed
+py -m pytest tests/ -q                 # expect 438 passed
 py scripts/verify_phase2.py --no-db    # 18/18, incl. the anthropic grep
 ```
 
@@ -162,12 +177,12 @@ feat: Phase 3 Corpus Metadata Validator + governance write path + superadmin das
 > first — AGENTS.md pre-session protocol.
 >
 > **Machine A (this repo) has an EMPTY database and no `documents/raw/`.** Only
-> these work here: `py -m pytest tests/ -q` (436, fully mocked),
+> these work here: `py -m pytest tests/ -q` (438, fully mocked),
 > `py -m ruff check rag/ tests/`, `py scripts/verify_phase2.py --no-db`. Do not
 > propose the validator, backfill, migration apply, `check_migration_details.py`,
 > or anything DB/corpus-dependent here — collect them into ONE machine-B block.
 >
-> **Phase 3 code is BUILT and mocked-tested on machine A (436 passed), not yet
+> **Phase 3 code is BUILT and mocked-tested on machine A (438 passed), not yet
 > verified on the corpus or deployed.** Deliverables: migration 028
 > (`028_metadata_validation.sql`, enum extensions only), `ingestion/metadata_agent.py`
 > (agent #13, deterministic-first + one structured `run_agent` call, every
@@ -178,7 +193,7 @@ feat: Phase 3 Corpus Metadata Validator + governance write path + superadmin das
 > `/admin/agents`). Validator registered via `api/main._register_di_agents()`.
 >
 > **Next: run the machine-B block in the journal** (apply 028, dry-run then
-> `--apply` the backfill, confirm 436 tests + verify_phase2 --no-db), then review
+> `--apply` the backfill, confirm 438 tests + verify_phase2 --no-db), then review
 > the filed proposals in the dashboard, approve the good ones (each apply writes
 > through governance + records a correction row), and confirm q6's Dallas
 > ordinance v1/v2/v3 family is flagged by `detect_supersession_candidates`.

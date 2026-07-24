@@ -375,6 +375,22 @@ def run_agent(
     return result
 
 
+# Models that reject the `temperature` parameter, learned at runtime. The newer
+# Claude generation (Sonnet 5, Opus 4.8, ...) deprecated the knob and 400s on it,
+# while Haiku 4.5 still accepts it. Rather than hard-code a list that rots as the
+# ladder changes, the first rejection for a model is remembered here so every
+# later call in the process skips `temperature` for it — one wasted call, once.
+_TEMPERATURE_UNSUPPORTED: set[str] = set()
+
+
+def _is_temperature_deprecated(exc: Exception) -> bool:
+    """True when a 400 says the model no longer accepts `temperature`."""
+    msg = str(exc).lower()
+    return "temperature" in msg and (
+        "deprecat" in msg or "not support" in msg or "unsupported" in msg
+    )
+
+
 def _dispatch(
     api: Any,
     *,
@@ -389,21 +405,35 @@ def _dispatch(
     max_retries: int,
 ) -> Any:
     """Route to parse (structured) or create (text), with retries."""
-    kwargs: dict[str, Any] = {
-        "model": model, "max_tokens": max_tokens, "temperature": temperature,
-        "system": system, "messages": messages,
-    }
-    if output_config is not None:
-        kwargs["output_config"] = output_config
-    if output_format is not None:
+
+    def _call(include_temperature: bool) -> Any:
+        kwargs: dict[str, Any] = {
+            "model": model, "max_tokens": max_tokens,
+            "system": system, "messages": messages,
+        }
+        if include_temperature:
+            kwargs["temperature"] = temperature
+        if output_config is not None:
+            kwargs["output_config"] = output_config
+        if output_format is not None:
+            return _invoke_with_retries(
+                lambda: api.messages.parse(output_format=output_format, **kwargs),
+                max_retries=max_retries, agent_name=agent_name,
+            )
         return _invoke_with_retries(
-            lambda: api.messages.parse(output_format=output_format, **kwargs),
+            lambda: api.messages.create(**kwargs),
             max_retries=max_retries, agent_name=agent_name,
         )
-    return _invoke_with_retries(
-        lambda: api.messages.create(**kwargs),
-        max_retries=max_retries, agent_name=agent_name,
-    )
+
+    include_temp = model not in _TEMPERATURE_UNSUPPORTED
+    try:
+        return _call(include_temp)
+    except Exception as exc:
+        if include_temp and _is_temperature_deprecated(exc):
+            _TEMPERATURE_UNSUPPORTED.add(model)
+            log.info("temperature not accepted by %s; retrying without it", model)
+            return _call(include_temperature=False)
+        raise
 
 
 def _finish(

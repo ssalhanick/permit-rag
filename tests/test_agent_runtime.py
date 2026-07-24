@@ -264,3 +264,62 @@ def test_non_retryable_error_records_error_step_and_reraises(wired: _Recorder) -
                   max_retries=0, client=client)
     assert wired.steps[-1]["status"] == "error"
     assert "ValueError" in wired.steps[-1]["error"]
+
+
+def test_temperature_deprecated_retries_without_it(wired: _Recorder) -> None:
+    """A model that 400s on `temperature` (Sonnet 5) is retried without it."""
+    agent_runtime._TEMPERATURE_UNSUPPORTED.discard("claude-sonnet-5")
+    seen: list[dict[str, Any]] = []
+
+    class _Msgs:
+        def count_tokens(self, **k: Any) -> Any:
+            return SimpleNamespace(input_tokens=120)
+
+        def create(self, **k: Any) -> Any:
+            seen.append(k)
+            if "temperature" in k:
+                raise RuntimeError(
+                    "Error code: 400 - `temperature` is deprecated for this model."
+                )
+            return _FakeResponse(model="claude-sonnet-5")
+
+    class _Client:
+        messages = _Msgs()
+
+    try:
+        with audit_logger.start_run("t"):
+            result = run_agent("x", system="s",
+                               messages=[{"role": "user", "content": "x"}],
+                               tier=Tier.MID, client=_Client())
+        assert result.text == "hello"
+        assert "temperature" in seen[0]        # first attempt sent it
+        assert "temperature" not in seen[1]    # retry dropped it
+        assert "claude-sonnet-5" in agent_runtime._TEMPERATURE_UNSUPPORTED
+    finally:
+        agent_runtime._TEMPERATURE_UNSUPPORTED.discard("claude-sonnet-5")
+
+
+def test_temperature_unsupported_model_skips_it_from_the_start(wired: _Recorder) -> None:
+    """Once learned, the model omits `temperature` with no wasted first call."""
+    agent_runtime._TEMPERATURE_UNSUPPORTED.add("claude-sonnet-5")
+    seen: list[dict[str, Any]] = []
+
+    class _Msgs:
+        def count_tokens(self, **k: Any) -> Any:
+            return SimpleNamespace(input_tokens=120)
+
+        def create(self, **k: Any) -> Any:
+            seen.append(k)
+            return _FakeResponse(model="claude-sonnet-5")
+
+    class _Client:
+        messages = _Msgs()
+
+    try:
+        with audit_logger.start_run("t"):
+            run_agent("x", system="s", messages=[{"role": "user", "content": "x"}],
+                      tier=Tier.MID, client=_Client())
+        assert len(seen) == 1                  # no retry needed
+        assert "temperature" not in seen[0]
+    finally:
+        agent_runtime._TEMPERATURE_UNSUPPORTED.discard("claude-sonnet-5")
