@@ -657,11 +657,16 @@ py -m rag.pipeline --municipality dallas --top-k 10 "What are the fire sprinkler
 $env:ENVIRONMENT="production"; py -m evaluation.prod_preflight
 
 # Production RAGAs faithfulness eval (uses DATABASE_URL from .env.production + secrets from .env)
-$env:ENVIRONMENT="production"; $env:LLM_PROVIDER="anthropic"; $env:LLM_MODEL="claude-haiku-4-5-20251001"; $env:RETRIEVAL_HYBRID_ENABLED="false"; $env:RAGAS_ANSWER_CACHE_ENABLED="false"; py -m evaluation.ragas_eval --export
+# NOTE: use --no-answer-cache, NOT $env:RAGAS_ANSWER_CACHE_ENABLED="false". bootstrap_env()
+# runs inside the process and calls load_dotenv(override=True), so the env var is overwritten
+# by the dotenv files (.env.local.example ships it as `true`). A cached run never calls
+# generate_answer, so it scores stale answer text and reports 0ms generation latency while
+# looking healthy -- it silently measures nothing. eval_guard now hard-fails such a run.
+$env:ENVIRONMENT="production"; $env:LLM_PROVIDER="anthropic"; $env:LLM_MODEL="claude-haiku-4-5-20251001"; $env:RETRIEVAL_HYBRID_ENABLED="false"; py -m evaluation.ragas_eval --export --no-answer-cache
 
 # Focused RAGAs pass then full suite (local Docker Postgres)
-$env:RAGAS_ANSWER_CACHE_ENABLED="false"; py -m evaluation.ragas_eval --query 0 1 2 3 5 --export
-$env:RAGAS_ANSWER_CACHE_ENABLED="false"; py -m evaluation.ragas_eval --export
+py -m evaluation.ragas_eval --query 0 1 2 3 5 --export --no-answer-cache
+py -m evaluation.ragas_eval --export --no-answer-cache
 
 # Regression guard against confirmatory baseline (fails on metric drift)
 py -m evaluation.eval_guard --candidate evaluation/results/ragas_20260601_010352.json

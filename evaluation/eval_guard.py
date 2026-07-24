@@ -52,6 +52,16 @@ def _extract_query_faithfulness(payload: dict[str, Any], query_index: int) -> fl
     return float(value)
 
 
+def _cache_hit_counts(payload: dict[str, Any]) -> tuple[int, int]:
+    """Return (rows_served_from_cache, total_rows) for a RAGAs export."""
+    results = payload.get("results", [])
+    if not isinstance(results, list):
+        return (0, 0)
+    rows = [row for row in results if isinstance(row, dict)]
+    hits = sum(1 for row in rows if row.get("answer_cache_hit") is True)
+    return (hits, len(rows))
+
+
 def _latest_ragas_export(results_dir: Path) -> Path:
     """Return the most recently modified ragas_*.json file."""
     candidates = list(results_dir.glob("ragas_*.json"))
@@ -85,6 +95,23 @@ def run_guard(
     candidate = _load_payload(candidate_path)
     baseline = _load_payload(baseline_path)
 
+    # Same failure class as comparing a file to itself: green, proves nothing.
+    # On a cache hit ragas_eval never calls generate_answer -- it scores whatever
+    # answer text was cached on some earlier run, so a code change to the
+    # generation path is completely invisible. Two Phase 2 gate runs passed this
+    # way before anyone noticed the 0ms generation latency.
+    cache_hits, cache_rows = _cache_hit_counts(candidate)
+    if cache_rows and cache_hits == cache_rows:
+        return False, [
+            f"Candidate: {candidate_path}",
+            f"Baseline:  {baseline_path}",
+            f"FAIL: all {cache_rows} candidate rows are answer-cache hits — "
+            "generate_answer never ran, so nothing about the generation path "
+            "was measured.",
+            "  Re-run with the cache off (the env var alone cannot do this):",
+            "    py -m evaluation.ragas_eval --export --no-answer-cache",
+        ]
+
     candidate_avg = _extract_avg_faithfulness(candidate)
     baseline_q1 = _extract_query_faithfulness(baseline, q1_index)
     candidate_q1 = _extract_query_faithfulness(candidate, q1_index)
@@ -100,6 +127,11 @@ def run_guard(
         messages.append(
             "WARNING: candidate is older than the baseline — did the latest "
             "`ragas_eval` run use --export?"
+        )
+    if cache_rows:
+        messages.append(
+            f"answer cache: {cache_hits}/{cache_rows} rows cached "
+            f"({cache_rows - cache_hits} live generation(s))"
         )
     messages += [
         f"avg faithfulness={candidate_avg:.3f} (min={min_avg_faithfulness:.3f})",

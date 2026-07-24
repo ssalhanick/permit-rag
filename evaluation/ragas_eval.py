@@ -771,6 +771,7 @@ def run_evaluation(
     queries: Optional[list[dict[str, Any]]] = None,
     query_indices: Optional[list[int]] = None,
     retrieval_only: bool = False,
+    answer_cache_enabled: bool | None = None,
 ) -> list[EvalResult]:
     """
     Run RAGAs evaluation on the test query suite.
@@ -779,6 +780,9 @@ def run_evaluation(
         queries: Custom query list. Defaults to TEST_QUERIES.
         query_indices: If set, only run queries at these indices.
         retrieval_only: Skip generation, score only context precision.
+        answer_cache_enabled: Explicit override for the answer cache. None
+            defers to RAGAS_ANSWER_CACHE_ENABLED. Pass False to guarantee live
+            generation -- see the note below on why the env var alone cannot.
 
     Returns:
         List of EvalResult objects.
@@ -789,7 +793,19 @@ def run_evaluation(
     if query_indices is not None:
         queries = [queries[i] for i in query_indices if i < len(queries)]
 
-    cache_enabled = _env_bool("RAGAS_ANSWER_CACHE_ENABLED", True)
+    # An explicit argument beats the environment, because the environment is not
+    # actually controllable from the shell here: bootstrap_env() runs *inside*
+    # this process and calls load_dotenv(override=True) three times, so a
+    # `RAGAS_ANSWER_CACHE_ENABLED=false` exported by the caller is silently
+    # overwritten by whatever the dotenv files say -- and .env.local.example
+    # ships it as `true`. A cached run never calls generate_answer, so it scores
+    # stale answer text while looking entirely healthy. That produced two
+    # meaningless Phase 2 gate runs before it was spotted. Use --no-answer-cache.
+    cache_enabled = (
+        _env_bool("RAGAS_ANSWER_CACHE_ENABLED", True)
+        if answer_cache_enabled is None
+        else answer_cache_enabled
+    )
     answer_cache = _load_answer_cache() if cache_enabled else {}
     cache_stats = CacheStats()
     tracing_enabled = _langsmith_enabled()
@@ -1101,6 +1117,16 @@ if __name__ == "__main__":
         action="store_true",
         help="Export results to evaluation/results/ as JSON",
     )
+    parser.add_argument(
+        "--no-answer-cache",
+        action="store_true",
+        help=(
+            "Force live generation, ignoring the answer cache. Required for any "
+            "run that must exercise the generator (a gate re-baseline). The env "
+            "var RAGAS_ANSWER_CACHE_ENABLED cannot do this: bootstrap_env() "
+            "load_dotenv(override=True) overwrites it inside the process."
+        ),
+    )
     args = parser.parse_args()
 
     logging.basicConfig(
@@ -1112,6 +1138,7 @@ if __name__ == "__main__":
         results = run_evaluation(
             query_indices=args.query,
             retrieval_only=args.retrieval_only,
+            answer_cache_enabled=False if args.no_answer_cache else None,
         )
 
         if args.export:

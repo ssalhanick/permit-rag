@@ -111,6 +111,88 @@ def test_run_guard_refuses_to_compare_a_file_to_itself(tmp_path: Path) -> None:
     assert any("--export" in line for line in messages)
 
 
+def _write_cached_payload(
+    path: Path, *, avg_faithfulness: float, cache_hits: list[bool | None]
+) -> None:
+    """Write a payload whose rows carry explicit answer_cache_hit flags."""
+    payload = {
+        "run_metrics": {"avg_faithfulness": avg_faithfulness},
+        "results": [
+            {"faithfulness": 0.90, "answer_cache_hit": hit} for hit in cache_hits
+        ],
+    }
+    path.write_text(json.dumps(payload), encoding="utf-8")
+
+
+def test_run_guard_rejects_a_fully_cached_candidate(tmp_path: Path) -> None:
+    """
+    A candidate served entirely from the answer cache must fail.
+
+    On a cache hit `ragas_eval` never calls `generate_answer`, so it scores
+    answer text produced by some earlier run and a change to the generation path
+    is invisible. Two Phase 2 gate runs passed at avg 0.903 and 0.896 this way,
+    with 0ms generation latency on every query, before it was caught. Same
+    failure class as comparing a file to itself: green, and carrying no
+    information about the thing under test.
+    """
+    baseline = tmp_path / "baseline.json"
+    candidate = tmp_path / "candidate.json"
+    _write_payload(baseline, avg_faithfulness=0.91, q1_faithfulness=1.0)
+    _write_cached_payload(candidate, avg_faithfulness=0.90, cache_hits=[True] * 7)
+
+    passed, messages = run_guard(
+        candidate_path=candidate,
+        baseline_path=baseline,
+        min_avg_faithfulness=0.85,
+        q1_index=1,
+        max_q1_drop=0.10,
+    )
+
+    assert passed is False
+    assert any("answer-cache hits" in line for line in messages)
+    assert any("--no-answer-cache" in line for line in messages)
+
+
+def test_run_guard_accepts_a_partially_cached_candidate(tmp_path: Path) -> None:
+    """One live generation is enough to be measuring something; report the split."""
+    baseline = tmp_path / "baseline.json"
+    candidate = tmp_path / "candidate.json"
+    _write_payload(baseline, avg_faithfulness=0.91, q1_faithfulness=1.0)
+    _write_cached_payload(
+        candidate, avg_faithfulness=0.90, cache_hits=[True, False, True]
+    )
+
+    passed, messages = run_guard(
+        candidate_path=candidate,
+        baseline_path=baseline,
+        min_avg_faithfulness=0.85,
+        q1_index=1,
+        max_q1_drop=0.10,
+    )
+
+    assert passed is True
+    assert any("2/3 rows cached" in line for line in messages)
+
+
+def test_run_guard_accepts_a_cache_disabled_candidate(tmp_path: Path) -> None:
+    """`--no-answer-cache` leaves answer_cache_hit=None, which is not a hit."""
+    baseline = tmp_path / "baseline.json"
+    candidate = tmp_path / "candidate.json"
+    _write_payload(baseline, avg_faithfulness=0.91, q1_faithfulness=1.0)
+    _write_cached_payload(candidate, avg_faithfulness=0.90, cache_hits=[None] * 7)
+
+    passed, messages = run_guard(
+        candidate_path=candidate,
+        baseline_path=baseline,
+        min_avg_faithfulness=0.85,
+        q1_index=1,
+        max_q1_drop=0.10,
+    )
+
+    assert passed is True
+    assert any("0/7 rows cached" in line for line in messages)
+
+
 def test_run_guard_warns_when_candidate_predates_baseline(tmp_path: Path) -> None:
     """An auto-selected candidate older than the baseline signals a missed export."""
     import os
