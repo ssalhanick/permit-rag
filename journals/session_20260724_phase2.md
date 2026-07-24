@@ -171,28 +171,95 @@ is a no-op today either way — it starts mattering in Phase 4.
 feat: Phase 2 Manager + artifact store + Budget Governor, fold generator into the runtime
 ```
 
+## RAGAs gate — what the machine-B runs actually found (2026-07-24, later)
+
+The RAGAs half was run on the corpus machine, and it turned into a lesson about
+the harness before it said anything about Phase 2.
+
+**Three cached false-passes first.** The first three "gate" runs all passed
+(avg 0.903, 0.896, then a green `eval_guard`) while measuring nothing. Every row
+was `answer_cache_hit=True`: on a cache hit `ragas_eval` never calls
+`generate_answer`, so it scored answer text cached on 2026-07-21 — before Phase
+2 existed — and reported 0ms generation latency the whole time. The cause is the
+same `override=True` footgun already in this repo's DB-target notes:
+`RAGAS_ANSWER_CACHE_ENABLED=false` exported from the shell is overwritten by
+`bootstrap_env()` → `load_dotenv(override=True)`, and `.env.local.example` ships
+the flag `true`. The canonical command in README:660 could never have worked.
+
+Fixed in code (commits `b3213da`, `6bd90ec`):
+- `ragas_eval --no-answer-cache` — an argv flag dotenv cannot clobber.
+- `eval_guard` hard-fails a candidate whose rows are all cache hits (same
+  false-pass class as comparing a file to itself), and prints the cached/live
+  split otherwise.
+- `ragas_eval` now exports `stop_reason` and `answer_preview`, so a faithfulness
+  collapse can be told apart from a truncation.
+- README:660 corrected to use `--no-answer-cache`.
+
+**The first genuinely live full run failed the floor — and it was one query.**
+`ragas_20260724_123849.json`: avg faithfulness **0.7956** (floor 0.85), but avg
+**without q6 = 0.8676**. q6 ("max building height, Dallas") collapsed 0.875 (its
+cached score) → 0.364 live.
+
+**Then q6 alone, three live runs, settled attribution:**
+
+| run | faithfulness | cache_hit | stop_reason | answer |
+|-----|-------------|-----------|-------------|--------|
+| 131002 | 0.600 | None | end_turn | identical |
+| 134430 | 0.417 | None | end_turn | identical |
+| 134927 | 0.273 | None | end_turn | identical |
+
+The generated answer is **byte-identical across all three** (temperature=0) and
+**not truncated** (`end_turn` — trap (d)'s 1024 cap is not firing). The RAGAs
+faithfulness judge, itself an LLM, scored the same text 0.273 / 0.417 / 0.600.
+
+**Conclusions:**
+1. Generation is deterministic and unchanged by the fold. Combined with
+   `test_generator_runtime_fold.py`'s pass-through assertions, the generator
+   fold is behaviour-preserving.
+2. The floor miss is **not attributable to Phase 2** — it is RAGAs judge noise
+   (0.33 spread on identical input) plus a real corpus grounding weakness on q6
+   (`city-of-dallas-ordiance-v3`, the v1/v2/v3 supersession the arch doc flags).
+3. A single RAGAs run cannot verify or refute a code change here: the metric's
+   own run-to-run noise on one query exceeds any plausible fold effect. The
+   harness needs N-sample averaging to be a trustworthy gate.
+
+**Still to run on machine B (both cheap, neither blocks Phase 3 thinking):**
+- Old-vs-new q6 answer diff — the one clean proof the fold is inert:
+  ```powershell
+  Move-Item evaluation/cache/answers.json evaluation/cache/answers.json.bak -Force; git checkout 0651620; py -m evaluation.ragas_eval --query 6; git checkout agents/phase-2; Move-Item evaluation/cache/answers.json.bak evaluation/cache/answers.json -Force
+  ```
+  Compare the console `Answer: # Maximum Building Height…` line to the Phase 2
+  answer. Same opening → fold proven inert.
+- `py scripts/verify_phase2.py --local` — the Manager-orchestration half (live
+  plan + the two trace rows). Untouched by all of the above.
+
 ## Still open at session end
 
-- **The RAGAs half of the Phase 2 gate is UNRUN.** Phase 2 is *not* verified.
+- Phase 2 generator fold: **shown behaviour-preserving** (deterministic answers
+  + unit tests); the old-vs-new q6 diff is the last confirming step.
 - `verify_phase2.py --local` unrun (needs the corpus machine).
+- q6 / Dallas ordinance supersession → Phase 3 corpus ticket.
+- RAGAs harness needs multi-sample averaging to be a reliable gate.
 - Prod migration 027 status still disputed (Phase 0 loose end).
 - `pyproject.toml` anthropic floor still unpushed.
 - Phase 3's migration number collides with `027_agent_action_item_dedupe`.
 
-## Machine B block — run these, paste the output back
+## Machine B block — the two remaining Phase 2 checks
 
 ```powershell
 .\.venv\Scripts\Activate.ps1
+# 1. Prove the generator fold is inert: old vs new q6 answer must match.
+Move-Item evaluation/cache/answers.json evaluation/cache/answers.json.bak -Force; git checkout 0651620; py -m evaluation.ragas_eval --query 6; git checkout agents/phase-2; Move-Item evaluation/cache/answers.json.bak evaluation/cache/answers.json -Force
+# 2. Manager-orchestration half (live plan + trace rows).
+py scripts/verify_phase2.py --local
+# Carried Phase 0/1 checks, same session:
 py scripts/check_migration_details.py --local
 py scripts/verify_phase1.py --local
-py scripts/verify_phase2.py --local
-py -m evaluation.ragas_eval --export
-py -m evaluation.eval_guard --baseline <path to the Phase 0 results json>
 ```
 
-`--export` is mandatory on `ragas_eval`. Without it no file is written and
-`eval_guard` compares the baseline against itself and passes — a green run that
-proves nothing. Target: **avg faithfulness 0.910, floor 0.85.**
+The 0.910 "baseline" and the "must match avg faithfulness 0.910" target are
+retired: that number is a single cached score, and we now know the judge varies
+±0.15 on one query. Do not gate Phase 2 on a single RAGAs number.
 
 ## Prompt for next session
 

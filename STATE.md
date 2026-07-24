@@ -1,6 +1,6 @@
 # permit_rag — State
 
-_Updated: 2026-07-24 (Agent architecture Phase 2 — Manager port; machine-A half done, RAGAs half unrun)_
+_Updated: 2026-07-24 (Agent architecture Phase 2 — Manager port; machine-A done, generator fold shown behaviour-preserving, one q6 diff + verify_phase2 --local left)_
 
 ## Phase
 
@@ -62,19 +62,54 @@ py scripts/verify_phase2.py --no-db                # 18/18 offline invariants
 expects** is the whole signal of this phase. `git status tests/` was clean
 before the new files were added — the ported route satisfies the old test as-is.
 
-### Machine B — OPEN. This is what "verified" is waiting on.
+### Machine B — the RAGAs half, and what it actually showed
 
 ```powershell
 py scripts/verify_phase2.py --local
-py -m evaluation.ragas_eval --export
+py -m evaluation.ragas_eval --export --no-answer-cache   # NOT the env var — see below
 py -m evaluation.eval_guard --baseline <the Phase 0 results json>
 ```
 
-Must match the Phase 0 baseline: **avg faithfulness 0.910, floor 0.85.**
+**The generator fold is behaviour-preserving. The RAGAs floor number is not a
+usable gate for it — the metric's own run-to-run noise is larger than any
+effect the fold could have.** Evidence, from three live single-query runs of q6
+("max building height, Dallas") on Phase 2 code (2026-07-24):
 
-**`--export` is mandatory.** Without it `ragas_eval` writes no file and
-`eval_guard` silently compares the baseline against itself and passes — a green
-run that proves nothing.
+| run | faithfulness | cache_hit | stop_reason | answer |
+|-----|-------------|-----------|-------------|--------|
+| 131002 | 0.600 | None | end_turn | identical |
+| 134430 | 0.417 | None | end_turn | identical |
+| 134927 | 0.273 | None | end_turn | identical |
+
+The generated answer is **byte-identical across all three** (temperature=0,
+deterministic) and **not truncated** (`end_turn`, so trap (d)'s 1024 cap is not
+firing). Yet the RAGAs faithfulness judge — itself an LLM decomposing the answer
+into claims — scored the same text 0.273 / 0.417 / 0.600. A 0.33 spread on
+identical input. So:
+
+- The full-set live run (`ragas_20260724_123849.json`) landed avg 0.7956, below
+  the 0.85 floor, **driven almost entirely by q6** (avg without q6 = 0.8676).
+- That miss is **not attributable to Phase 2**: generation is deterministic and
+  unchanged, and the fold's pass-through of model / max_tokens / cache / prompt
+  is unit-tested in `test_generator_runtime_fold.py`.
+- q6 is a genuine grounding weakness on `city-of-dallas-ordiance-v3` — the
+  v1/v2/v3 supersession the arch doc flags. A **corpus** problem, Phase 3's job.
+
+**Deciding test still to run (cheap):** run q6 on the pre-Phase-2 commit
+`0651620` (cache emptied so it generates live) and compare the console
+`Answer:` line to the Phase 2 answer. Identical opening → the fold provably
+changed nothing and the RAGAs half is satisfied as far as it can be. Command is
+in the punch list.
+
+**Two harness traps, both fixed in code (commits `b3213da`, `6bd90ec`):**
+1. `RAGAS_ANSWER_CACHE_ENABLED=false` from the shell **does not work** —
+   `bootstrap_env()` runs inside the process and `load_dotenv(override=True)`
+   overwrites it (`.env.local.example` ships it `true`). A cached run never
+   calls `generate_answer`, scores stale 07-21 answer text, and reports 0ms
+   generation latency while looking healthy. **Three gate runs passed this way
+   before it was caught.** Use `--no-answer-cache`, which argv cannot clobber.
+2. `eval_guard` now hard-fails a candidate whose rows are all `answer_cache_hit`
+   — same false-pass class as comparing a file to itself.
 
 ## Verification — which machine runs what
 
@@ -111,7 +146,7 @@ py scripts/verify_phase2.py --local --no-llm    # skip the paid answer call
 py scripts/verify_phase1.py --local             # Phase 1 regression
 py scripts/verify_phase0.py --local             # Phase 0 regression
 py scripts/check_migration_details.py --local   # settles the disputed prod 027
-py -m evaluation.ragas_eval --export            # --export or eval_guard self-compares
+py -m evaluation.ragas_eval --export --no-answer-cache   # cache off, or it scores stale text
 ```
 
 `verify_phase2.py --local` drives the real `run_query_plan` against the real
@@ -131,29 +166,56 @@ clean on machine B.
 
 ## Blocked on / needs your attention (punch list)
 
-1. **RAGAs re-baseline for Phase 2 (machine B).** The open half of the gate.
-   Nothing else about Phase 2 should be treated as settled until this lands.
-2. **Prod migration 027 — confirm state before doing anything.** STATE's prior
+1. **Phase 2 generator-fold verification — one cheap test left (machine B).**
+   The RAGAs floor number is not a usable gate here (judge noise > fold effect;
+   see the gate section). The deciding test is an old-vs-new q6 answer diff:
+
+   ```powershell
+   Move-Item evaluation/cache/answers.json evaluation/cache/answers.json.bak -Force; git checkout 0651620; py -m evaluation.ragas_eval --query 6; git checkout agents/phase-2; Move-Item evaluation/cache/answers.json.bak evaluation/cache/answers.json -Force
+   ```
+
+   Compare the console `Answer: # Maximum Building Height…` line to the Phase 2
+   answer (same opening was captured on 2026-07-24). Identical → fold proven
+   inert, generator half of the gate closed.
+2. **`verify_phase2.py --local` still unrun (machine B).** Separate from RAGAs —
+   drives the live Manager plan and reads back the two trace rows. Needed to
+   close the Manager-orchestration half.
+3. **q6 / Dallas ordinance v1-v2-v3 supersession → Phase 3 corpus ticket.** q6
+   ("max building height, Dallas") is weakly grounded even at best (0.60),
+   sourced from `city-of-dallas-ordiance-v3`. This is exactly what Phase 3's
+   metadata validator + supersession detection exist to fix. Not a Phase 2 bug.
+4. **RAGAs harness needs multi-sample averaging to be a trustworthy gate.**
+   Single-shot faithfulness swings ±0.15 on one query (0.273–0.600 measured on
+   identical input). A one-run RAGAs number cannot verify or refute a code
+   change. Worth a note in the eval docs and, eventually, an N-sample mode.
+5. **Prod migration 027 — confirm state before doing anything.** STATE's prior
    note said 026+027 were applied to RDS; the same-day journal said prod still
    needed 027. These conflict. **Do not blind-apply 027** — it is a `NOT NULL`
    alter and re-running it on an already-fixed table will error. Run
    `check_migration_details.py` first. A Phase 0 loose end, not a Phase 2 one.
-3. **Push the `anthropic>=0.104.1` floor** in `pyproject.toml` (commit written,
+6. **Prod migration 027 — confirm state before doing anything.** STATE's prior
+   note said 026+027 were applied to RDS; the same-day journal said prod still
+   needed 027. These conflict. **Do not blind-apply 027** — it is a `NOT NULL`
+   alter and re-running it on an already-fixed table will error. Run
+   `check_migration_details.py` first. A Phase 0 loose end, not a Phase 2 one.
+7. **Push the `anthropic>=0.104.1` floor** in `pyproject.toml` (commit written,
    not yet pushed). The Dockerfile reads deps straight from `pyproject.toml`, so
    the old `>=0.25.0` pin let a build resolve a version with no `messages.parse`.
-4. **Migration numbering collision ahead of Phase 3.**
+8. **Migration numbering collision ahead of Phase 3.**
    `docs/agent_architecture.md` still lists Phase 3's migration as
    `027_metadata_validation`, but 027 is taken by
    `027_agent_action_item_dedupe`. Shift the numbers when Phase 3 starts.
-5. **Mobile OAuth deep links (deferred)** — M0-6/M0-7 device Google/Apple roundtrip.
+9. **Mobile OAuth deep links (deferred)** — M0-6/M0-7 device Google/Apple roundtrip.
 
 ## Next tasks
 
-1. Run the machine-B block at the end of `journals/session_20260724_phase2.md`;
-   paste the output back. Until then Phase 2 is unverified.
-2. Push the `pyproject.toml` anthropic floor (punch item 3).
+1. Close Phase 2: run the old-vs-new q6 answer diff (punch item 1) and
+   `verify_phase2.py --local` (punch item 2). Both machine B. Then Phase 2 is
+   done as far as it can be verified.
+2. Push the `pyproject.toml` anthropic floor (punch item 7).
 3. Phase 3 — Corpus Metadata Validator + 27-doc backfill + superadmin dashboard
-   v1, after fixing the migration numbering (punch item 4).
+   v1, after fixing the migration numbering (punch item 8). q6 (punch item 3)
+   is the first corpus this phase should fix.
 
 ## Migration drift — check before touching any database
 
@@ -239,6 +301,6 @@ py scripts/verify_phase2.py --no-db
 
 # Machine B (corpus machine) — needs the corpus + trace tables
 py scripts/verify_phase2.py --local
-py -m evaluation.ragas_eval --export && py -m evaluation.eval_guard --baseline <phase-0 json>
+py -m evaluation.ragas_eval --export --no-answer-cache && py -m evaluation.eval_guard --baseline <phase-0 json>
 # Prod corpus smoke: GET https://permits.scottsalhanick.com/api/documents  (not [])
 ```
