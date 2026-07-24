@@ -150,6 +150,8 @@ already applied by name on multiple DBs). The dedupe correction is therefore
 | Model ladder | `Tier(StrEnum)` cheap/mid/top → haiku-4-5 / sonnet-5 / opus-4-8 |
 | Prompt caching | Measure with `count_tokens` first; attach a breakpoint only above the model minimum (4096/2048) — never guess, never silently no-cache |
 | Token counting | `client.messages.count_tokens`; on failure skip budget + skip caching (no tiktoken guess) |
+| Anthropic SDK floor | `pyproject.toml` raised `anthropic>=0.25.0` → `>=0.104.1`. 0.25 predates `messages.parse`, so the old pin let a build resolve a version the runtime cannot run on. 0.104.1 is the version verified on prod |
+| Retry error set | Resolved by name via `getattr`, not direct attribute access — `OverloadedError` does not exist on prod's 0.104.1 and a direct reference raised `AttributeError` on every call |
 | Autonomy | Enforced in the runtime, fail-closed to L0; clamped again on read; dashboard only edits `current_level` |
 | Registry DI | `rag/agents/` never imports commerce/forms/bids; `api/main.py` injects them; agent callables bind lazily |
 | Registry duplicates | `register()` raises on a name clash unless `replace=True` — no silent shadowing |

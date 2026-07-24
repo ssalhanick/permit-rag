@@ -23,7 +23,10 @@ dependencies = [
     "neo4j>=5.19.0",
 
     # --- LLM / embeddings ---
-    "anthropic>=0.25.0",
+    # rag/agent_runtime.py needs messages.parse(output_format=...) -> .parsed_output
+    # for structured outputs. 0.104.1 is the floor verified on prod; 0.25 predates
+    # messages.parse entirely, so the old pin let a build resolve a broken version.
+    "anthropic>=0.104.1",
     "sentence-transformers>=3.0.0",
     "einops",
 
