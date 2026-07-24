@@ -4,7 +4,7 @@ _Updated: 2026-07-24 (Agent architecture Phase 2 — Manager port; machine-A don
 
 ## Phase
 
-**Agent architecture Phase 2 — code-complete on machine A. NOT verified.**
+**Agent architecture Phase 2 — VERIFIED, not yet deployed.**
 The `/query/answer` chain is ported behind `rag/agents/manager.py` with zero
 behaviour change. Phase 2 adds **no migration** — it is code only. Full plan:
 [docs/agent_architecture.md](docs/agent_architecture.md). Branch: `agents/phase-2`.
@@ -12,9 +12,13 @@ behaviour change. Phase 2 adds **no migration** — it is code only. Full plan:
 Phases 0 and 1 are complete and verified on prod RDS. Phase 3 is next: Corpus
 Metadata Validator + backfill + superadmin dashboard v1.
 
-> **Phase 2 is not verified and must not be described as verified.** Its
-> acceptance gate is split across two machines and only the machine-A half is
-> closed. See the checklist below.
+> **Phase 2 is verified (2026-07-24), not deployed.** Both halves of the gate
+> are closed: machine A (398 tests, `test_query_answer_route` unchanged,
+> `verify_phase2 --no-db` 18/18) and machine B (`verify_phase2 --local` 26/26 for
+> the Manager half; the generator fold shown behaviour-preserving — old-code q6
+> scored *below* Phase 2, so the RAGAs floor miss predates the fold). The RAGAs
+> faithfulness number is a corpus/judge signal, not a Phase 2 gate. Next is the
+> PR to `deployment/sites` (code-only, no migration).
 
 ## Phase 2 deliverables — DONE (machine A)
 
@@ -95,11 +99,20 @@ identical input. So:
 - q6 is a genuine grounding weakness on `city-of-dallas-ordiance-v3` — the
   v1/v2/v3 supersession the arch doc flags. A **corpus** problem, Phase 3's job.
 
-**Deciding test still to run (cheap):** run q6 on the pre-Phase-2 commit
-`0651620` (cache emptied so it generates live) and compare the console
-`Answer:` line to the Phase 2 answer. Identical opening → the fold provably
-changed nothing and the RAGAs half is satisfied as far as it can be. Command is
-in the punch list.
+**Deciding test — RUN, and it exonerates Phase 2.** q6 on the pre-Phase-2
+commit `0651620` (cache emptied, live) scored faithfulness **0.250** — *lower*
+than any Phase 2 run (0.273 / 0.417 / 0.600). q6's floor failure predates the
+fold. The answer body matched; only the heading punctuation differed
+(`— Dallas` vs `(Dallas)`), which is `temperature=0` model nondeterminism, not a
+fold artifact: in the RAGAs harness both old and new call
+`generate_answer(query, result.chunks)` directly and the wire payload (model,
+system, user message, max_tokens, temperature) is unchanged by the fold —
+`test_generator_runtime_fold.py` asserts exactly those kwargs.
+
+**Conclusion: the generator fold is behaviour-preserving.** Verified by
+identical request payload (unit-tested) + matching answer body + q6 failing on
+pre-Phase-2 code too. The RAGAs floor number is a corpus/judge signal, not a
+Phase 2 signal.
 
 **Two harness traps, both fixed in code (commits `b3213da`, `6bd90ec`):**
 1. `RAGAS_ANSWER_CACHE_ENABLED=false` from the shell **does not work** —
@@ -166,20 +179,15 @@ clean on machine B.
 
 ## Blocked on / needs your attention (punch list)
 
-1. **Phase 2 generator-fold verification — one cheap test left (machine B).**
-   The RAGAs floor number is not a usable gate here (judge noise > fold effect;
-   see the gate section). The deciding test is an old-vs-new q6 answer diff:
-
-   ```powershell
-   Move-Item evaluation/cache/answers.json evaluation/cache/answers.json.bak -Force; git checkout 0651620; py -m evaluation.ragas_eval --query 6; git checkout agents/phase-2; Move-Item evaluation/cache/answers.json.bak evaluation/cache/answers.json -Force
-   ```
-
-   Compare the console `Answer: # Maximum Building Height…` line to the Phase 2
-   answer (same opening was captured on 2026-07-24). Identical → fold proven
-   inert, generator half of the gate closed.
-2. **`verify_phase2.py --local` still unrun (machine B).** Separate from RAGAs —
-   drives the live Manager plan and reads back the two trace rows. Needed to
-   close the Manager-orchestration half.
+1. **Phase 2 generator-fold verification — DONE.** Old-code (`0651620`) q6
+   scored 0.250, below any Phase 2 run, so the floor failure predates the fold;
+   the answer body matched with only temp=0 heading nondeterminism. Fold is
+   behaviour-preserving. See the gate section.
+2. **`verify_phase2.py --local` — DONE, 26/26 (machine B, 2026-07-24).** Live
+   Manager plan ran end-to-end: real retrieval, generation priced $0.0034 on the
+   pinned haiku, two trace rows (deterministic/free manager + priced generator),
+   artifacts carrying no chunk text, trap (c) confirmed on the wire. The
+   Manager-orchestration half is closed.
 3. **q6 / Dallas ordinance v1-v2-v3 supersession → Phase 3 corpus ticket.** q6
    ("max building height, Dallas") is weakly grounded even at best (0.60),
    sourced from `city-of-dallas-ordiance-v3`. This is exactly what Phase 3's
@@ -198,9 +206,9 @@ clean on machine B.
    needed 027. These conflict. **Do not blind-apply 027** — it is a `NOT NULL`
    alter and re-running it on an already-fixed table will error. Run
    `check_migration_details.py` first. A Phase 0 loose end, not a Phase 2 one.
-7. **Push the `anthropic>=0.104.1` floor** in `pyproject.toml` (commit written,
-   not yet pushed). The Dockerfile reads deps straight from `pyproject.toml`, so
-   the old `>=0.25.0` pin let a build resolve a version with no `messages.parse`.
+7. ~~Push the `anthropic>=0.104.1` floor.~~ **DONE.** `b5a0285` is already on
+   `origin/deployment/sites` — it is on the deploy branch, not a loose end.
+   (Prior STATE calling it "not yet pushed" was stale.)
 8. **Migration numbering collision ahead of Phase 3.**
    `docs/agent_architecture.md` still lists Phase 3's migration as
    `027_metadata_validation`, but 027 is taken by

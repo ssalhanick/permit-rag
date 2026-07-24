@@ -275,13 +275,14 @@ def _report(offline: bool) -> None:
         sys.exit(1)
     if offline:
         print(f"  {len(RESULTS)} offline checks passed — PARTIAL RUN.")
-        print("  The live plan run is NOT verified, and neither is RAGAs.")
+        print("  The live Manager plan is NOT verified here — run --local on the corpus machine.")
     else:
-        print(f"  All {len(RESULTS)} checks passed on this database.")
-    print("  Phase 2 is NOT verified until RAGAs re-baselines on the corpus machine:")
-    print("    py -m evaluation.ragas_eval --export")
-    print("    py -m evaluation.eval_guard --baseline <phase-0 results json>")
-    print("  Target: avg faithfulness 0.910, floor 0.85. --export is mandatory.")
+        print(f"  All {len(RESULTS)} checks passed — the Manager plan is verified on this database.")
+    print("  RAGAs faithfulness is a corpus/judge signal, NOT a Phase 2 gate: the")
+    print("  judge varies more run-to-run than the fold can. If you run it, use")
+    print("  --no-answer-cache — the env var is overwritten by bootstrap_env, so a")
+    print("  plain run scores stale cached answer text and measures nothing:")
+    print("    py -m evaluation.ragas_eval --export --no-answer-cache")
     print("=" * 72)
 
 

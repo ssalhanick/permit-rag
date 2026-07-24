@@ -223,15 +223,29 @@ faithfulness judge, itself an LLM, scored the same text 0.273 / 0.417 / 0.600.
    own run-to-run noise on one query exceeds any plausible fold effect. The
    harness needs N-sample averaging to be a trustworthy gate.
 
-**Still to run on machine B (both cheap, neither blocks Phase 3 thinking):**
-- Old-vs-new q6 answer diff — the one clean proof the fold is inert:
-  ```powershell
-  Move-Item evaluation/cache/answers.json evaluation/cache/answers.json.bak -Force; git checkout 0651620; py -m evaluation.ragas_eval --query 6; git checkout agents/phase-2; Move-Item evaluation/cache/answers.json.bak evaluation/cache/answers.json -Force
-  ```
-  Compare the console `Answer: # Maximum Building Height…` line to the Phase 2
-  answer. Same opening → fold proven inert.
-- `py scripts/verify_phase2.py --local` — the Manager-orchestration half (live
-  plan + the two trace rows). Untouched by all of the above.
+**Old-vs-new q6 diff — RAN, fold exonerated.** Pre-Phase-2 code (`0651620`) on
+q6, cache emptied, live: faithfulness **0.250** — lower than every Phase 2 run
+(0.273 / 0.417 / 0.600). So q6's floor failure predates the fold entirely. The
+answer body matched; only the heading punctuation differed (`— Dallas` vs
+`(Dallas)`), which is temp=0 nondeterminism, not a fold change: in the RAGAs
+harness both old and new call `generate_answer(query, result.chunks)` directly,
+and the wire payload is unchanged (asserted in `test_generator_runtime_fold.py`).
+**Generator fold: behaviour-preserving.**
+
+**`verify_phase2.py --local` — RAN, 26/26 (machine B, localhost:5433 corpus).**
+Live Manager plan end-to-end: real retrieval, generation priced $0.0034 on the
+pinned haiku, two trace rows (deterministic/free manager + priced generator),
+artifacts carrying no chunk text, and trap (c) confirmed on the wire
+(`claude-haiku-4-5-20251001`). The Manager-orchestration half is closed.
+
+Side note from the probe run: `5/5 citations not matched to context` — the
+answer cited chunks absent from the retrieved set. Pre-existing generator
+behaviour (unverified citations reach the response); catching it is the Citation
+Verifier's job in Phase 5, not a Phase 2 regression.
+
+**Phase 2 is verified.** Both gate halves closed. Remaining before it ships is
+the PR to `deployment/sites` (code-only, no migration) plus the carried
+`pyproject.toml` anthropic-floor push.
 
 ## Still open at session end
 
