@@ -8,9 +8,11 @@ import json
 import logging
 import os
 import re
-from typing import Any
+from typing import Any, Literal
 
-from audit.logger import traced
+from pydantic import BaseModel, ConfigDict, Field
+
+from rag.agent_runtime import Tier, run_agent
 
 log = logging.getLogger(__name__)
 
@@ -36,6 +38,36 @@ If the user wants different textures on parts of the same wall (e.g. "backsplash
 Calculate these boundaries based on the wall dimensions in surface_hints if user specifies exact units (e.g. "bottom 1 meter" on a wall with height 2.5m is y_min: 0.0, y_max: 0.4).
 Do not invent measurements. Use only the provided room context.
 """
+
+
+# ── Structured-output schema (messages.parse) ────────────────
+# The runtime uses these to constrain decoding, so the model cannot return a
+# malformed overlay. extra="allow" keeps forward-compatibility with any new
+# hint the prompt starts emitting before this schema catches up.
+
+
+class OverlayPatch(BaseModel):
+    """One AR overlay segment applied to a scanned surface."""
+
+    model_config = ConfigDict(extra="allow")
+
+    surface_id: str | None = None
+    type: Literal["paint", "tile", "trim", "appliance"] = "paint"
+    material_id: str = "generic_paint"
+    color_hex: str | None = None
+    asset_url: str | None = None
+    product_search: dict[str, Any] | None = None
+    y_min: float = 0.0
+    y_max: float = 1.0
+    x_min: float = 0.0
+    x_max: float = 1.0
+
+
+class DesignIntentParse(BaseModel):
+    """The structured result of parsing one remodel utterance."""
+
+    overlays: list[OverlayPatch] = Field(default_factory=list)
+    explanation: str = ""
 
 
 def parse_design_intent(
@@ -135,7 +167,6 @@ def _parse_design_intent_rules(
     }
 
 
-@traced("design_intent")
 def _parse_design_intent_llm(
     utterance: str,
     *,
@@ -144,11 +175,15 @@ def _parse_design_intent_llm(
     surface_hints: list[dict[str, Any]] | None,
     selected_surface_id: str | None = None,
 ) -> dict[str, Any]:
-    """Call Anthropic for structured overlay patches."""
-    import anthropic
+    """
+    Parse structured overlay patches through the agent runtime.
 
-    client = anthropic.Anthropic(api_key=os.environ.get("ANTHROPIC_API_KEY"))
-    model = os.environ.get("LLM_MODEL", "claude-haiku-4-5-20251001")
+    Uses ``messages.parse`` (via ``run_agent``) so the overlays are
+    schema-valid by construction -- no JSON repair. Tracing, model-ladder
+    selection, caching, and autonomy all happen inside the runtime; this
+    function only assembles the prompt and reshapes the validated result into
+    the dict contract callers (and token accounting) already expect.
+    """
     context = {
         "room_label": room_label,
         "derived": room_derived or {},
@@ -158,25 +193,28 @@ def _parse_design_intent_llm(
     user_message = (
         f"Room context:\n{json.dumps(context, indent=2)}\n\n"
         f"User instruction:\n{utterance}\n\n"
-        "Return JSON only."
+        "Return the structured overlays."
     )
-    response = client.messages.create(
-        model=model,
-        max_tokens=512,
-        temperature=0.0,
+    result = run_agent(
+        "design_intent",
         system=_DESIGN_SYSTEM,
         messages=[{"role": "user", "content": user_message}],
+        tier=Tier.CHEAP,
+        output_format=DesignIntentParse,
+        effort="low",
+        max_tokens=512,
+        temperature=0.0,
+        input_parts=(utterance, selected_surface_id),
     )
-    text = response.content[0].text if response.content else "{}"
-    parsed = json.loads(text)
-    if "overlays" not in parsed:
+    parsed = result.parsed_output
+    if parsed is None:
         raise ValueError("LLM response missing overlays key")
     return {
-        "overlays": parsed["overlays"],
-        "explanation": parsed.get("explanation", ""),
+        "overlays": [o.model_dump() for o in parsed.overlays],
+        "explanation": parsed.explanation,
         "usage": {
-            "input_tokens": int(response.usage.input_tokens),
-            "output_tokens": int(response.usage.output_tokens),
-            "model": model,
+            "input_tokens": result.usage.tokens_in,
+            "output_tokens": result.usage.tokens_out,
+            "model": result.model,
         },
     }

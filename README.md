@@ -40,10 +40,9 @@ py -m pytest tests/test_commerce_takeoff.py tests/test_commerce_product_resolver
 ## TODO
 
 ### In Progress
-- [ ] **[Agent Architecture](docs/agent_architecture.md)** — 26-agent roster under one Manager, with prompt routing, a feedback loop, autonomy levels, and a token protocol. **Phase 0 (trace store) is verified on local** via `py scripts/verify_phase0.py --local`; prod push is gated on a RAGAs re-baseline. Phase 1 is the agent runtime + registry. Phases 0–5 are the demo slice.
+- [ ] **[Agent Architecture](docs/agent_architecture.md)** — 26-agent roster under one Manager, with prompt routing, a feedback loop, autonomy levels, and a token protocol. **Phases 0 (trace store) and 1 (runtime + registry) are code-complete and verified on local.** Phase 2 (Manager, zero behaviour change) is next. Phases 0–5 are the demo slice.
 
 ### Planned
-- [ ] [Agent Architecture Phase 1](docs/agent_architecture.md) — `rag/agent_runtime.py` as the single Anthropic call site (structured outputs, model ladder, caching, autonomy enforcement, automatic tracing) plus the `AgentSpec` registry
 - [ ] [Agent Architecture Phase 2](docs/agent_architecture.md) — Manager + artifact store + Budget Governor, ported over `api/routes/query.py` with zero behaviour change
 - [ ] [Agent Architecture Phase 3](docs/agent_architecture.md) — Corpus Metadata Validator + 27-doc backfill + superadmin dashboard v1 (action queue). **Includes the metadata source-of-truth redesign**: `documents/metadata/*.json` sidecars are now gitignored (derived, write-only, churned on every ingest); Phase 3 decides whether they survive as a local cache or are replaced by the validator writing corrected metadata straight to the DB + `registry.json` via `governance.py`. `catalog.json` + `registry.json` remain the tracked source/governance artifacts.
 - [ ] **Step-by-step instructions agent** — agent #12 in [docs/agent_architecture.md](docs/agent_architecture.md); turns project/design-intent context into detailed step-by-step instructions, persona-aware. Backs an "Instructions produced" section on the project dashboard (deferred from migration 023's project lifecycle work — no data source existed yet).
@@ -58,7 +57,7 @@ py -m pytest tests/test_commerce_takeoff.py tests/test_commerce_product_resolver
 - [ ] [Cognito Groups RBAC](docs/cognito_groups_rbac.md) — Cognito groups as source of truth for `member` / `admin` / `superadmin`; staff bypass for see-everything; keep project_members + ops token
 
 ### Upcoming
-- [ ] **CI: pytest gate on deploy** — add a `pytest` job to `.github/workflows/deploy.yml` that `deploy-backend` depends on, so a failing suite blocks the deploy. Today the workflow runs only `python -m compileall` (syntax), not the 292-test suite, so a compiling-but-failing commit can ship to prod. (Migrations stay manual — CI has no RDS reach.)
+- [ ] **CI: pytest gate on deploy** — add a `pytest` job to `.github/workflows/deploy.yml` that `deploy-backend` depends on, so a failing suite blocks the deploy. Today the workflow runs only `python -m compileall` (syntax), not the 315-test suite, so a compiling-but-failing commit can ship to prod. (Migrations stay manual — CI has no RDS reach.)
 - [ ] **SerpApi production key** — add `SERPAPI_API_KEY` to ECS task env / SSM after account signup (blocker for live HD prices; mocks work until then)
 - [ ] Add ability to update existing documents
 - [ ] Mobile OAuth deep links (M0-6/M0-7) + Firebase push (`google-services.json`)
@@ -66,6 +65,7 @@ py -m pytest tests/test_commerce_takeoff.py tests/test_commerce_product_resolver
 - [ ] 3D Map Integration — CesiumJS city boundaries + site overlay
 
 ### Completed
+- [x] **Agent Architecture Phase 1 — runtime + registry + autonomy enforcement** ([docs/agent_architecture.md](docs/agent_architecture.md)) — `rag/agent_runtime.py` as the single Anthropic call site (native `messages.parse` structured outputs, cheap/mid/top model ladder, measured prompt caching that refuses the silent-no-cache footgun, `count_tokens` budgeting, retries, automatic tracing, and fail-closed autonomy enforcement), plus `rag/agents/registry.py` (`AgentSpec` + lazy binding, rag self-registers, commerce/forms/bids injected by `api/main.py`). `rag/design_intent.py`'s inline Anthropic call folded into the runtime. No new migration. Verify with `py scripts/verify_phase1.py --local`. **Code-complete and verified on local; prod deploy pending.**
 - [x] **Agent Architecture Phase 0 — trace store + chunk-leakage fix** ([docs/agent_architecture.md](docs/agent_architecture.md)) — migration 026 (`agent_runs`, `agent_steps`, `agent_corrections`, `agent_action_items`, `agent_autonomy`), the three previously-empty `audit/` modules implemented, `@traced`/`@traced_run` wired onto `generate_answer` and `design_intent`, and reranker-rejected chunks no longer prompted or billed
 - [x] [On-Demand URL Pull](docs/on_demand_url_pull.md) — `ingestion/url_normalize.py`, `ingestion/page_crawler.py`, migration 022 identity keys + backfill script, `POST /admin/documents/pull-page` + job poll, Pull-from-URL tab on `/upload`. End-to-end verification checklist in the plan doc still pending.
 - [x] Sprint 17: Conversational Project Kickoff — Interactive LLM-driven dialog to extract user persona, budget, and materials. Automatically synthesizes a project-specific custom system prompt (migration 020) which is injected into all future compliance queries.

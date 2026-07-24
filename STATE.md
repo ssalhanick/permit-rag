@@ -1,213 +1,166 @@
 # permit_rag — State
 
-_Updated: 2026-07-23 (Agent architecture Phase 0 — verified on local)_
+_Updated: 2026-07-24 (Agent architecture Phase 1 — runtime + registry, verified on local)_
 
 ## Phase
 
-**Agent architecture Phase 0 — complete and verified on local.**
-`py scripts/verify_phase0.py --local` passes every check: schema, autonomy
-enforcement, corpus, and the trace store writing a step row with non-zero
-`cost_usd`. Full plan: [docs/agent_architecture.md](docs/agent_architecture.md).
+**Agent architecture Phase 1 — code-complete and verified on local.**
+`rag/agent_runtime.py` is the single Anthropic call site; `rag/agents/registry.py`
+is the `AgentSpec` registry. Full suite green (315 passed). Phase 1 adds **no
+migration** — it is code only. Full plan:
+[docs/agent_architecture.md](docs/agent_architecture.md).
 
-Not yet on prod. Two gates below, then Phase 1 (`rag/agent_runtime.py` as the
-single Anthropic call site, plus the agent registry).
+Phase 0 (trace store) is complete and was applied to prod RDS on 2026-07-23.
+Phase 2 is next: port the existing query chain behind the Manager with zero
+behaviour change.
 
-## RAGAs gate — PASSED (the chunk-leakage fix improved quality)
+## Phase 1 deliverables — DONE (local)
 
-Ran `ragas_eval --export` then `eval_guard --baseline
-evaluation/results/ragas_20260721_183712.json` on the corpus machine:
+- [x] `rag/agent_runtime.py` — the single Anthropic call site:
+  - Native structured outputs via `client.messages.parse(output_format=Model)`
+    → `.parsed_output` (no `instructor`, no JSON-repair retries).
+  - Model ladder: `Tier.CHEAP=claude-haiku-4-5`, `MID=claude-sonnet-5`,
+    `TOP=claude-opus-4-8`; `output_config={"effort":"low"}` supported.
+  - Prompt caching that **measures before it caches** — a `cache_control`
+    breakpoint is attached to the system block only when `count_tokens` says it
+    clears the model minimum (4096 haiku/opus, 2048 sonnet). Below that it sends
+    a plain string, avoiding the silent-no-cache footgun.
+  - `count_tokens` pre-flight budgeting (`token_budget` → `BudgetError`). Never
+    tiktoken.
+  - Automatic tracing via `audit.logger.record_step` — one step per call,
+    carrying model, usage, cost, latency, and the resolved autonomy level.
+  - **Autonomy enforcement in the runtime** (`resolve_autonomy_level`,
+    `enforce_autonomy`): agents absent from `agent_autonomy` default to **L0
+    (fail closed)**; a stored level above `max_level` is clamped on read.
+  - Retries with exponential backoff on transient Anthropic errors.
+- [x] `rag/agents/registry.py` — `AgentSpec` (name, callable, tier,
+  parallel_safe, metrics) + `AgentSpecProtocol`; `register`/`get`/`all_specs`;
+  `lazy()` binding so the roster enumerates without importing each agent's deps.
+- [x] `rag/agents/__init__.py` — rag self-registers `answer_generator` and
+  `design_intent` on import (lazy). commerce/forms/bids are NOT imported here —
+  `api/main.py` injects those agents at startup (import boundary held).
+- [x] `rag/design_intent.py` — inline Anthropic call folded into the runtime
+  behind a `DesignIntentParse` pydantic schema; public dict contract unchanged.
+- [x] `AGENTS.md` amended — "no inline anthropic calls" now points at
+  `rag/agent_runtime.py`; `rag/agents/ → rag/, db/, audit/, stdlib` added.
+- [x] Tests: `tests/test_agent_runtime.py` (15), `tests/test_agent_registry.py`
+  (8). Cover ladder, cache-decision, fail-closed autonomy, budget, retries,
+  error-step tracing, lazy binding, self-registration, boundary.
+- [x] `scripts/verify_phase1.py` — mirrors verify_phase0; pure-Python invariants
+  + DB autonomy checks + a live 2-call probe that asserts
+  `cache_read_input_tokens > 0` on the second call (the caching guarantee).
 
-- **avg faithfulness 0.910** (floor 0.85)
-- **q1 drop −0.188** — negative is an *improvement*; q1 faithfulness rose 0.188
-
-This is the predicted good outcome: dropping reranker-rejected chunks removed
-noise from the model's context rather than signal. The fix is validated, not
-just neutral. Prod is unblocked.
-
-Note the guard tooling itself had a trap — running `ragas_eval` without
-`--export` writes no file, so `eval_guard` silently compared the baseline to
-itself and passed with drop=0.000. `eval_guard` now refuses a self-comparison
-and warns when the candidate predates the baseline (tests added).
-
-## Blocked on
-
-1. **Mobile OAuth deep links (deferred)** — M0-6/M0-7 device Google/Apple roundtrip
-
-## Prod migration status (2026-07-23)
-
-Applied 026 (current file — already has the NOT NULL entity-column fix inline)
-and 027 to RDS. Prod's agent tables are correct.
-
-**Correction to an earlier note in this file:** a prior claim that "026 reached
-prod by accident" was wrong. Prod had *no* agent tables until they were applied
-deliberately today — the earlier "aws had everything through 26" reading was a
-drifted target (a different database), not prod. The target-drift tooling and
-guards remain justified; only that specific claim was mistaken.
-
-## Deliverables checklist
-
-### Phase 0 — trace store (code done this session)
-
-- [x] `db/migrations/026_agent_traces.sql` — `agent_runs`, `agent_steps`,
-      `agent_corrections`, `agent_action_items`, `agent_autonomy`, with policy
-      ceilings seeded from AGENTS.md governance rules
-- [x] `db/client.py` — trace insert/query helpers, action-queue upsert with an
-      open-item dedupe index, autonomy set clamped to ceiling in SQL
-- [x] `audit/logger.py` (was 0 bytes) — `@traced` / `@traced_run` / `record_step`,
-      cache-aware cost math, Sonnet-5 intro pricing with a built-in expiry
-- [x] `audit/provenance.py` (was 0 bytes) — corpus-state snapshot per answer
-- [x] `audit/anomaly.py` (was 0 bytes) — statistics → action items
-- [x] Retrofit: `rag/generator.py::generate_answer`, `rag/design_intent.py`,
-      run scope on `api/routes/query.py::query_answer`
-- [x] `GenerationResult` now carries cache tokens + `stop_reason` (were computed
-      and discarded, leaving cache effectiveness unmeasurable)
-- [x] **Cost fix**: reranker-rejected chunks no longer reach the model
-- [x] 22 new tests; full suite green (292 passed)
-
-- [x] Migration 026 dry-run against local Docker Postgres inside a rolled-back
-      transaction: 5 tables create, 15 ceilings seed, dedupe verified for
-      entity-bearing, entity-less, distinct-entity, and re-raise-after-resolve
-      cases. **Caught and fixed a dedupe bug** (nullable entity columns skipped
-      the unique index) before it could be frozen by deployment.
-
-### Verification — LOCAL: all checks pass
-
-`py scripts/verify_phase0.py --local`
-
-- [x] Migrations 018–027 applied; corpus ingested, embedded, and 022-backfilled
-- [x] 026's five tables present; 027 dedupe fix applied (entity columns NOT NULL)
-- [x] `agent_autonomy` seeded (15 rows); an L3 request on
-      `web_form_navigator/submit` is **refused by the SQL clamp**, not merely
-      hidden in a future UI
-- [x] Retrieval returns chunks; `filtered_out` chunks dropped before prompting
-- [x] Trace store writes a run + step with non-zero `cost_usd` — Phase 0's
-      actual deliverable
-- [x] 292 tests green
-
-### Verification — PROD: not started
-
-Deploy via **GitHub Actions** (`.github/workflows/deploy.yml`), not `deploy.ps1`.
-GHA triggers on push to `deployment/sites` (or manual `workflow_dispatch`) and is
-path-filtered: Phase 0 is backend-only, so deploy-backend runs and deploy-frontend
-is skipped. **GHA does NOT run migrations or pytest** — do both by hand first.
-
-- [x] RAGAs gate — avg 0.910, q1 improved by 0.188 (see above)
-- [ ] `py -m pytest tests/ -q` (GHA only runs `compileall`, not the suite)
-- [ ] `py scripts/apply_migration.py db/migrations/027_agent_action_item_dedupe.sql` (GHA never touches RDS)
-- [ ] Merge `agents/init` → `deployment/sites` and push → GHA deploys backend
-- [ ] `py scripts/verify_phase0.py` (no `--local`; confirm the banner names RDS)
-
-## Verification commands
+## Verification — LOCAL
 
 ```powershell
 .\.venv\Scripts\Activate.ps1
-py scripts/verify_phase0.py --local          # full Phase 0 acceptance
-py scripts/check_migrations.py --local       # migration drift + corpus size
-py -m pytest tests/ -q
-py -m evaluation.ragas_eval
-py -m audit.anomaly --window-hours 24
+py -m pytest tests/test_agent_runtime.py tests/test_agent_registry.py -v
+py -m pytest tests/ -q                          # full suite: 315 passed
+py scripts/verify_phase1.py --local             # runtime + registry + live probe
+py scripts/verify_phase1.py --local --no-llm     # skip the two real haiku calls
 ```
 
-`verify_phase0.py` makes one real model call (fractions of a cent) and writes a
-run + step under the `verify_phase0` entrypoint — that is the trace tables doing
-their job. `--no-llm` skips it, but then the trace store is not verified.
+The live probe in `verify_phase1.py` makes **two** real haiku calls (fractions
+of a cent) behind a >4096-token cached prefix, so it can prove caching works.
+Needs the trace tables (026/027) and `ANTHROPIC_API_KEY`. `--no-llm` skips it.
+
+## Verification — PROD: not started for Phase 1
+
+Phase 1 is backend code with **no migration**, so the prod path is: run pytest
+by hand, merge to `deployment/sites`, let GHA deploy the backend. See the
+deploy-command block at the bottom.
+
+## Blocked on / needs your attention (punch list)
+
+1. **Prod migration 027 — confirm state before doing anything.** STATE's prior
+   "Prod migration status" note (2026-07-23) said 026+027 were applied to RDS;
+   the same-day journal's "still open" list said prod still needed 027. These
+   conflict. **Do not blind-apply 027** — it's a `NOT NULL` alter and re-running
+   it on an already-fixed table will error. Run the check command first (below)
+   and only apply if it reports the fix missing. This is a Phase 0 loose end, not
+   a Phase 1 dependency.
+2. **Live caching assertion is unverified on this machine** — this repo's DB is
+   empty and it has no `ANTHROPIC_API_KEY` wired for a spend. Run
+   `py scripts/verify_phase1.py --local` on the **corpus machine** to confirm
+   `cache_read_input_tokens > 0`. The unit test proves the *decision* logic; only
+   a live call proves the API honours the breakpoint.
+3. **Mobile OAuth deep links (deferred)** — M0-6/M0-7 device Google/Apple roundtrip.
 
 ## Next tasks
 
-1. **RAGAs gate** — re-baseline, confirm ≥0.85, quantify the chunk-leakage delta
-2. Prod: apply 027 → `deploy.ps1 -BackendOnly` → `verify_phase0.py` against RDS
-3. Phase 1 — `rag/agent_runtime.py` + `rag/agents/registry.py`
+1. Run `py scripts/verify_phase1.py --local` on the corpus machine (live caching).
+2. Phase 2 — Manager + artifact store + Budget Governor, porting
+   `api/routes/query.py` behind the Manager with **zero behaviour change**
+   (`tests/test_query_answer_route.py` and RAGAs must be identical).
+3. Confirm/close the prod 027 loose end (punch item 1).
 
 ## Migration drift — check before touching any database
 
 `scripts/apply_migration.py` executes a file and records nothing: there is no
 `schema_migrations` table and no ordering guard. **`scripts/check_migrations.py`
-(new) probes for the artifact each migration creates** and reports corpus size
-alongside it. Run it first on any database.
+probes for the artifact each migration creates** and reports corpus size.
+`scripts/check_migration_details.py` (read-only) verifies migration *contents*
+(whether applied 026 has the dedupe fix; whether 022's columns were backfilled).
+Safe to point at prod. Run one of these first on any database.
 
-`scripts/check_migration_details.py` (new, **read-only**) goes further and
-verifies migration *contents*: whether the applied 026 includes the dedupe fix,
-and whether 022's columns were actually backfilled. Safe to point at prod.
+| Database | State (as last recorded) |
+|----------|--------------------------|
+| Local Docker (machine A, this repo) | 018–021, 023–026 applied; **022 missing**; 026 pre-fix so 027 required here. **Corpus empty.** |
+| Machine B (corpus machine) | Corpus ingested + backfilled; migrations current. Reconfirm with `py scripts/check_migrations.py --local`. |
+| Prod RDS | 026 applied 2026-07-23; **027 status disputed — verify before touching** (punch item 1). |
 
-Confirmed drift as of this session:
-
-| Database | State |
-|----------|-------|
-| Local Docker (machine A, this repo) | 018–021, 023–026 applied; **022 missing** behind them; 026 is the pre-fix version (nullable entity columns) so 027 is required here. Corpus empty. |
-| Machine B local (corpus machine) | Corpus ingested + backfilled; migrations current. Run `py scripts/check_migrations.py --local` to reconfirm. |
-| Prod RDS | 026 + 027 applied deliberately on 2026-07-23; agent tables correct. |
-
-**Why target confusion kept happening.** `bootstrap_env` loads `.env` last
-with `override=True`, and `ENVIRONMENT=production` selects `.env.production`;
-all three dotenv files are gitignored, so the target differs per machine and
-`apply_migration.py` originally gave no indication of where it was writing. It
-now prints
-the target host and profile, and requires the hostname to be typed for any
-non-localhost target (`--yes` bypasses for CI; nothing automated calls it).
-
-**`.env.local` does not reliably mean localhost.** On machine B it points at a
-campus IP — repointed during remote-debugging work and left that way. So
-`--local` forces the file but cannot force the destination; the banner reports
-the real host and names the file that supplied it rather than trusting the flag.
-`scripts/_db_target.py` holds this resolution logic for both diagnostics and
-supports `--database-url='...'` as a one-off override. Canonical local value,
-from `.env.local.example`:
+**Why target confusion keeps happening.** `bootstrap_env` loads `.env` last with
+`override=True`, and `ENVIRONMENT=production` selects `.env.production`; all three
+dotenv files are gitignored, so the target differs per machine. `.env.local` does
+**not** reliably mean localhost (machine B's points at a campus IP). Any script
+that touches a DB must use `scripts/_db_target.py` (`--local` / `--database-url`
+/ banner naming the real host + the file that set it / fail-fast reachability),
+never a bare `bootstrap_env()`. Canonical local value (`.env.local.example`):
 
 ```
 DATABASE_URL=postgresql://postgres:localdev@localhost:5433/permit_rag
 ```
 
-Applying 022 to a database that already holds a corpus leaves its new columns
-NULL until `scripts/backfill_source_identity.py` runs — the migration alone is
-not sufficient there.
-
 ### Duplicate migration number 026
 
-`026_agent_traces.sql` and `026_design_intent_usage_project_fk.sql` (from commit
-`dc802a9`) share a number; the traces migration should have been 027. Recorded
-rather than renamed — both are already applied by name on multiple databases,
-and renaming an applied migration is riskier than the duplicate.
-`check_migrations.py` probes each independently so neither hides the other. The
-dedupe correction is therefore **027_agent_action_item_dedupe.sql**.
-
-All of these migrations are additive (`CREATE TABLE IF NOT EXISTS`, `ADD
-COLUMN`), so each is individually low-risk and fast, but the gaps should be
-closed deliberately rather than by accident.
-
-The code and the migration are independently safe to ship in either order:
-tracing degrades to a log line without the tables (verified), and the tables sit
-idle without the code. The thing that is *not* safe to ship blind is the
-chunk-leakage fix — it changes what the model sees, so RAGAs must be re-baselined
-first.
+`026_agent_traces.sql` and `026_design_intent_usage_project_fk.sql` share a
+number; the traces migration should have been 027. Recorded, not renamed (both
+already applied by name on multiple DBs). The dedupe correction is therefore
+**027_agent_action_item_dedupe.sql**. All these migrations are additive.
 
 ## Module status
 
 | Module | Current state |
 |--------|---------------|
-| audit | All three modules implemented (were 0-byte stubs) |
-| db | Migration 026 written, **not applied**; trace helpers in client.py |
-| rag | generator + design_intent traced; generator drops filtered_out chunks |
+| rag/agent_runtime | **New (Phase 1).** Single Anthropic call site: parse, ladder, caching, budgeting, tracing, autonomy, retries |
+| rag/agents | **New (Phase 1).** `registry.py` + self-registration of answer_generator, design_intent |
+| rag/design_intent | Inline anthropic call folded into the runtime; contract unchanged |
+| audit | Three modules implemented in Phase 0; `record_step` now driven by the runtime |
+| db | 026/027 trace + autonomy helpers; `set_agent_autonomy` clamps in SQL |
+| rag/generator | Still a legacy inline call site — folded into the runtime in Phase 2 |
 | api | `/query/answer` opens a trace run; passes `passing_chunks` |
-| prod RDS | 19 docs / 17,159 embedded chunks (no migration 022 or 026 yet) |
-| tests | 292 passing |
+| tests | **315 passing** (+23 Phase 1) |
 
 ## Decisions log
 
 | Decision | Choice |
 |----------|--------|
-| Agent framework | In-house on the Anthropic SDK; Claude Agent SDK only for the browser/form agent |
-| Structured outputs | Native `client.messages.parse()` — **not** `instructor`; pydantic already a dep |
-| Trace table types | `text` + `CHECK`, not enums, so new agent names never need `ALTER TYPE` |
+| Single call site | `rag/agent_runtime.py` owns every model call; generator folds in at Phase 2 |
+| Structured outputs | Native `client.messages.parse()` → `.parsed_output`; **not** `instructor` |
+| Model ladder | `Tier(StrEnum)` cheap/mid/top → haiku-4-5 / sonnet-5 / opus-4-8 |
+| Prompt caching | Measure with `count_tokens` first; attach a breakpoint only above the model minimum (4096/2048) — never guess, never silently no-cache |
+| Token counting | `client.messages.count_tokens`; on failure skip budget + skip caching (no tiktoken guess) |
+| Autonomy | Enforced in the runtime, fail-closed to L0; clamped again on read; dashboard only edits `current_level` |
+| Registry DI | `rag/agents/` never imports commerce/forms/bids; `api/main.py` injects them; agent callables bind lazily |
+| Registry duplicates | `register()` raises on a name clash unless `replace=True` — no silent shadowing |
 | Tracing failure mode | Degrade to a log line, never raise — observability is not business logic |
-| Autonomy ceilings | Stored in `agent_autonomy.max_level`, clamped in both SQL and the runtime; the dashboard cannot raise them |
-| Persona default | `research`, never `diy` — a confident wrong DIY answer is the costliest default failure |
-| Optimizer/Crystallizer | Propose-only: PR + human merge |
-| Phase order | Trace store first; meta agents train on accumulated history |
-| Web Form Navigator | Split into its own final phase (9) so it is droppable without stranding the PDF agent |
+| Trace table types | `text` + `CHECK`, not enums, so new agent names never need `ALTER TYPE` |
+| Persona default | `research`, never `diy` |
 
 ## Canonical validation
 
 ```powershell
-py -m pytest tests/test_audit_logger.py tests/test_generator_chunk_filter.py -v
+py -m pytest tests/test_agent_runtime.py tests/test_agent_registry.py -v
+py scripts/verify_phase1.py --local
 # Prod corpus smoke: GET https://permits.scottsalhanick.com/api/documents  (not [])
 ```

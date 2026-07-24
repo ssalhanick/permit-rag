@@ -42,7 +42,9 @@ End with “Next step:” only
 - Write the test before or immediately after every new function
 - No hardcoded secrets, URLs, or credentials — .env only
 - No inline supabase calls — go through db/client.py exclusively
-- No inline anthropic calls — go through rag/generator.py exclusively
+- No inline anthropic calls — go through `rag/agent_runtime.py` exclusively
+  (the single Anthropic call site, Phase 1). `rag/generator.py` is the one
+  remaining legacy call site; it is folded into the runtime in Phase 2.
 - All git commands will be run manually, though I will ask for assistance and may need clarification on git best practices
 - All python module terminal commands will be run manually (I'll run them after you generate them)
 - All docker commands will be run manually (I'll run them after you generate them)
@@ -55,12 +57,17 @@ End with “Next step:” only
 ```
 ingestion/  →  may import: db/, standard library only
 rag/        →  may import: db/, audit/, standard library only
+rag/agents/ →  may import: rag/, db/, audit/, standard library only
 commerce/   →  may import: db/, standard library only
 api/        →  may import: rag/, commerce/, db/, audit/, standard library only
 audit/      →  may import: db/, standard library only
 evaluation/ →  may import: rag/, db/, standard library only
 scripts/    →  may import: anything (one-off use only)
 ```
+
+`rag/agents/` must NOT import `commerce/`, `forms/`, or `bids/`. Agents backed
+by those packages are registered by `api/main.py` at startup via dependency
+injection (`rag/agents/registry.py`), never imported into `rag/`.
 
 ---
 
