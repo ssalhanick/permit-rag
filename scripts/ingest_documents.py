@@ -1,26 +1,37 @@
 """
-scripts/ingest_documents.py — Ingest 10 passing docs into the database
+scripts/ingest_documents.py — Ingest documents/raw/ into the database
 ======================================================================
 Chunks each document and inserts both the document row (via insert_document)
 and its chunks (via insert_chunks) into the database.
 
-Skips the 3 Municode redirect pages that fail extraction.
+Driven by whatever is in `documents/raw/` -- not a fixed list -- minus the 3
+Municode redirect pages that fail extraction.
+
+Note this does NOT populate migration 022's identity columns
+(source_url_normalized, source_filename); run
+`scripts/backfill_source_identity.py` afterwards.
 
 Run from project root:
     py -m scripts.ingest_documents
+    py -m scripts.ingest_documents --local
+    py -m scripts.ingest_documents --database-url='postgresql://...'
 """
 
 import logging
 import sys
-from functools import lru_cache
 from datetime import date, timedelta
+from functools import lru_cache
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+
+import _db_target
 
 from api.load_env import bootstrap_env
 
-bootstrap_env()
+# Resolved before argparse so the banner can name the target even on --help.
+TARGET = _db_target.resolve(sys.argv[1:], bootstrap_env)
 
 logging.basicConfig(
     level=logging.INFO,
@@ -200,6 +211,21 @@ if __name__ == "__main__":
         action="store_true",
         help="Re-ingest existing doc_ids (default: skip existing)",
     )
+    # Consumed by _db_target above; declared so argparse accepts them.
+    parser.add_argument(
+        "--local",
+        action="store_true",
+        help="Read DATABASE_URL from .env.local, ignoring later overrides",
+    )
+    parser.add_argument(
+        "--database-url",
+        default=None,
+        help="Target this database explicitly, bypassing dotenv resolution",
+    )
     args = parser.parse_args()
+
+    # Ingestion writes the corpus, so name the target before it does.
+    _db_target.banner(TARGET, read_only=False)
+    _db_target.ensure_reachable(TARGET)
 
     ingest_all(new_only=not args.include_existing)

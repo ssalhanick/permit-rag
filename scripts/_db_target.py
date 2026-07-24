@@ -67,9 +67,16 @@ def resolve(argv: list[str], bootstrap) -> Target:
     and `--database-url=URL` (bypass dotenv entirely). `bootstrap` is passed in
     rather than imported so this module stays free of the api package.
     """
-    explicit = next(
-        (a.split("=", 1)[1] for a in argv if a.startswith("--database-url=")), None
-    )
+    # Both spellings: argparse accepts "--database-url URL" as well as
+    # "--database-url=URL", and this runs before argparse.
+    explicit: str | None = None
+    for i, arg in enumerate(argv):
+        if arg.startswith("--database-url="):
+            explicit = arg.split("=", 1)[1]
+            break
+        if arg == "--database-url" and i + 1 < len(argv):
+            explicit = argv[i + 1]
+            break
     if explicit:
         bootstrap()
         os.environ["DATABASE_URL"] = explicit
