@@ -1,0 +1,38 @@
+{
+  "run_command": "py -m evaluation.ragas_eval --query 6 --export --no-answer-cache",
+  "exported_at": "2026-07-24 13:10:02",
+  "query_count": 1,
+  "run_metrics": {
+    "avg_faithfulness": 0.6,
+    "avg_relevancy": 0.0,
+    "avg_context_precision": 0.9999999999,
+    "top_similarity": {
+      "avg": 0.8030255319491361,
+      "max": 0.8030255319491361,
+      "min": 0.8030255319491361,
+      "values": [
+        0.8030255319491361
+      ]
+    }
+  },
+  "results": [
+    {
+      "query": "What is the maximum building height allowed in a residential zone?",
+      "municipality": "dallas",
+      "num_chunks": 10,
+      "top_similarity": 0.8030255319491361,
+      "faithfulness": 0.6,
+      "relevancy": 0.0,
+      "context_precision": 0.9999999999,
+      "latency_retrieval_ms": 3569,
+      "latency_generation_ms": 3724,
+      "latency_scoring_ms": 197295,
+      "most_relevant_chunk_id": "151c4c93-4733-4249-b315-6883af8bfa5f",
+      "most_relevant_doc_id": "city-of-dallas-ordiance-v3",
+      "answer_cache_hit": null,
+      "stop_reason": "end_turn",
+      "answer_preview": "# Maximum Building Height in Residential Zones (Dallas)\n\nThe maximum building height in residential zones varies by specific zoning district and roof type:\n\n## Primary Residential Districts\n\n**Low-den",
+      "error": null
+    }
+  ]
+}
