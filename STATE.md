@@ -174,8 +174,14 @@ RDS on 2026-07-24, including the live `cache_read_input_tokens > 0` assertion.
 Prod runs **anthropic 0.104.1**, which supports the whole runtime; it lacks
 `OverloadedError`, so the retry list resolves error classes by name.
 
-**Phase 2 is not deployed.** Do not deploy it until the RAGAs gate comes back
-clean on machine B.
+**Phase 2 is verified and being merged to `deployment/sites` for a GHA deploy
+(2026-07-24).** Code-only, no migration.
+
+**Machine B local DB (`localhost:5433`) — confirmed current 2026-07-24:**
+`verify_phase1.py --local` 10/10 (incl. `cache_read=8163` on the 2nd probe
+call); `check_migration_details.py --local` reports the dedupe fix present
+(the `027_agent_action_item_dedupe` correction), 022 backfilled, 19 docs,
+"Nothing to do." Note this is machine B's **local Docker**, not prod.
 
 ## Blocked on / needs your attention (punch list)
 
@@ -201,11 +207,14 @@ clean on machine B.
    needed 027. These conflict. **Do not blind-apply 027** — it is a `NOT NULL`
    alter and re-running it on an already-fixed table will error. Run
    `check_migration_details.py` first. A Phase 0 loose end, not a Phase 2 one.
-6. **Prod migration 027 — confirm state before doing anything.** STATE's prior
-   note said 026+027 were applied to RDS; the same-day journal said prod still
-   needed 027. These conflict. **Do not blind-apply 027** — it is a `NOT NULL`
-   alter and re-running it on an already-fixed table will error. Run
-   `check_migration_details.py` first. A Phase 0 loose end, not a Phase 2 one.
+6. ~~Prod migration 027 — disputed.~~ **RESOLVED 2026-07-24: prod already has
+   it.** `check_migration_details.py` against prod RDS reported the dedupe fix
+   present + dedupe index present (the `027_agent_action_item_dedupe`
+   correction), 022 backfilled, 19 docs, "Nothing to do." STATE's "027 applied
+   2026-07-23" was correct; the 07-23 journal's "still needed 027" was wrong.
+   **Do NOT apply 027 to prod** — it is there, and re-running the `NOT NULL`
+   alter would error. `verify_phase1.py` also passed 10/10 against prod the same
+   day (2 probe trace steps written, expected).
 7. ~~Push the `anthropic>=0.104.1` floor.~~ **DONE.** `b5a0285` is already on
    `origin/deployment/sites` — it is on the deploy branch, not a loose end.
    (Prior STATE calling it "not yet pushed" was stale.)
@@ -236,8 +245,8 @@ Safe to point at prod. Run one of these first on any database.
 | Database | State (as last recorded) |
 |----------|--------------------------|
 | Local Docker (machine A, this repo) | 018–021, 023–026 applied; **022 missing**; 026 pre-fix so 027 required here. **Corpus empty.** |
-| Machine B (corpus machine) | Corpus ingested + backfilled; migrations current. Reconfirm with `py scripts/check_migrations.py --local`. |
-| Prod RDS | 026 applied 2026-07-23; **027 status disputed — verify before touching** (punch item 2). |
+| Machine B local (`localhost:5433`) | **Confirmed current 2026-07-24**: dedupe fix present, 022 backfilled, 19 docs, "Nothing to do." |
+| Prod RDS | **Confirmed current 2026-07-24**: 026 + dedupe fix (027) applied, dedupe index present, 022 backfilled, 19 docs, "Nothing to do." Do NOT re-apply 027. |
 
 **Why target confusion keeps happening.** `bootstrap_env` loads `.env` last with
 `override=True`, and `ENVIRONMENT=production` selects `.env.production`; all three

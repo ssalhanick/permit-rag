@@ -243,9 +243,24 @@ answer cited chunks absent from the retrieved set. Pre-existing generator
 behaviour (unverified citations reach the response); catching it is the Citation
 Verifier's job in Phase 5, not a Phase 2 regression.
 
-**Phase 2 is verified.** Both gate halves closed. Remaining before it ships is
-the PR to `deployment/sites` (code-only, no migration) plus the carried
-`pyproject.toml` anthropic-floor push.
+**Phase 2 is verified.** Both gate halves closed. Being merged to
+`deployment/sites` for a GHA deploy (code-only, no migration). The
+`anthropic>=0.104.1` floor turned out to already be on the deploy branch
+(`b5a0285`) — the "not yet pushed" note was stale.
+
+**Carried Phase 0/1 checks — RAN clean on machine B (`localhost:5433`):**
+- `verify_phase1.py --local` → 10/10, incl. `cache_read=8163` on the 2nd probe
+  call (the live caching guarantee).
+- `check_migration_details.py --local` → dedupe fix present (the
+  `027_agent_action_item_dedupe` correction), 022 backfilled, 19 docs, "Nothing
+  to do." This settled machine B's local Docker.
+- **Prod-027 dispute RESOLVED (same day, prod RDS).**
+  `$env:ENVIRONMENT="production"; py scripts/check_migration_details.py` against
+  RDS reported the dedupe fix + dedupe index present, 022 backfilled, 19 docs,
+  "Nothing to do." Prod already has 027 — STATE was right, the 07-23 journal was
+  wrong. Do NOT re-apply it (`NOT NULL` alter would error). `verify_phase1.py`
+  also passed 10/10 against prod. Prod is a clean baseline for Phase 3's
+  migrations.
 
 ## Still open at session end
 
