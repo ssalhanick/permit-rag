@@ -116,7 +116,8 @@ class FieldProposal(BaseModel):
     )
     excerpt: str = Field(
         default="",
-        description="Short verbatim snippet from the cited chunk (≤200 chars).",
+        description="Short supporting snippet from the cited chunk (≤100 chars). "
+        "Paraphrase if needed; do NOT include quotation marks or newlines.",
     )
     rationale: str = Field(default="")
 
@@ -204,7 +205,8 @@ class ValidationReport:
     result: str = "pass"  # 'pass' | 'needs_review' | 'fail' | 'error'
     action_item_ids: list[str] = field(default_factory=list)
     drafted: bool = False
-    error: str | None = None  # set only on result == 'error' (the LLM/DB blew up)
+    error: str | None = None  # set only on result == 'error' (a DB read blew up)
+    llm_note: str | None = None  # set when the LLM step was skipped/failed, degraded
 
     def to_detail(self) -> dict[str, Any]:
         """Serialise for the ingestion_verifications.detail JSONB column."""
@@ -219,6 +221,7 @@ class ValidationReport:
             "llm_used": self.llm_used,
             "drafted": self.drafted,
             "error": self.error,
+            "llm_note": self.llm_note,
         }
 
 
@@ -344,9 +347,10 @@ def _build_assessment_prompt(doc: dict[str, Any], sampled: list[dict[str, Any]])
     lines.append(
         "Propose the true effective_date (adoption/effective date stated in the "
         "text), doc_type, authority_level, and subject_tags. For each, cite the "
-        "chunk_index and a short verbatim excerpt. Use null where the document "
-        "does not state the value. Flag any value that contradicts the stored "
-        "metadata."
+        "chunk_index and a short excerpt. Keep every excerpt and rationale under "
+        "100 characters, with NO quotation marks or newlines inside them. Use "
+        "null where the document does not state the value. Flag any value that "
+        "contradicts the stored metadata."
     )
     return "\n".join(lines)
 
@@ -385,10 +389,11 @@ def assess_with_llm(
         messages=[{"role": "user", "content": _build_assessment_prompt(doc, sampled)}],
         tier=Tier.MID,  # content-vs-metadata inference is a sonnet-class task
         output_format=MetadataAssessment,
-        # Four proposals, each with an excerpt + rationale: 1024 truncates the
-        # structured JSON on verbose docs, which fails the parse and drops the
-        # document. 2048 gives the schema headroom.
-        max_tokens=2048,
+        # Four proposals, each with an excerpt + rationale: a tight cap truncates
+        # the structured JSON on verbose docs, which fails the parse. 4096 gives
+        # generous headroom; a parse failure now degrades to deterministic-only
+        # (validate_document catches it) rather than dropping the document.
+        max_tokens=4096,
         temperature=0.0,
         input_parts=(doc.get("doc_id"), [c.get("id") for c in sampled]),
         client=client,
@@ -544,7 +549,15 @@ def validate_document(
     if use_llm and doc.get("id") is not None:
         chunks = get_chunks_for_document(doc["id"])
         sampled = sample_chunks(chunks)
-        assessment = assess_with_llm(doc, sampled, client=client)
+        try:
+            assessment = assess_with_llm(doc, sampled, client=client)
+        except Exception as exc:
+            # The LLM is an enhancement over the deterministic checks, not a
+            # dependency. A truncated/malformed structured parse degrades this
+            # doc to its deterministic result — it is never dropped for it.
+            log.warning("metadata LLM assessment failed for %s: %s", doc_id, exc)
+            report.llm_note = f"LLM assessment skipped: {type(exc).__name__}"
+            assessment = None
         if assessment is not None:
             report.llm_used = True
             report.proposals, report.contradictions = build_proposals(doc, assessment, sampled)

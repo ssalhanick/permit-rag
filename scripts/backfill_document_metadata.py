@@ -89,8 +89,11 @@ def _print_summary(reports: list) -> None:
     total = len(reports)
     by_result: dict[str, int] = {}
     null_dates = catchall = empty_tags = enum_bad = families = proposals = 0
+    degraded = 0
     for r in reports:
         by_result[r.result] = by_result.get(r.result, 0) + 1
+        if getattr(r, "llm_note", None):
+            degraded += 1
         if "effective_date" in r.completeness_failures:
             null_dates += 1
         if "subject_tags" in r.completeness_failures:
@@ -127,6 +130,8 @@ def _print_detail(reports: list) -> None:
         print(f"{icon} {r.doc_id}  [{r.result}]")
         if getattr(r, "error", None):
             print(f"    error: {r.error}")
+        if getattr(r, "llm_note", None):
+            print(f"    ⚠ {r.llm_note} (degraded to deterministic)")
         if r.enum_failures:
             print(f"    enum: {'; '.join(r.enum_failures)}")
         if r.completeness_failures:

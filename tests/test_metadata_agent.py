@@ -249,3 +249,37 @@ def test_validate_document_no_llm_skips_model(monkeypatch) -> None:
     report = ma.validate_document("dallas-building-code", use_llm=False, file_action_items=False)
     assert report.llm_used is False
     assert "effective_date" in report.completeness_failures
+
+
+def test_validate_document_degrades_on_llm_failure(monkeypatch) -> None:
+    """A failed LLM parse must degrade to the deterministic result, not drop the doc."""
+    from db import client as db_client
+
+    monkeypatch.setattr(db_client, "get_document_by_doc_id", lambda _id: _doc(effective_date=None))
+    monkeypatch.setattr(db_client, "get_chunks_for_document", lambda _uuid: _chunks(5))
+
+    def _raise(*a, **k):
+        raise ValueError("Invalid JSON: EOF while parsing a string")
+
+    monkeypatch.setattr(ma, "run_agent", _raise)
+    report = ma.validate_document("dallas-building-code", file_action_items=False)
+    assert report.result == "needs_review"   # deterministic finding stands
+    assert report.result != "error"          # not dropped
+    assert report.llm_used is False
+    assert report.llm_note and "ValueError" in report.llm_note
+    assert report.proposals == []            # no LLM proposals, but the doc survives
+
+
+def test_validate_corpus_llm_failure_is_not_an_error_row(monkeypatch) -> None:
+    """validate_corpus keeps a degraded doc as needs_review, reserving 'error' for DB blows."""
+    from db import client as db_client
+
+    monkeypatch.setattr(db_client, "list_documents",
+                        lambda: [{"doc_id": "dallas-building-code"}])
+    monkeypatch.setattr(db_client, "get_document_by_doc_id", lambda _id: _doc(effective_date=None))
+    monkeypatch.setattr(db_client, "get_chunks_for_document", lambda _uuid: _chunks(5))
+    monkeypatch.setattr(ma, "run_agent",
+                        lambda *a, **k: (_ for _ in ()).throw(ValueError("EOF")))
+    reports = ma.validate_corpus(file_action_items=False)
+    assert [r.result for r in reports] == ["needs_review"]
+    assert reports[0].llm_note
