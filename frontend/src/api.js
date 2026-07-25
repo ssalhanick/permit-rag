@@ -479,4 +479,12 @@ export async function applyMetadataCorrection(docId, body) {
   });
 }
 
+export async function listCorpusDocuments({ status = null, municipality = null } = {}) {
+  const params = new URLSearchParams();
+  if (status) params.set("status", status);
+  if (municipality) params.set("municipality", municipality);
+  const qs = params.toString();
+  return await requestJson(`/admin/agents/documents${qs ? `?${qs}` : ""}`);
+}
+
 export { API_BASE_URL, DEFAULT_BASE_URL };

@@ -143,6 +143,24 @@ def list_metadata_review(
     return {"items": items, "count": len(items)}
 
 
+@router.get("/documents")
+def list_corpus_documents(
+    _user: Annotated[dict, Depends(require_superadmin)],
+    status: str | None = Query(None),
+    municipality: str | None = Query(None),
+) -> dict[str, Any]:
+    """
+    Read-only corpus metadata view for superadmins.
+
+    Returns every document's stored metadata (all statuses, including ``draft``),
+    so the corpus's gaps — null ``effective_date``, missing ``checksum_sha256`` —
+    are visible on the site. Review and edit stay in the metadata-review pane;
+    this is a look-only surface.
+    """
+    docs = db_client.list_documents(status=status, municipality=municipality)
+    return {"documents": docs, "count": len(docs)}
+
+
 @router.post("/metadata-review/{doc_id}/apply")
 def apply_metadata_correction(
     doc_id: str,

@@ -1,10 +1,12 @@
 import React, { useState } from "react";
 import ActionQueue from "./ActionQueue.jsx";
 import MetadataReviewPane from "./MetadataReviewPane.jsx";
+import DocumentMetadataTable from "./DocumentMetadataTable.jsx";
 
 const TABS = [
   { key: "queue", label: "Action Queue" },
   { key: "metadata", label: "Metadata Review" },
+  { key: "documents", label: "Documents" },
 ];
 
 /**
@@ -41,7 +43,9 @@ export default function AgentDashboardPage() {
         ))}
       </div>
 
-      {tab === "queue" ? <ActionQueue /> : <MetadataReviewPane />}
+      {tab === "queue" && <ActionQueue />}
+      {tab === "metadata" && <MetadataReviewPane />}
+      {tab === "documents" && <DocumentMetadataTable />}
     </div>
   );
 }

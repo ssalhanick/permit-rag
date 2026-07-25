@@ -176,3 +176,27 @@ def test_apply_400_when_no_fields(client, monkeypatch) -> None:
         json={"item_id": str(uuid4())},
     )
     assert r.status_code == 400
+
+
+# ── corpus documents (read-only) ─────────────────────────────
+
+
+def test_documents_403_for_admin(client) -> None:
+    _as(ADMIN)
+    assert client.get("/api/admin/agents/documents").status_code == 403
+
+
+def test_documents_list_for_superadmin(client, monkeypatch) -> None:
+    _as(SUPERADMIN)
+    from api.routes import agents_admin as route
+
+    row = {"id": uuid4(), "doc_id": "dallas-building-code", "municipality": "dallas",
+           "doc_type": "building_code", "authority_level": "municipal",
+           "effective_date": None, "document_status": "active", "subject_tags": ["building"],
+           "checksum_sha256": None, "review_due": None, "source_tier": 1}
+    monkeypatch.setattr(route.db_client, "list_documents", lambda **k: [row])
+    r = client.get("/api/admin/agents/documents")
+    assert r.status_code == 200
+    body = r.json()
+    assert body["count"] == 1
+    assert body["documents"][0]["doc_id"] == "dallas-building-code"
