@@ -2526,7 +2526,7 @@ def list_action_items(
     sql = """
         SELECT * FROM agent_action_items
         WHERE status = %s
-          AND (%s IS NULL OR source_agent = %s)
+          AND (%s::text IS NULL OR source_agent = %s)
         ORDER BY CASE severity
                      WHEN 'critical' THEN 0
                      WHEN 'high'     THEN 1
