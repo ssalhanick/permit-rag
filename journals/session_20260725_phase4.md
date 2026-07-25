@@ -265,24 +265,60 @@ chat-thread redesign deferred).
   issues (newer local ruff) — do NOT `--fix` the whole scope (it rewrites dozens of
   unrelated files, as it did once already).
 
+## Query-UX pass — DEPLOYED + verified (continuation, 2026-07-25)
+
+Picked up the "deploy the query-UX pass" task and found it was **already
+deployed** — the plan assumed a merge+deploy still had to happen, but git shows
+otherwise:
+
+- `deployment/sites` reflog: `@{0}` is a **fast-forward merge of `agents/phase-4`
+  to `45f4c13`** (the query-UX commit). `origin/deployment/sites` (fetched, not a
+  stale local ref) is also `45f4c13`. So the merge **and** push happened at the
+  end of the prior working block (commit time 02:16) — the "pending deploy" note
+  in STATE/journal was written before that and never updated.
+- `deploy.yml` fires on push to `deployment/sites`. `45f4c13` touches `api/`,
+  `rag/`, and `frontend/`, so both `deploy-backend` and `deploy-frontend` ran.
+
+Verification done this session (no re-merge, no re-push — nothing to do):
+
+- **Local frontend build:** `cd frontend && npm run build` → clean (only the
+  pre-existing >500 kB chunk-size warning; built in ~31 s). This was the one item
+  the prior session explicitly left unchecked.
+- **Deployed frontend is live:** the served prod bundle
+  (`https://permits.scottsalhanick.com/assets/index-BfhgwmxH.js`) contains
+  `No confident answer found` (abstain card), `persona_nudge` (💡 nudge), and
+  `top_k:8`. (Local build hash differs from prod's — expected; GHA bakes in
+  different `VITE_*` env, so hashes won't match.)
+- **Backend healthy:** `GET /api/documents` = 19 (corpus intact).
+
+**Not machine-checkable from here:** an interactive click-through behind the
+Cognito login (submit a vague query, see the blue card; open a no-persona project,
+see the 💡 nudge). Credentials are out of scope for the agent — left for the owner
+to eyeball. All served-bundle + backend evidence says it's live.
+
+Docs reconciled this session: `README.md` (3 "pending deploy" mentions → deployed),
+`STATE.md` (header, query-UX section, migration table `029 pending`→applied, Next
+tasks — Media Curator promoted to #1), this journal.
+
 ## Prompt for next session
 
 > Read STATE.md, the latest `journals/session_*.md`, AGENTS.md, and
 > docs/agent_architecture.md before touching anything. Restate the current task
 > first — AGENTS.md pre-session protocol.
 >
-> **Phase 4 core is DEPLOYED to prod; the query-UX pass is BUILT + machine-A
-> verified (474 pytest) on `agents/phase-4` but NOT yet deployed — do not redo
-> it.** First, deploy the query-UX pass: `cd frontend && npm run build` + a
-> click-through (vague query → blue "no confident answer" card, not red;
-> no-persona project → 💡 nudge), then merge to `deployment/sites` + GHA-deploy.
-> **No migration** (code + frontend only). The full chat-thread `QueryPage`
-> redesign was deferred (owner chose quick-wins) — pick it up if wanted.
+> **Phase 4 core AND the query-UX pass are both DEPLOYED to prod and verified
+> live (2026-07-25) — do not redo them.** `deployment/sites` = `origin` =
+> `45f4c13`; frontend build clean; the served prod bundle carries the abstain
+> card + `persona_nudge` + `top_k:8`; `/api/documents`=19. The only open UX item
+> is an owner eyeball of the interactive click-through behind Cognito login (blue
+> "no confident answer" card, not red; no-persona project → 💡 nudge) — the agent
+> can't log in. The full chat-thread `QueryPage` redesign was deferred (owner
+> chose quick-wins) — pick it up if wanted.
 >
-> **Then Phase 4 second pass — Media Curator (#17):** sourced URLs only
+> **Lead task — Phase 4 second pass, Media Curator (#17):** sourced URLs only
 > (`web_search` + `allowed_domains:["youtube.com"]`, or a curated `media_refs`
 > table); Guardrail rejects any URL from neither; wire into the `diy` path
-> (Media Curator ∥ Answer Generator). Own branch.
+> (Media Curator ∥ Answer Generator). **Own branch off `deployment/sites`.**
 >
 > Carried, still open: a **multi-sample** live RAGAs baseline (the 2026-07-25 run
 > is one sample, avg 0.843, q6=0.50 drags it under 0.85) + repoint `eval_guard`

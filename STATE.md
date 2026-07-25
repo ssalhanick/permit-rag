@@ -1,6 +1,6 @@
 # permit_rag — State
 
-_Updated: 2026-07-25 (Phase 4 core DEPLOYED to prod. Query-UX pass BUILT + machine-A verified (474 pytest) on `agents/phase-4` — grounding-floor miss now a conversational 200 abstain (was 422), `persona_nudge` rendered, UI top_k 5→8; pending frontend build check + deploy. Phase 3 done + on prod.)_
+_Updated: 2026-07-25 (Phase 4 core DEPLOYED to prod. Query-UX pass DEPLOYED to prod — grounding-floor miss now a conversational 200 abstain (was 422), `persona_nudge` rendered, UI top_k 5→8; frontend build verified, deployed bundle serves the abstain card + nudge, `/api/documents`=19. Phase 3 done + on prod. Next: Media Curator #17.)_
 
 ## Phase
 
@@ -10,8 +10,16 @@ default-path non-regression confirmed). Prompt Router + versioned fragment libra
 + persona-aware `max_tokens` + Guardrail truncation trip + kickoff demotion are
 live. `agents/phase-4` merged to `deployment/sites`.
 
-**Query-UX pass — BUILT + machine-A verified (474 pytest), pending deploy.** From
-prod use, addressed before Media Curator:
+**Query-UX pass — DEPLOYED to prod (2026-07-25).** Merged to `deployment/sites`
+(fast-forward, commit `45f4c13`) and GHA-deployed (deploy fires on push; the
+commit touches `api/`+`rag/`+`frontend/` so both backend and frontend jobs ran).
+**Verified live:** `frontend/ npm run build` clean; the served prod bundle
+(`assets/index-*.js`) contains the abstain card (`No confident answer found`),
+`persona_nudge`, and `top_k:8`; `/api/documents`=19 (backend healthy). **No
+migration** (code + frontend only). _One thing not machine-checkable here: an
+interactive click-through behind Cognito login — eyeball a vague query → blue
+card, no-persona project → 💡 nudge when convenient._ From prod use, addressed
+before Media Curator:
 1. A grounding-floor miss (`top_similarity < 0.74` or `< 3` chunks) is now a
    **soft abstain returning 200** with a conversational message (was a 422 red
    error). The Manager sets `abstained` + `abstain_message` instead of raising;
@@ -285,21 +293,18 @@ journal only." **Phase 3 is fully done.**_
 
 ## Next tasks
 
-1. **Deploy the query-UX pass.** Built + machine-A verified (474). Do a frontend
-   build check (`cd frontend && npm run build`) + click-through (vague query →
-   blue "no confident answer" card, not red; no-persona project → 💡 nudge), then
-   merge to `deployment/sites` + GHA-deploy. **No migration** (code + frontend only).
-   Deferred from this pass: a full chat-thread `QueryPage` redesign (owner chose
-   quick-wins first).
-2. **Phase 4 second pass — Media Curator (#17).** Sourced URLs only
+1. **Phase 4 second pass — Media Curator (#17).** Sourced URLs only
    (`web_search` + `allowed_domains:["youtube.com"]`, or a curated `media_refs`
-   table); Guardrail rejects any URL from neither. Own branch.
-3. **Multi-sample live RAGAs baseline** before RAGAs gates any phase (punch 3).
+   table); Guardrail rejects any URL from neither; wire into the `diy` path
+   (Media Curator ∥ Answer Generator). Own branch.
+   _(Query-UX pass done + deployed 2026-07-25 — see above. Still deferred from it:
+   a full chat-thread `QueryPage` redesign, owner chose quick-wins first.)_
+2. **Multi-sample live RAGAs baseline** before RAGAs gates any phase (punch 3).
    The 2026-07-25 run (`ragas_20260725_011651.json`, avg 0.843) is the first clean
    *live* one — but one sample; q6 (0.50) alone drags the mean past 0.85. Run 3+
    and average, and repoint `eval_guard`'s default baseline off the stale
    cached-era `ragas_20260531` file. Not a Phase 4 blocker.
-4. **Pre-existing, not Phase 4:** q6 (building height) + q1 (electrical)
+3. **Pre-existing, not Phase 4:** q6 (building height) + q1 (electrical)
    faithfulness; the `NLI inference failed ('type')` classifier warning (falls
    back to keyword rules, non-fatal); q6/Dallas 3-part-PDF retrieval weakness.
 
@@ -320,7 +325,7 @@ apply anytime; the Router reads the new columns but tolerates them being NULL.
 |----------|--------------------------|
 | Local Docker (machine A, this repo) | 018–021, 023–026 applied; **022 missing**; 026 pre-fix so 027 required here. **028/029 not applied. Corpus empty.** |
 | Machine B local (campus corpus DB via `.env.local`) | Current through 027; **029 applied 2026-07-25** (Phase 4 demo); 19 docs. (028 only needed for a local `--apply`.) |
-| Prod RDS | **Current through 028 (applied 2026-07-24).** Backfill `--apply` run; good metadata proposals approved. **029 pending** (apply at Phase 4 deploy). Do NOT re-apply 027/028. |
+| Prod RDS | **Current through 029 (028 applied 2026-07-24; 029 applied 2026-07-25 at the Phase 4 core deploy).** Backfill `--apply` run; good metadata proposals approved. Query-UX pass added **no** migration. Do NOT re-apply 027/028/029. |
 
 **Why target confusion keeps happening.** `bootstrap_env` loads `.env` last with
 `override=True`, and `ENVIRONMENT=production` selects `.env.production`; all three
