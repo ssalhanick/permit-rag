@@ -190,14 +190,20 @@ source-identity backfill, not this agent).
 - New **Documents** tab + `GET /admin/agents/documents` — read-only corpus
   metadata view (all statuses), null date / missing checksum / draft highlighted.
 
-## Still open — operational tail on prod (not code)
+## Operational tail — DONE (2026-07-24)
 
-- Apply migration 028 to prod RDS; run the backfill `--apply` against prod;
-  approve the good proposals in `/admin/agents` (this is what actually writes the
-  corrected `effective_date`/tags). Until then prod dates stay null.
-- `checksum_sha256` backfill (source-identity) — separate.
+Migration 028 applied on prod RDS; backfill `--apply` run against prod (filed the
+review items + verification rows); the good proposals approved in `/admin/agents`
+— corrected `effective_date`/tags written through
+`governance.apply_metadata_correction`. **Phase 3 is complete end-to-end:** built,
+tested (442), deployed, and the prod corpus metadata is now corrected.
+
+## Still open (not Phase 3)
+
+- `checksum_sha256` backfill (source-identity) — separate, all 19 docs.
 - q6 / Dallas ordinance is a **retrieval** problem (answer spans 3 PDF parts),
   not supersession — corrected in the arch doc; a Phase 4+ retrieval concern.
+- Fresh live RAGAs baseline before RAGAs gates anything.
 
 ## Machine B block — Phase 3 verification (run in order)
 

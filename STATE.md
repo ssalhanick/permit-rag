@@ -1,6 +1,6 @@
 # permit_rag — State
 
-_Updated: 2026-07-24 (Phase 3 SHIPPED + deployed — validator + backfill + superadmin dashboard v1 live on prod; 442 tests; remaining is operational corpus review)_
+_Updated: 2026-07-24 (Phase 3 DONE — validator + backfill + dashboard v1 live on prod; 028 applied on prod; backfill `--apply` run; good proposals approved → corpus metadata corrected. 442 tests. Next: Phase 4.)_
 
 ## Phase
 
@@ -15,11 +15,10 @@ Phases 0–2 are on prod (details in `journals/session_20260724_phase2.md`). The
 validator was run against the machine-B corpus (19 docs, dry-run): 19/19
 `needs_review`, cited proposals, zero drops, zero supersession false-flags.
 
-**What "shipped" means here:** the validator, backfill, and dashboard are built,
-tested, and deployed. The *operational* tail — apply 028 on prod, run the
-backfill `--apply` against prod, and approve the good proposals in the dashboard
-(which actually writes the corrected `effective_date`/tags) — is corpus work done
-*through* the shipped tool, tracked in the punch list, not more code.
+**Operational tail — DONE (2026-07-24).** Migration 028 applied on prod; the
+backfill `--apply` was run against prod; the good proposals were approved in the
+dashboard, writing corrected `effective_date`/tags through
+`governance.apply_metadata_correction`. Phase 3 is fully complete end-to-end.
 
 > **Migration numbering collision RESOLVED.** Phase 3 → **028**
 > (`028_metadata_validation.sql`), Phase 4 → 029, Phase 6 → 030. 027 is
@@ -178,21 +177,15 @@ call); `check_migration_details.py --local` reports the dedupe fix present,
 ## Blocked on / needs your attention (punch list)
 
 _Forward-looking only. Resolved items (Phase 2 verification, prod-027, the
-anthropic floor, the migration-numbering collision) are recorded in the journals,
-per AGENTS.md "completed work → journal only."_
+anthropic floor, the migration-numbering collision, **the Phase 3 operational
+tail — 028 applied on prod, backfill `--apply` run, good proposals approved
+2026-07-24**) are recorded in the journals, per AGENTS.md "completed work →
+journal only." **Phase 3 is fully done.**_
 
-1. **Phase 3 operational tail on PROD (the corpus fix).** The tool is deployed;
-   these correct the actual data: (a) apply migration 028 to prod RDS
-   (`apply_migration.py`, additive enum-only); (b) run
-   `ENVIRONMENT=production py scripts/backfill_document_metadata.py --apply
-   --report` to file the review items; (c) in `/admin/agents`, approve the good
-   proposals (the two 2012-03-15 dates; edit/reject the recent low-conf ones and
-   lossy tag sets). Until (c), prod `effective_date` stays null. The dashboard
-   Documents tab shows the gaps live.
-2. **`checksum_sha256` missing on all 19 docs.** Flagged by the validator's
+1. **`checksum_sha256` missing on all 19 docs.** Flagged by the validator's
    completeness check but not proposable (a checksum is the file bytes, not
    content). Needs a separate source-identity backfill, not this agent.
-3. **q6 / Dallas ordinance — NOT a supersession.** Corrected on machine B:
+2. **q6 / Dallas ordinance — NOT a supersession.** Corrected on machine B:
    `city-of-dallas-ordiance-v1/v2/v3` are **parts of one oversized PDF** split
    for ingestion, not competing versions. The Phase 2 "supersession" framing was
    wrong. `detect_supersession_candidates` no longer flags `-vN` families (that
@@ -203,22 +196,19 @@ per AGENTS.md "completed work → journal only."_
    `RAGAS_ANSWER_CACHE_ENABLED=false` from the shell does **not** work —
    `bootstrap_env()` `load_dotenv(override=True)` overwrites it; use
    `--no-answer-cache`. (b) `eval_guard`'s default baseline is a cached-era run
-   and single-shot RAGAs swings ±0.15 on one query. Before RAGAs gates Phase 3,
+   and single-shot RAGAs swings ±0.15 on one query. Before RAGAs gates any phase,
    establish a fresh **live** multi-sample baseline. Do not gate on one number.
 4. **Mobile OAuth deep links (deferred)** — M0-6/M0-7 device Google/Apple roundtrip.
 
 ## Next tasks
 
-1. **Finish the Phase 3 corpus fix on prod** (punch item 1): apply 028, run the
-   backfill `--apply`, approve the good proposals in `/admin/agents`. Operating
-   the shipped tool — no code.
-2. **Phase 4 — Prompt Router + fragment library + Media Curator** (migration
+1. **Phase 4 — Prompt Router + fragment library + Media Curator** (migration
    029). Persona playbooks, jurisdiction/intent fragments, demote
    `custom_system_prompt` to bounded notes, `research` default + Clarification
    nudge, **persona/intent-aware `max_tokens`** (the 1024 cap that truncates
    `diy`/`hiring_contractor`), and `stop_reason == "max_tokens"` as a Guardrail
    trip. Own chat, own branch.
-3. Before RAGAs is a quality gate, clear the eval-harness debt (punch item 4).
+2. Before RAGAs is a quality gate, clear the eval-harness debt (punch item 3).
 
 ## Migration drift — check before touching any database
 
@@ -236,8 +226,8 @@ writes verification rows. Apply on prod as part of finishing the corpus fix.
 | Database | State (as last recorded) |
 |----------|--------------------------|
 | Local Docker (machine A, this repo) | 018–021, 023–026 applied; **022 missing**; 026 pre-fix so 027 required here. **028 not applied. Corpus empty.** |
-| Machine B local (`localhost:5433`) | Current through 027; 19 docs. **028 pending `--apply`** (dry-run needs no migration). |
-| Prod RDS | Current through 027; 19 docs. Do NOT re-apply 027. **028 pending** — apply before the prod backfill `--apply`. |
+| Machine B local (`localhost:5433`) | Current through 027; 19 docs. (028 only needed for a local `--apply`.) |
+| Prod RDS | **Current through 028 (applied 2026-07-24).** Backfill `--apply` run; good metadata proposals approved → corrected `effective_date`/tags written. Do NOT re-apply 027/028. |
 
 **Why target confusion keeps happening.** `bootstrap_env` loads `.env` last with
 `override=True`, and `ENVIRONMENT=production` selects `.env.production`; all three
