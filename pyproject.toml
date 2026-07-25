@@ -38,6 +38,11 @@ dependencies = [
     # --- Chunking ---
     "langchain-text-splitters>=0.2.0",
 
+    # --- Media Curator: how-to video transcripts (Slice C) ---
+    # Pinned <1.0: 1.x replaced the YouTubeTranscriptApi.get_transcript classmethod
+    # (used in ingestion/transcript.py) with an instance .fetch() API.
+    "youtube-transcript-api>=0.6.2,<1.0",
+
     # --- API ---
     "fastapi>=0.111.0",
     "uvicorn[standard]>=0.29.0",

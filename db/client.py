@@ -120,12 +120,17 @@ def insert_document(
     source_tier: int = 1,  # Sprint 1: 1=corpus, 2=user ordinance, 3=project doc
     project_id: UUID | None = None,
     uploaded_by: UUID | None = None,
+    content_class: str = "authority",  # migration 031: 'authority' | 'how_to'
 ) -> dict[str, Any]:
     """
     Insert a document row. Returns the full row as a dict.
 
     Uses ON CONFLICT to update metadata if the doc_id already exists,
     which supports re-harvesting without duplicating rows.
+
+    ``content_class`` defaults to ``"authority"`` (permit corpus). The Media
+    Curator transcript ingest passes ``"how_to"`` so those docs are segregated
+    out of compliance retrieval (migration 031).
     """
     sql = """
         INSERT INTO documents (
@@ -133,7 +138,7 @@ def insert_document(
             doc_type, subject_tags, effective_date, document_status,
             is_current, retrieval_weight, review_due,
             checksum_sha256, source_etag, local_path, source_tier,
-            project_id, uploaded_by
+            project_id, uploaded_by, content_class
         ) VALUES (
             %(doc_id)s, %(source_url)s, %(municipality)s,
             %(authority_level)s::authority_level,
@@ -142,7 +147,7 @@ def insert_document(
             %(effective_date)s, %(document_status)s::document_status,
             %(is_current)s, %(retrieval_weight)s, %(review_due)s,
             %(checksum_sha256)s, %(source_etag)s, %(local_path)s,
-            %(source_tier)s, %(project_id)s, %(uploaded_by)s
+            %(source_tier)s, %(project_id)s, %(uploaded_by)s, %(content_class)s
         )
         ON CONFLICT (doc_id) DO UPDATE SET
             source_url       = EXCLUDED.source_url,
@@ -160,7 +165,8 @@ def insert_document(
             local_path       = EXCLUDED.local_path,
             source_tier      = EXCLUDED.source_tier,
             project_id       = EXCLUDED.project_id,
-            uploaded_by      = EXCLUDED.uploaded_by
+            uploaded_by      = EXCLUDED.uploaded_by,
+            content_class    = EXCLUDED.content_class
         RETURNING *;
     """
     params = {
@@ -181,6 +187,7 @@ def insert_document(
         "source_tier": source_tier,  # Sprint 1
         "project_id": project_id,
         "uploaded_by": uploaded_by,
+        "content_class": content_class,
     }
     with get_conn() as conn:
         row = conn.execute(sql, params).fetchone()
@@ -593,6 +600,7 @@ def match_chunks(
     top_k: int = 5,
     municipality: str | None = None,
     min_similarity: float = 0.0,
+    content_class: str | None = "authority",
 ) -> list[dict[str, Any]]:
     """
     Dense vector similarity search via the match_chunks() SQL function.
@@ -606,6 +614,10 @@ def match_chunks(
         top_k: Maximum number of chunks to return.
         municipality: Optional filter (e.g. "dallas", "plano").
         min_similarity: Discard results below this cosine similarity.
+        content_class: Retrieval-class filter (migration 031). Defaults to
+            ``"authority"`` so the compliance path never sees how-to transcripts
+            (they must not ground or cite a compliance answer). Pass ``"how_to"``
+            for the DIY how-to retrieval, or ``None`` to search both classes.
 
     Returns:
         List of dicts with keys: id, document_id, doc_id, content,
@@ -617,13 +629,15 @@ def match_chunks(
         SELECT * FROM match_chunks(
             %(query_embedding)s::vector,
             %(match_count)s,
-            %(filter_municipality)s
+            %(filter_municipality)s,
+            %(filter_content_class)s
         );
     """
     params = {
         "query_embedding": str(query_embedding),
         "match_count": top_k,
         "filter_municipality": municipality,
+        "filter_content_class": content_class,
     }
     with get_conn() as conn:
         rows = conn.execute(sql, params).fetchall()
@@ -2672,6 +2686,19 @@ def fetch_media_refs(
     """
     with get_conn() as conn:
         return conn.execute(sql, (task_key, jurisdiction, limit)).fetchall()
+
+
+def list_media_refs(*, active_only: bool = True) -> list[dict[str, Any]]:
+    """List curated media_refs rows (all of them), newest first.
+
+    Used by the transcript-ingest driver to walk every vetted video. Unlike
+    ``fetch_media_refs`` (task-scoped, jurisdiction-aware, capped), this returns
+    the whole table.
+    """
+    where = "WHERE active" if active_only else ""
+    sql = f"SELECT * FROM media_refs {where} ORDER BY created_at DESC;"
+    with get_conn() as conn:
+        return conn.execute(sql).fetchall()
 
 
 def insert_media_ref(

@@ -307,6 +307,32 @@ journal only." **Phase 3 is fully done.**_
      --apply --verified`, run a diy query end-to-end; (c) merge to
      `deployment/sites` + GHA-deploy (backend+frontend; migration 030 by hand on
      prod RDS first).
+   - **Abstain quick-win (BUILT, in this branch):** a **diy** query that abstains
+     now still surfaces the curated how-to links (`_curate_media` no longer skips
+     on abstain; `_build_abstain_response` attaches `media_refs`). Non-diy abstains
+     stay empty. Tests updated (`test_diy_abstain_still_surfaces_media` +
+     `test_non_diy_abstain_has_no_media`).
+   - **Slice C — transcript ingest.** The real fix for "no confident answer" on
+     how-to queries. Owner decision: **separate tier, never grounds compliance**.
+     Plan: `docs/plan_media_transcripts.md`.
+     - **C1 BUILT (machine-A compile + transcript smoke green):** migration
+       `031_media_transcripts.sql` (enum `educational`/`how_to_video`,
+       `documents.content_class` column, `match_chunks` gains a
+       `filter_content_class` param **defaulting to `authority`** so compliance
+       retrieval is byte-for-byte unchanged); `db.client` (`match_chunks` +
+       `content_class`, `insert_document` + `content_class`, `list_media_refs`);
+       `ingestion/transcript.py` (YouTube transcript fetch, graceful on no
+       captions); `scripts/ingest_media_transcripts.py` (target-safe driver,
+       local→prod via `ingest_prod_corpus` pattern); `pyproject` dep
+       `youtube-transcript-api`; `tests/test_transcript.py`.
+       **To verify (machine B):** `pip install -e .` (new dep) → apply `031` →
+       `ingest_media_transcripts.py --local` (dry-run) then `--apply` →
+       **run RAGAs to confirm compliance retrieval is unchanged** (AGENTS.md:
+       never change retrieval without RAGAs after; default filter is authority-only).
+     - **C2 NOT built:** wire the how-to retrieval (`match_chunks(content_class=
+       'how_to')`) into the diy path so a compliance-abstain becomes a grounded
+       how-to answer + the video, with an **educational disclaimer** (not the AHJ
+       one). Depends on C1 being verified on machine B first.
    - **B2 (deferred):** the `web_search` youtube-only path. Needs the `claude-api`
      skill (tool id) + `run_agent` learning `tools=` + a `web_search_tool_result`
      parser + Budget-Governor cap. Same Guardrail gate. See `docs/plan_media_curator.md`.
@@ -337,15 +363,22 @@ apply anytime; the Router reads the new columns but tolerates them being NULL.
 **Migration 030 (`030_media_refs.sql`, Media Curator B1)** `CREATE TABLE IF NOT
 EXISTS media_refs` (curated how-to video links) + one partial index. Additive,
 idempotent, `text + CHECK` (no enums), `UNIQUE (task_key, url)` for idempotent
-seeding. **NOT applied on any DB yet.** Takes the `030` slot; the planned Phase-6
-`ontology_and_bids` migration cascades to `031`. Safe to apply anytime; the
-Curator tolerates an empty table (returns no videos).
+seeding. Takes the `030` slot; Phase-6 `ontology_and_bids` cascades to `032`.
+Safe to apply anytime; the Curator tolerates an empty table (returns no videos).
+
+**Migration 031 (`031_media_transcripts.sql`, Media Curator Slice C1)** adds enum
+values (`authority_level += 'educational'`, `doc_type += 'how_to_video'`), the
+`documents.content_class` column (`authority`|`how_to`, default `authority`), and
+**recreates `match_chunks`** with a `filter_content_class` param **defaulting to
+`authority`** — so compliance retrieval is byte-for-byte unchanged. **NOT applied
+on any DB yet.** Requires PG12+ for `ALTER TYPE … ADD VALUE` in a txn (schema is
+PG15). ⚠ **`match_chunks` is retrieval-critical — run RAGAs after applying.**
 
 | Database | State (as last recorded) |
 |----------|--------------------------|
-| Local Docker (machine A, this repo) | 018–021, 023–026 applied; **022 missing**; 026 pre-fix so 027 required here. **028/029/030 not applied. Corpus empty.** |
-| Machine B local (campus corpus DB via `.env.local`) | Current through 027; **029 applied 2026-07-25** (Phase 4 demo); 19 docs. **030 pending** (apply for the Media Curator demo). (028 only needed for a local `--apply`.) |
-| Prod RDS | **Current through 029 (028 applied 2026-07-24; 029 applied 2026-07-25 at the Phase 4 core deploy).** Backfill `--apply` run; good metadata proposals approved. Query-UX pass added **no** migration. **030 pending** (apply at the Media Curator deploy). Do NOT re-apply 027/028/029. |
+| Local Docker (machine A, this repo) | 018–021, 023–026 applied; **022 missing**; 026 pre-fix so 027 required here. **028/029/030/031 not applied. Corpus empty.** |
+| Machine B local (campus corpus DB via `.env.local`) | Current through 027; **029 applied 2026-07-25** (Phase 4 demo); 19 docs. **030 applied 2026-07-25** (media_refs seeded — placeholder rows pruned/replaced). **031 pending** (Slice C1 transcript ingest; run RAGAs after). (028 only needed for a local `--apply`.) |
+| Prod RDS | **Current through 029 (028 applied 2026-07-24; 029 applied 2026-07-25 at the Phase 4 core deploy).** Backfill `--apply` run; good metadata proposals approved. Query-UX pass added **no** migration. **030 + 031 pending** (apply at the Media Curator deploy). Do NOT re-apply 027/028/029. |
 
 **Why target confusion keeps happening.** `bootstrap_env` loads `.env` last with
 `override=True`, and `ENVIRONMENT=production` selects `.env.production`; all three
@@ -370,7 +403,7 @@ already applied by name on multiple DBs). The dedupe correction is therefore
 
 | Module | Current state |
 |--------|---------------|
-| rag/agents/manager | Phase 2 orchestrator; **Phase 4:** `_generate` routes the prompt (deterministic `prompt_router` step + fragment ids), derives intent, passes `routed=`, runs the Guardrail truncation trip, threads `persona_defaulted` to the nudge. **Query-UX:** a grounding-floor miss sets `abstained` + `abstain_message` (soft abstain) instead of raising; `_generate` short-circuits (routes for the nudge, skips generation). **Media (B1):** `_route_prompt` persists `resolved_persona`; wave 4 adds `_curate_media` (∥ `_generate`, diy-only, skip on abstain) → Guardrail source gate → `media_refs` threaded through `ManagerResult` |
+| rag/agents/manager | Phase 2 orchestrator; **Phase 4:** `_generate` routes the prompt (deterministic `prompt_router` step + fragment ids), derives intent, passes `routed=`, runs the Guardrail truncation trip, threads `persona_defaulted` to the nudge. **Query-UX:** a grounding-floor miss sets `abstained` + `abstain_message` (soft abstain) instead of raising; `_generate` short-circuits (routes for the nudge, skips generation). **Media (B1):** `_route_prompt` persists `resolved_persona`; wave 4 adds `_curate_media` (∥ `_generate`, diy-only) → Guardrail source gate → `media_refs` threaded through `ManagerResult`. **Abstain quick-win:** `_curate_media` runs on a diy abstain too (links show even with no answer); the abstain response carries `media_refs` |
 | rag/agents/artifacts | **New (Phase 2).** `ArtifactRef` + `ArtifactStore`; bounds the Manager's context |
 | rag/agents/budget | **New (Phase 2).** Deterministic Budget Governor; uncapped default = no-op |
 | rag/agents/registry | Roster is 13 specs, all lazily bound (Media B1 added `media_curator`; Phase 4 added `prompt_router` + `guardrail`; Phase 3 added `metadata_validator` via api DI) |
@@ -378,6 +411,8 @@ already applied by name on multiple DBs). The dedupe correction is therefore
 | rag/agents/prompt_router | **New (Phase 4).** Agent #2. Lookup composition; `research` default; persona/intent `max_tokens`; missing-fragment signal. No LLM call |
 | rag/agents/guardrail | **New (Phase 4 slice).** `check_truncation` → `answer_truncated` action item on `stop_reason == 'max_tokens'`. **Media B1:** `check_media_sources` drops any URL not from youtube.com/media_refs (the zero-unsourced-URL gate) → `unsourced_media_url` action item on a drop. Never raises |
 | rag/agents/media | **New (Media B1).** Media Curator (agent #17). Deterministic diy-only curator: keyword task-map → `db.client.fetch_media_refs`. Returns `MediaRef` (`sourced=True`); never fabricates a URL. No LLM (B1) |
+| ingestion/transcript | **New (Media C1).** `fetch_transcript(url)` + `video_id_from_url` — pulls a YouTube transcript (public captions, no API cost); graceful None on missing captions / non-youtube URL. Dep `youtube-transcript-api` |
+| db.client match_chunks / retrieval | **Media C1:** `match_chunks` gains a `content_class` filter **defaulting to `authority`** (migration 031 recreates the SQL fn) so how-to transcripts never enter compliance retrieval / the grounding floor; `insert_document` + `content_class`; `list_media_refs` |
 | rag/agent_runtime | Single Anthropic call site. Phase 3: `_dispatch` learns models that reject `temperature` and retries without it |
 | rag/generator | **Folded into the runtime.** Phase 4: takes an optional `routed` RoutedPrompt (composed system + persona `max_tokens` + fragment ids); un-routed default unchanged. Kickoff emits bounded `notes` |
 | rag/design_intent | Folded in Phase 1; contract unchanged |
