@@ -600,24 +600,21 @@ def match_chunks(
     top_k: int = 5,
     municipality: str | None = None,
     min_similarity: float = 0.0,
-    content_class: str | None = "authority",
 ) -> list[dict[str, Any]]:
     """
     Dense vector similarity search via the match_chunks() SQL function.
 
-    Calls the pgvector cosine-distance search defined in db/schema.sql.
-    Returns up to *top_k* chunks ordered by source_tier ASC then descending
-    similarity (corpus chunks surface before user-uploaded on equal score).
+    Calls the pgvector cosine-distance search defined in db/schema.sql. As of
+    migration 031 the SQL function is scoped to ``content_class = 'authority'`` —
+    how-to video transcripts are excluded from compliance retrieval **in SQL**, so
+    this signature is unchanged and no caller passes a class. Returns up to *top_k*
+    chunks ordered by source_tier ASC then descending similarity.
 
     Args:
         query_embedding: 768-dim float vector (nomic-embed-text query).
         top_k: Maximum number of chunks to return.
         municipality: Optional filter (e.g. "dallas", "plano").
         min_similarity: Discard results below this cosine similarity.
-        content_class: Retrieval-class filter (migration 031). Defaults to
-            ``"authority"`` so the compliance path never sees how-to transcripts
-            (they must not ground or cite a compliance answer). Pass ``"how_to"``
-            for the DIY how-to retrieval, or ``None`` to search both classes.
 
     Returns:
         List of dicts with keys: id, document_id, doc_id, content,
@@ -629,15 +626,13 @@ def match_chunks(
         SELECT * FROM match_chunks(
             %(query_embedding)s::vector,
             %(match_count)s,
-            %(filter_municipality)s,
-            %(filter_content_class)s
+            %(filter_municipality)s
         );
     """
     params = {
         "query_embedding": str(query_embedding),
         "match_count": top_k,
         "filter_municipality": municipality,
-        "filter_content_class": content_class,
     }
     with get_conn() as conn:
         rows = conn.execute(sql, params).fetchall()
@@ -650,6 +645,43 @@ def match_chunks(
         "match_chunks: %d results (top_k=%d, municipality=%s)",
         len(rows), top_k, municipality,
     )
+    return rows
+
+
+def match_how_to_chunks(
+    query_embedding: list[float],
+    *,
+    top_k: int = 5,
+    municipality: str | None = None,
+    min_similarity: float = 0.0,
+) -> list[dict[str, Any]]:
+    """
+    Dense search over the how-to transcript class only (migration 031).
+
+    The DIY how-to retrieval: returns ``content_class = 'how_to'`` chunks (video
+    transcripts) via the ``match_how_to_chunks()`` SQL function. Kept entirely
+    separate from :func:`match_chunks` so how-to content can never ground or cite
+    a compliance answer. Same row shape as ``match_chunks``.
+    """
+    sql = """
+        SELECT * FROM match_how_to_chunks(
+            %(query_embedding)s::vector,
+            %(match_count)s,
+            %(filter_municipality)s
+        );
+    """
+    params = {
+        "query_embedding": str(query_embedding),
+        "match_count": top_k,
+        "filter_municipality": municipality,
+    }
+    with get_conn() as conn:
+        rows = conn.execute(sql, params).fetchall()
+
+    if min_similarity > 0.0:
+        rows = [r for r in rows if r["similarity"] >= min_similarity]
+
+    log.info("match_how_to_chunks: %d results (top_k=%d)", len(rows), top_k)
     return rows
 
 

@@ -3,11 +3,14 @@
 _Drafted 2026-07-25. Follows Media Curator B1 (curated links)._
 
 > **Status (2026-07-25): C1 BUILT** (machine-A compile + transcript smoke green) —
-> migration 031, `db.client` (`match_chunks` content_class filter defaulting to
-> `authority`, `insert_document` content_class, `list_media_refs`),
-> `ingestion/transcript.py`, `scripts/ingest_media_transcripts.py`, `pyproject` dep,
-> `tests/test_transcript.py`. **Verify on machine B** (install dep → apply 031 →
-> ingest → **RAGAs**) before **C2** (the how-to answer wiring below) is built.
+> migration 031 (**non-breaking**: `match_chunks` keeps its 3-arg signature, body
+> scoped to `content_class='authority'` in SQL; new `match_how_to_chunks` for the
+> diy path — so migration/deploy need no ordering), `db.client`
+> (`match_chunks` unchanged sig + `match_how_to_chunks` + `insert_document`
+> content_class + `list_media_refs`), `ingestion/transcript.py`,
+> `scripts/ingest_media_transcripts.py`, `pyproject` dep, `tests/test_transcript.py`.
+> **Verify on machine B** (install dep → apply 031 → ingest → **RAGAs**) before
+> **C2** (the how-to answer wiring below) is built.
 
 ## Goal
 

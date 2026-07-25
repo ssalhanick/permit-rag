@@ -369,10 +369,13 @@ Safe to apply anytime; the Curator tolerates an empty table (returns no videos).
 **Migration 031 (`031_media_transcripts.sql`, Media Curator Slice C1)** adds enum
 values (`authority_level += 'educational'`, `doc_type += 'how_to_video'`), the
 `documents.content_class` column (`authority`|`how_to`, default `authority`), and
-**recreates `match_chunks`** with a `filter_content_class` param **defaulting to
-`authority`** — so compliance retrieval is byte-for-byte unchanged. **NOT applied
-on any DB yet.** Requires PG12+ for `ALTER TYPE … ADD VALUE` in a txn (schema is
-PG15). ⚠ **`match_chunks` is retrieval-critical — run RAGAs after applying.**
+is **NON-BREAKING**: `CREATE OR REPLACE match_chunks` keeps its **3-arg signature**
+(body now filters `content_class='authority'`, enforced in SQL) + a **new**
+`match_how_to_chunks` for the diy path — so migration and app-deploy need **no
+ordering** (neither old-code+new-DB nor new-code+old-DB breaks). **NOT applied on
+any DB yet.** Requires PG12+ for `ALTER TYPE … ADD VALUE` in a txn (schema is PG15).
+⚠ **`match_chunks` body changed — run RAGAs after (corpus is all `authority`, so
+the result set is identical; the run confirms it).**
 
 | Database | State (as last recorded) |
 |----------|--------------------------|
@@ -412,7 +415,7 @@ already applied by name on multiple DBs). The dedupe correction is therefore
 | rag/agents/guardrail | **New (Phase 4 slice).** `check_truncation` → `answer_truncated` action item on `stop_reason == 'max_tokens'`. **Media B1:** `check_media_sources` drops any URL not from youtube.com/media_refs (the zero-unsourced-URL gate) → `unsourced_media_url` action item on a drop. Never raises |
 | rag/agents/media | **New (Media B1).** Media Curator (agent #17). Deterministic diy-only curator: keyword task-map → `db.client.fetch_media_refs`. Returns `MediaRef` (`sourced=True`); never fabricates a URL. No LLM (B1) |
 | ingestion/transcript | **New (Media C1).** `fetch_transcript(url)` + `video_id_from_url` — pulls a YouTube transcript (public captions, no API cost); graceful None on missing captions / non-youtube URL. Dep `youtube-transcript-api` |
-| db.client match_chunks / retrieval | **Media C1:** `match_chunks` gains a `content_class` filter **defaulting to `authority`** (migration 031 recreates the SQL fn) so how-to transcripts never enter compliance retrieval / the grounding floor; `insert_document` + `content_class`; `list_media_refs` |
+| db.client match_chunks / retrieval | **Media C1:** migration 031 scopes `match_chunks` to `content_class='authority'` **in SQL** (unchanged 3-arg signature → non-breaking deploy) so how-to transcripts never enter compliance retrieval; new `match_how_to_chunks` reader (diy path, C2); `insert_document` + `content_class`; `list_media_refs` |
 | rag/agent_runtime | Single Anthropic call site. Phase 3: `_dispatch` learns models that reject `temperature` and retries without it |
 | rag/generator | **Folded into the runtime.** Phase 4: takes an optional `routed` RoutedPrompt (composed system + persona `max_tokens` + fragment ids); un-routed default unchanged. Kickoff emits bounded `notes` |
 | rag/design_intent | Folded in Phase 1; contract unchanged |

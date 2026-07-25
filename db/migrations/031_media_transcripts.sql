@@ -48,16 +48,18 @@ COMMENT ON COLUMN documents.content_class IS
     '(video transcripts, DIY-only, never grounds or cites a compliance answer). '
     'match_chunks filters on this, defaulting to authority.';
 
--- 3. match_chunks gains the content_class filter. Adding a parameter changes the
---    signature, so drop the old 3-arg version first (avoids overload ambiguity).
---    The return table is UNCHANGED — only the WHERE clause and the new param.
-DROP FUNCTION IF EXISTS match_chunks(vector, integer, text);
-
-CREATE FUNCTION match_chunks(
+-- 3. Segregate retrieval by content_class WITHOUT changing any function signature,
+--    so this migration and the app deploy need NO ordering (neither old-code+new-DB
+--    nor new-code+old-DB breaks — the signatures are identical, only the bodies /
+--    a new function change). match_chunks keeps its 3-arg shape and simply excludes
+--    how_to now (compliance = authority-only, enforced in SQL, no app change). A
+--    separate match_how_to_chunks serves the DIY how-to path (Slice C2).
+--    ⚠ match_chunks body changed → run RAGAs after (default corpus is all authority,
+--      so the result set is identical; the RAGAs run confirms it).
+CREATE OR REPLACE FUNCTION match_chunks(
     query_embedding      vector(768),
     match_count          int default 5,
-    filter_municipality  text default null,
-    filter_content_class text default 'authority'
+    filter_municipality  text default null
 )
 returns table (
     id              uuid,
@@ -78,18 +80,9 @@ returns table (
 language sql stable
 as $$
     select
-        c.id,
-        c.document_id,
-        d.doc_id,
-        c.content,
-        c.chunk_index,
-        d.municipality,
-        d.authority_level,
-        d.doc_type,
-        d.document_status,
-        c.status          as chunk_status,
-        d.source_tier,
-        d.ingested_at,
+        c.id, c.document_id, d.doc_id, c.content, c.chunk_index,
+        d.municipality, d.authority_level, d.doc_type, d.document_status,
+        c.status as chunk_status, d.source_tier, d.ingested_at,
         d.retrieval_weight,
         1 - (c.embedding <=> query_embedding) as similarity
     from chunks c
@@ -97,10 +90,53 @@ as $$
     where d.document_status = 'active'
       and d.is_current = true
       and c.status = 'active'
+      and d.content_class = 'authority'      -- transcripts never ground compliance
       and (filter_municipality is null or d.municipality = filter_municipality)
-      and (filter_content_class is null or d.content_class = filter_content_class)
     order by
         d.source_tier asc,
+        c.embedding <=> query_embedding
+    limit match_count;
+$$;
+
+-- The DIY how-to retrieval (Slice C2 wires this into the diy path). Same shape,
+-- how_to class only, ranked by similarity (all how_to docs are source_tier 3).
+CREATE OR REPLACE FUNCTION match_how_to_chunks(
+    query_embedding      vector(768),
+    match_count          int default 5,
+    filter_municipality  text default null
+)
+returns table (
+    id              uuid,
+    document_id     uuid,
+    doc_id          text,
+    content         text,
+    chunk_index     integer,
+    municipality    text,
+    authority_level authority_level,
+    doc_type        doc_type,
+    document_status document_status,
+    chunk_status    document_status,
+    source_tier     integer,
+    ingested_at     timestamptz,
+    retrieval_weight numeric,
+    similarity      float
+)
+language sql stable
+as $$
+    select
+        c.id, c.document_id, d.doc_id, c.content, c.chunk_index,
+        d.municipality, d.authority_level, d.doc_type, d.document_status,
+        c.status as chunk_status, d.source_tier, d.ingested_at,
+        d.retrieval_weight,
+        1 - (c.embedding <=> query_embedding) as similarity
+    from chunks c
+    join documents d on d.id = c.document_id
+    where d.document_status = 'active'
+      and d.is_current = true
+      and c.status = 'active'
+      and d.content_class = 'how_to'
+      and (filter_municipality is null or d.municipality = filter_municipality)
+    order by
         c.embedding <=> query_embedding
     limit match_count;
 $$;
