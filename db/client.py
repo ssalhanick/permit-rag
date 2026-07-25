@@ -2711,17 +2711,19 @@ def insert_media_ref(
 
 
 def delete_placeholder_media_refs() -> int:
-    """Delete un-vetted placeholder seed rows (URL/title still says ``REPLACE``).
+    """Delete un-vetted placeholder seed rows (URL still carries the sentinel).
 
     A cleanup for rows seeded before their placeholder links were replaced with
-    verified ones. media_refs is a curated helper table, not the governed document
+    verified ones. Keys on the ``REPLACE_WITH_VERIFIED_ID`` URL sentinel only — not
+    the word "replace", which is legitimate in a title like "How to replace a
+    faucet". media_refs is a curated helper table, not the governed document
     corpus, so a hard delete is appropriate here (the "never delete a document"
     rule is about ``documents``/``registry.json``, not this table). Returns the
     number of rows removed.
     """
-    sql = "DELETE FROM media_refs WHERE url ILIKE %s OR title ILIKE %s;"
+    sql = "DELETE FROM media_refs WHERE url ILIKE %s;"
     with get_conn() as conn:
-        cur = conn.execute(sql, ("%REPLACE%", "%REPLACE%"))
+        cur = conn.execute(sql, ("%REPLACE_WITH_VERIFIED_ID%",))
         removed = cur.rowcount
         conn.commit()
     return removed

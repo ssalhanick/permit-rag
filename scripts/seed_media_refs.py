@@ -70,9 +70,12 @@ def _load_seed(path: Path) -> list[dict]:
                 raise ValueError(f"seed entry missing '{key}': {r}")
         if not str(r["url"]).startswith("https://"):
             raise ValueError(f"seed url must be https: {r['url']}")
-        if "REPLACE" in f"{r['url']} {r['title']}".upper():
+        # The shipped placeholder URLs carry this exact sentinel. Match only it —
+        # not the word "replace", which is legitimate in a title like
+        # "How to replace a faucet".
+        if "REPLACE_WITH_VERIFIED_ID" in str(r["url"]).upper():
             raise ValueError(
-                f"placeholder entry not yet vetted (still says REPLACE): {r['task_key']}. "
+                f"placeholder entry not yet vetted: {r['task_key']}. "
                 "Edit scripts/media_refs_seed.json with a real, human-verified link first."
             )
     return rows

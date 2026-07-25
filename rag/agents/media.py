@@ -39,6 +39,8 @@ DIY_PERSONA = "diy"
 # first matching phrase wins, so list more specific phrases before generic ones.
 _TASK_KEYWORDS: tuple[tuple[tuple[str, ...], str], ...] = (
     (("gfci", "ground fault"), "install_gfci_outlet"),
+    (("3-way switch", "3 way switch", "three-way switch", "three way switch"),
+     "find-correct-wiring-for-3-way-switch"),
     (("outlet", "receptacle"), "install_electrical_outlet"),
     (("ceiling fan",), "install_ceiling_fan"),
     (("light fixture", "light fitting"), "replace_light_fixture"),
