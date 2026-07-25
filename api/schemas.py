@@ -195,6 +195,21 @@ class CitationResponse(BaseModel):
     authority_level: str | None = Field(description="Authority level of cited source.")
 
 
+class MediaRefResponse(BaseModel):
+    """A sourced how-to video link (Media Curator, agent #17)."""
+
+    title: str = Field(description="Video title.")
+    url: str = Field(description="Vetted video URL (youtube.com only).")
+    provider: str = Field(default="youtube", description="Source provider.")
+    jurisdiction: str | None = Field(
+        default=None,
+        description="Municipality the link is specific to, or null for a national how-to.",
+    )
+    relevance_note: str | None = Field(
+        default=None, description="Why this video is relevant to the task."
+    )
+
+
 class AnswerResponse(BaseModel):
     """Response for POST /query/answer — generated answer with citations."""
 
@@ -273,6 +288,16 @@ class AnswerResponse(BaseModel):
             "True when the system declined to answer because retrieval fell below "
             "the grounding floor. `answer` holds a conversational explanation; this "
             "is a normal outcome, not an error."
+        ),
+    )
+    # Phase 4 second pass — Media Curator: sourced how-to videos, diy path only.
+    # Empty for every other persona, on an abstain, and when the query names no
+    # curated task. Every URL is vetted (youtube.com); no model-invented links.
+    media_refs: list[MediaRefResponse] = Field(
+        default_factory=list,
+        description=(
+            "Sourced how-to video links, populated only for the 'diy' persona. "
+            "Empty otherwise. Every URL is from a vetted source (zero unsourced URLs)."
         ),
     )
 

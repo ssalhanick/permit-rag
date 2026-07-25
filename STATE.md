@@ -1,6 +1,6 @@
 # permit_rag — State
 
-_Updated: 2026-07-25 (Phase 4 core DEPLOYED to prod. Query-UX pass DEPLOYED to prod — grounding-floor miss now a conversational 200 abstain (was 422), `persona_nudge` rendered, UI top_k 5→8; frontend build verified, deployed bundle serves the abstain card + nudge, `/api/documents`=19. Phase 3 done + on prod. Next: Media Curator #17.)_
+_Updated: 2026-07-25 (Phase 4 core + query-UX pass DEPLOYED to prod. **Media Curator #17 Slice B1 BUILT** on `feat/media-curator` — migration 030_media_refs + deterministic diy-only curator + Guardrail source gate + Manager wave-4 wiring + AnswerResponse.media_refs + QueryPage videos section + seed script + tests; machine-A compile + offline smoke + frontend build all green; pending machine-A pytest, machine-B apply/seed/demo, deploy. Phase 3 done + on prod.)_
 
 ## Phase
 
@@ -293,12 +293,25 @@ journal only." **Phase 3 is fully done.**_
 
 ## Next tasks
 
-1. **Phase 4 second pass — Media Curator (#17).** Sourced URLs only
-   (`web_search` + `allowed_domains:["youtube.com"]`, or a curated `media_refs`
-   table); Guardrail rejects any URL from neither; wire into the `diy` path
-   (Media Curator ∥ Answer Generator). Own branch.
-   _(Query-UX pass done + deployed 2026-07-25 — see above. Still deferred from it:
-   a full chat-thread `QueryPage` redesign, owner chose quick-wins first.)_
+1. **Media Curator (#17) — verify + ship Slice B1, then build B2.**
+   - **B1 BUILT** on `feat/media-curator` (curated `media_refs` table path, $0, no
+     runtime change): migration `030_media_refs.sql`, `db.client.fetch_media_refs`
+     /`insert_media_ref`, `rag/agents/media.py` (diy-only, keyword task-map),
+     `guardrail.check_media_sources` (zero-unsourced-URL gate), Manager wave-4
+     wiring (`_curate_media` ∥ `_generate`), `AnswerResponse.media_refs`,
+     `QueryPage.jsx` videos section, `scripts/seed_media_refs.py` + seed JSON,
+     tests. Plan: `docs/plan_media_curator.md`.
+     **To ship:** (a) machine-A `py -m pytest tests/ -q` (expect prior +new green);
+     (b) machine-B apply `030`, replace the placeholder URLs in
+     `scripts/media_refs_seed.json` with vetted links, `seed_media_refs.py --local
+     --apply --verified`, run a diy query end-to-end; (c) merge to
+     `deployment/sites` + GHA-deploy (backend+frontend; migration 030 by hand on
+     prod RDS first).
+   - **B2 (deferred):** the `web_search` youtube-only path. Needs the `claude-api`
+     skill (tool id) + `run_agent` learning `tools=` + a `web_search_tool_result`
+     parser + Budget-Governor cap. Same Guardrail gate. See `docs/plan_media_curator.md`.
+   _(Query-UX pass done + deployed 2026-07-25. Still deferred: the full chat-thread
+   `QueryPage` redesign, owner chose quick-wins first.)_
 2. **Multi-sample live RAGAs baseline** before RAGAs gates any phase (punch 3).
    The 2026-07-25 run (`ragas_20260725_011651.json`, avg 0.843) is the first clean
    *live* one — but one sample; q6 (0.50) alone drags the mean past 0.85. Run 3+
@@ -318,14 +331,21 @@ Safe to point at prod. Run one of these first on any database.
 
 **Migration 029 (`029_prompt_fragments.sql`, Phase 4)** adds two nullable columns
 to `projects` (`experience`, `project_notes`) via `ADD COLUMN IF NOT EXISTS` —
-additive, idempotent, no data migration. **NOT applied on any DB yet.** Safe to
+additive, idempotent, no data migration. Applied on machine B + prod. Safe to
 apply anytime; the Router reads the new columns but tolerates them being NULL.
+
+**Migration 030 (`030_media_refs.sql`, Media Curator B1)** `CREATE TABLE IF NOT
+EXISTS media_refs` (curated how-to video links) + one partial index. Additive,
+idempotent, `text + CHECK` (no enums), `UNIQUE (task_key, url)` for idempotent
+seeding. **NOT applied on any DB yet.** Takes the `030` slot; the planned Phase-6
+`ontology_and_bids` migration cascades to `031`. Safe to apply anytime; the
+Curator tolerates an empty table (returns no videos).
 
 | Database | State (as last recorded) |
 |----------|--------------------------|
-| Local Docker (machine A, this repo) | 018–021, 023–026 applied; **022 missing**; 026 pre-fix so 027 required here. **028/029 not applied. Corpus empty.** |
-| Machine B local (campus corpus DB via `.env.local`) | Current through 027; **029 applied 2026-07-25** (Phase 4 demo); 19 docs. (028 only needed for a local `--apply`.) |
-| Prod RDS | **Current through 029 (028 applied 2026-07-24; 029 applied 2026-07-25 at the Phase 4 core deploy).** Backfill `--apply` run; good metadata proposals approved. Query-UX pass added **no** migration. Do NOT re-apply 027/028/029. |
+| Local Docker (machine A, this repo) | 018–021, 023–026 applied; **022 missing**; 026 pre-fix so 027 required here. **028/029/030 not applied. Corpus empty.** |
+| Machine B local (campus corpus DB via `.env.local`) | Current through 027; **029 applied 2026-07-25** (Phase 4 demo); 19 docs. **030 pending** (apply for the Media Curator demo). (028 only needed for a local `--apply`.) |
+| Prod RDS | **Current through 029 (028 applied 2026-07-24; 029 applied 2026-07-25 at the Phase 4 core deploy).** Backfill `--apply` run; good metadata proposals approved. Query-UX pass added **no** migration. **030 pending** (apply at the Media Curator deploy). Do NOT re-apply 027/028/029. |
 
 **Why target confusion keeps happening.** `bootstrap_env` loads `.env` last with
 `override=True`, and `ENVIRONMENT=production` selects `.env.production`; all three
@@ -350,13 +370,14 @@ already applied by name on multiple DBs). The dedupe correction is therefore
 
 | Module | Current state |
 |--------|---------------|
-| rag/agents/manager | Phase 2 orchestrator; **Phase 4:** `_generate` routes the prompt (deterministic `prompt_router` step + fragment ids), derives intent, passes `routed=`, runs the Guardrail truncation trip, threads `persona_defaulted` to the nudge. **Query-UX:** a grounding-floor miss sets `abstained` + `abstain_message` (soft abstain) instead of raising; `_generate` short-circuits (routes for the nudge, skips generation) |
+| rag/agents/manager | Phase 2 orchestrator; **Phase 4:** `_generate` routes the prompt (deterministic `prompt_router` step + fragment ids), derives intent, passes `routed=`, runs the Guardrail truncation trip, threads `persona_defaulted` to the nudge. **Query-UX:** a grounding-floor miss sets `abstained` + `abstain_message` (soft abstain) instead of raising; `_generate` short-circuits (routes for the nudge, skips generation). **Media (B1):** `_route_prompt` persists `resolved_persona`; wave 4 adds `_curate_media` (∥ `_generate`, diy-only, skip on abstain) → Guardrail source gate → `media_refs` threaded through `ManagerResult` |
 | rag/agents/artifacts | **New (Phase 2).** `ArtifactRef` + `ArtifactStore`; bounds the Manager's context |
 | rag/agents/budget | **New (Phase 2).** Deterministic Budget Governor; uncapped default = no-op |
-| rag/agents/registry | Roster is 12 specs, all lazily bound (Phase 4 added `prompt_router` + `guardrail`; Phase 3 added `metadata_validator` via api DI) |
+| rag/agents/registry | Roster is 13 specs, all lazily bound (Media B1 added `media_curator`; Phase 4 added `prompt_router` + `guardrail`; Phase 3 added `metadata_validator` via api DI) |
 | rag/prompts | **New (Phase 4).** Versioned fragment library (files + loader). `Fragment.id = dimension:key@version`; `library_version()`, `bound_notes()` |
 | rag/agents/prompt_router | **New (Phase 4).** Agent #2. Lookup composition; `research` default; persona/intent `max_tokens`; missing-fragment signal. No LLM call |
-| rag/agents/guardrail | **New (Phase 4 slice).** `check_truncation` → `answer_truncated` action item on `stop_reason == 'max_tokens'`. Never raises |
+| rag/agents/guardrail | **New (Phase 4 slice).** `check_truncation` → `answer_truncated` action item on `stop_reason == 'max_tokens'`. **Media B1:** `check_media_sources` drops any URL not from youtube.com/media_refs (the zero-unsourced-URL gate) → `unsourced_media_url` action item on a drop. Never raises |
+| rag/agents/media | **New (Media B1).** Media Curator (agent #17). Deterministic diy-only curator: keyword task-map → `db.client.fetch_media_refs`. Returns `MediaRef` (`sourced=True`); never fabricates a URL. No LLM (B1) |
 | rag/agent_runtime | Single Anthropic call site. Phase 3: `_dispatch` learns models that reject `temperature` and retries without it |
 | rag/generator | **Folded into the runtime.** Phase 4: takes an optional `routed` RoutedPrompt (composed system + persona `max_tokens` + fragment ids); un-routed default unchanged. Kickoff emits bounded `notes` |
 | rag/design_intent | Folded in Phase 1; contract unchanged |
@@ -365,11 +386,11 @@ already applied by name on multiple DBs). The dedupe correction is therefore
 | api/routes/agents_admin | **New (Phase 3).** `/admin/agents` action queue + metadata review + read-only `documents`; superadmin-gated; approve → governance + correction row |
 | frontend/src/admin | **New (Phase 3).** `SuperadminRoute`, `AgentDashboardPage` (3 tabs), `ActionQueue`, `MetadataReviewPane` (inline-editable proposals), `DocumentMetadataTable` |
 | audit | `record_step` driven by the runtime; the Manager writes its own deterministic step |
-| db | 026/027 trace + autonomy helpers; Phase 3 added `update_document_metadata_fields` |
-| api/routes/query | Reduced to HTTP concerns; injects retrieval + grounding thresholds into the Manager. **Query-UX:** `_build_abstain_response` returns a 200 on `plan.abstained`; `_nudge_for` sets `persona_nudge` on both paths |
-| frontend/src/QueryPage | **Query-UX:** renders `persona_nudge` (💡 banner) + abstains as a calm info card (not a red error); `top_k` 5→8 |
+| db | 026/027 trace + autonomy helpers; Phase 3 added `update_document_metadata_fields`; **Media B1:** `fetch_media_refs` (reader) + `insert_media_ref` (seed writer) |
+| api/routes/query | Reduced to HTTP concerns; injects retrieval + grounding thresholds into the Manager. **Query-UX:** `_build_abstain_response` returns a 200 on `plan.abstained`; `_nudge_for` sets `persona_nudge` on both paths. **Media B1:** `_media_ref_responses` maps `plan.media_refs` → `MediaRefResponse` on the success path |
+| frontend/src/QueryPage | **Query-UX:** renders `persona_nudge` (💡 banner) + abstains as a calm info card (not a red error); `top_k` 5→8. **Media B1:** "📺 How-to videos" section (renders only when `media_refs` non-empty) |
 | evaluation | Phase 4: `langsmith_eval.run_pipeline` takes a `persona` (routes + records fragment ids); `evaluation/persona_checks.py` (deterministic appropriateness) |
-| tests | **474 passing** (442 through Phase 3 + 32 Phase 4: `test_prompt_router`, `test_guardrail`, `test_persona_checks`, `test_generator_routing`) |
+| tests | **474 passing** through the query-UX pass. **Media B1 adds** `test_media_curator.py` + `check_media_sources` tests in `test_guardrail.py` + manager media tests in `test_agent_manager.py` + `_media_ref_responses` tests in `test_query_answer_route.py` (machine-A pytest count pending an owner run) |
 
 ## Decisions log
 
@@ -407,6 +428,9 @@ already applied by name on multiple DBs). The dedupe correction is therefore
 | **Validator autonomy (Phase 3)** | `apply_metadata_correction` is **not** gated by `enforce_autonomy` — the superadmin approving in the dashboard is the L1 human gate. The runtime ceiling (`metadata_validator/semantic` = L1) governs *auto*-application, which this phase never does |
 | Validator registration (Phase 3) | `metadata_validator` registered by `api/main._register_di_agents()` (rag/ can't import ingestion/), lazily bound, `Tier.MID` |
 | **`temperature` deprecation (Phase 3)** | The newer generation (Sonnet 5, Opus 4.8, …) 400s on the `temperature` param; Haiku 4.5 still accepts it — so the validator's first `Tier.MID` call failed on machine B. `run_agent._dispatch` now **learns** it: on a "temperature deprecated" 400 it records the model in `_TEMPERATURE_UNSUPPORTED`, retries without the param, and skips it for every later call in the process (one wasted call, once). No hard-coded model list to rot |
+| **Media Curator staged B1/B2 (Media)** | `run_agent` has **no `tools=`** today, so the `web_search` path needs a runtime extension. B1 ships the **curated `media_refs` table only** — a deterministic DB lookup, $0, no runtime change — which satisfies the "zero unsourced URLs" gate by construction (every row is vetted). B2 (web_search, youtube-only) is deferred: it needs the `claude-api` skill for the tool id, `run_agent` learning `tools=`, a `web_search_tool_result` parser, and a Budget cap. Deterministic-first, same as the rest of the system |
+| **Media source gate ships with the curator (Media)** | `guardrail.check_media_sources` drops any URL not on youtube.com and not carrying a curated-table `sourced=True` marker, filing an `unsourced_media_url` action item on a drop. On the B1 DB path nothing is ever dropped; the gate ships now (like the truncation trip shipped with the Router) so B2's model-emitted URLs have their backstop from day one |
+| **Media migration takes 030 (Media)** | `030_media_refs.sql` claims the `030` slot; the planned Phase-6 `ontology_and_bids` cascades to `031` (unshipped, nothing existed at 030). `text + CHECK` (no enum ALTERs), `UNIQUE (task_key, url)` for idempotent seeding. The fragment-vs-DB call is the opposite of Phase 4's: media links are *data* that changes without a code deploy, so a table (not files) is right |
 
 ## Canonical validation
 

@@ -222,3 +222,26 @@ def test_query_answer_empty_corpus_returns_200_abstain(monkeypatch) -> None:
         assert body["ahj_disclaimer"]["text"]       # disclaimer still attached
     finally:
         app.dependency_overrides.clear()
+
+
+def test_media_ref_responses_maps_curated_refs() -> None:
+    """The route maps the plan's MediaRef objects onto the response models."""
+    from api.routes.query import _media_ref_responses
+    from rag.agents.media import MediaRef
+
+    plan = SimpleNamespace(media_refs=[
+        MediaRef(title="GFCI how-to", url="https://www.youtube.com/watch?v=a",
+                 relevance_note="step by step"),
+    ])
+    out = _media_ref_responses(plan)
+    assert len(out) == 1
+    assert out[0].url == "https://www.youtube.com/watch?v=a"
+    assert out[0].provider == "youtube"
+
+
+def test_media_ref_responses_empty_when_absent() -> None:
+    """A plan with no media_refs (non-diy / abstain) maps to an empty list."""
+    from api.routes.query import _media_ref_responses
+
+    assert _media_ref_responses(SimpleNamespace(media_refs=[])) == []
+    assert _media_ref_responses(SimpleNamespace()) == []

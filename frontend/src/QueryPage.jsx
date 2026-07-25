@@ -393,6 +393,30 @@ export default function QueryPage() {
                   </div>
                 </div>
                 )}
+
+                {/* How-to videos (Media Curator, diy path). Sourced links only. */}
+                {(activeAnswer.media_refs || []).length > 0 && (
+                <div className="pt-4 border-t border-slate-100">
+                  <h4 className="font-semibold text-sm text-slate-700 mb-2">📺 How-to videos:</h4>
+                  <ul className="space-y-2">
+                    {(activeAnswer.media_refs || []).map((m, i) => (
+                      <li key={m.url || i} className="text-sm">
+                        <a
+                          href={m.url}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="text-blue-700 hover:underline font-medium"
+                        >
+                          ▶ {m.title}
+                        </a>
+                        {m.relevance_note && (
+                          <span className="text-slate-500 text-xs block">{m.relevance_note}</span>
+                        )}
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+                )}
               </CardContent>
             </Card>
           )}

@@ -109,6 +109,13 @@ _RAG_AGENTS: tuple[AgentSpec, ...] = (
         parallel_safe=True,
         metrics=("schema_validity", "overlay_precision"),
     ),
+    AgentSpec(
+        name="media_curator",
+        callable=lazy("rag.agents.media", "curate"),
+        tier=Tier.CHEAP,  # deterministic media_refs lookup; no model call (B1)
+        parallel_safe=True,  # runs ∥ answer_generator on the diy path
+        metrics=("link_liveness", "relevance", "zero_unsourced_urls"),
+    ),
 )
 
 

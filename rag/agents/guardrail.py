@@ -26,12 +26,20 @@ from __future__ import annotations
 
 import logging
 from typing import Any
+from urllib.parse import urlparse
 from uuid import UUID
 
 log = logging.getLogger(__name__)
 
 TRUNCATION_KIND = "answer_truncated"
+UNSOURCED_MEDIA_KIND = "unsourced_media_url"
 SOURCE_AGENT = "guardrail"
+
+# The only host a media URL may come from unless it carries a curated-table
+# marker. web_search is pinned to allowed_domains:["youtube.com"]; the curated
+# media_refs table is youtube-only by CHECK constraint. Anything else is a
+# model-invented (dead) link and must never reach the user.
+ALLOWED_MEDIA_HOSTS: frozenset[str] = frozenset({"youtube.com"})
 
 
 def check_truncation(
@@ -91,3 +99,89 @@ def check_truncation(
     except Exception as exc:  # never let the guard break the answer path
         log.warning("guardrail: could not file truncation action item: %s", exc)
     return True
+
+
+def _host(url: str) -> str:
+    """Lowercased hostname of a URL, without the leading ``www.``."""
+    host = (urlparse(url).hostname or "").lower()
+    return host[4:] if host.startswith("www.") else host
+
+
+def _is_sourced(item: Any) -> bool:
+    """True when a media item came from a vetted source.
+
+    Two sourced paths (docs/agent_architecture.md #17): a row from the curated
+    ``media_refs`` table (carries ``sourced=True``), or a URL on an allowed host
+    (``youtube.com``, matched on the domain or any subdomain). Everything else is
+    treated as a model-invented link and rejected.
+    """
+    if isinstance(item, dict):
+        if item.get("sourced"):
+            return True
+        url = item.get("url") or ""
+    else:
+        if getattr(item, "sourced", False):
+            return True
+        url = getattr(item, "url", "") or ""
+    host = _host(url)
+    return any(host == a or host.endswith("." + a) for a in ALLOWED_MEDIA_HOSTS)
+
+
+def check_media_sources(
+    items: list[Any],
+    *,
+    run_id: UUID | None = None,
+    entity_id: str | None = None,
+) -> list[Any]:
+    """Drop any media item whose URL is not from a vetted source.
+
+    The hard gate behind the Media Curator's "zero unsourced URLs" contract.
+    Returns only the sourced items; a dropped item files a deduped
+    ``unsourced_media_url`` action item (evidence: the offending URL) so the
+    anomaly detector can watch the rate. Never raises — a guard that can crash the
+    answer path is worse than the link it drops. On the curated-table path nothing
+    is ever dropped (every row is sourced); the gate does real work once
+    web_search can propose model-emitted URLs.
+    """
+    if not items:
+        return []
+    kept = [it for it in items if _is_sourced(it)]
+    dropped = [it for it in items if not _is_sourced(it)]
+    if dropped:
+        _file_unsourced_media(dropped, run_id=run_id, entity_id=entity_id)
+    return kept
+
+
+def _file_unsourced_media(
+    dropped: list[Any],
+    *,
+    run_id: UUID | None,
+    entity_id: str | None,
+) -> None:
+    """File one deduped action item recording rejected media URLs. Never raises."""
+    def _url(it: Any) -> Any:
+        return it.get("url") if isinstance(it, dict) else getattr(it, "url", None)
+
+    urls = [_url(it) for it in dropped]
+    try:
+        from db.client import upsert_action_item
+
+        upsert_action_item(
+            source_agent=SOURCE_AGENT,
+            kind=UNSOURCED_MEDIA_KIND,
+            title="Media Curator produced an unsourced URL — dropped",
+            severity="high",
+            blocking=False,
+            run_id=run_id,
+            entity_type="query",
+            entity_id=entity_id or (urls[0] if urls else "media"),
+            evidence={"rejected_urls": urls},
+            proposed_action=(
+                "Investigate the media source path — a URL reached the Guardrail "
+                "that was neither from media_refs nor an allowed host. Add the link "
+                "to media_refs if legitimate, or tighten web_search allowed_domains."
+            ),
+        )
+        log.warning("guardrail: dropped %d unsourced media URL(s): %s", len(urls), urls)
+    except Exception as exc:  # never let the guard break the answer path
+        log.warning("guardrail: could not file unsourced-media action item: %s", exc)

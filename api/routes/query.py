@@ -39,6 +39,7 @@ from api.schemas import (
     ConflictWarning,
     DiagnosticsResponse,
     ErrorResponse,
+    MediaRefResponse,
     QueryRequest,
     QueryResponse,
 )
@@ -74,6 +75,25 @@ _PERSONA_NUDGE_TEXT = (
 def _nudge_for(plan: Any) -> str | None:
     """The persona nudge text when the plan defaulted persona, else None."""
     return _PERSONA_NUDGE_TEXT if plan.persona_defaulted else None
+
+
+def _media_ref_responses(plan: Any) -> list[MediaRefResponse]:
+    """Map the plan's curated ``MediaRef`` objects to response models.
+
+    Empty for every non-diy answer and every abstain (the Manager only populates
+    ``media_refs`` on the diy path, and the values already passed the Guardrail
+    source gate).
+    """
+    return [
+        MediaRefResponse(
+            title=ref.title,
+            url=ref.url,
+            provider=ref.provider,
+            jurisdiction=ref.jurisdiction,
+            relevance_note=ref.relevance_note,
+        )
+        for ref in getattr(plan, "media_refs", []) or []
+    ]
 
 
 def _build_ahj_disclaimer(municipality: str | None) -> AHJDisclaimer:
@@ -592,6 +612,7 @@ def query_answer(
         resolved_municipality=plan.resolved_municipality,
         conflict_warnings=conflict_warnings,
         persona_nudge=_nudge_for(plan),
+        media_refs=_media_ref_responses(plan),
     )
     # Insert query log in Postgres (background, non-blocking)
     try:

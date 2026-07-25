@@ -75,3 +75,64 @@ def test_guardrail_never_raises_even_if_the_writer_fails(
 def test_entity_id_defaults_to_query_when_not_given(upsert: _UpsertRecorder) -> None:
     guardrail.check_truncation(_gen("max_tokens"), query="a compound question")
     assert upsert.calls[0]["entity_id"] == "a compound question"
+
+
+# ── Media source gate (Media Curator, agent #17) ─────────────
+
+
+def test_media_gate_keeps_youtube_and_subdomains(upsert: _UpsertRecorder) -> None:
+    items = [
+        {"url": "https://www.youtube.com/watch?v=abc", "title": "a"},
+        {"url": "https://m.youtube.com/watch?v=def", "title": "b"},
+    ]
+    kept = guardrail.check_media_sources(items)
+    assert len(kept) == 2
+    assert upsert.calls == []  # nothing dropped, no action item
+
+
+def test_media_gate_drops_unsourced_url_and_files_item(upsert: _UpsertRecorder) -> None:
+    items = [
+        {"url": "https://www.youtube.com/watch?v=ok", "title": "keep"},
+        {"url": "https://evil.example.com/video", "title": "drop"},
+        {"url": "https://vimeo.com/123", "title": "drop2"},
+    ]
+    kept = guardrail.check_media_sources(items)
+    assert [k["title"] for k in kept] == ["keep"]
+    assert len(upsert.calls) == 1
+    call = upsert.calls[0]
+    assert call["source_agent"] == "guardrail"
+    assert call["kind"] == "unsourced_media_url"
+    assert call["blocking"] is False
+    assert call["evidence"]["rejected_urls"] == [
+        "https://evil.example.com/video",
+        "https://vimeo.com/123",
+    ]
+
+
+def test_media_gate_honours_sourced_marker(upsert: _UpsertRecorder) -> None:
+    # A curated-table ref carries sourced=True even if the host check were unsure.
+    from rag.agents.media import MediaRef
+
+    ref = MediaRef(title="curated", url="https://youtube.com/watch?v=z", sourced=True)
+    kept = guardrail.check_media_sources([ref])
+    assert kept == [ref]
+    assert upsert.calls == []
+
+
+def test_media_gate_empty_list_is_noop(upsert: _UpsertRecorder) -> None:
+    assert guardrail.check_media_sources([]) == []
+    assert upsert.calls == []
+
+
+def test_media_gate_never_raises_when_writer_fails(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    import db.client as db_client
+
+    def _boom(**_kwargs: Any) -> Any:
+        raise RuntimeError("db down")
+
+    monkeypatch.setattr(db_client, "upsert_action_item", _boom)
+    # A bad URL still gets dropped; the write failure is swallowed.
+    kept = guardrail.check_media_sources([{"url": "http://nope.com/x", "title": "t"}])
+    assert kept == []

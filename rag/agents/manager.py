@@ -49,6 +49,7 @@ from audit.logger import record_step
 from rag.agents import registry
 from rag.agents.artifacts import ArtifactRef, ArtifactStore
 from rag.agents.budget import BudgetGovernor
+from rag.agents.guardrail import check_media_sources
 
 log = logging.getLogger(__name__)
 
@@ -169,6 +170,9 @@ class ManagerResult:
     # user-facing text; the route returns it as a 200, not a 422.
     abstained: bool = False
     abstain_message: str | None = None
+    # Phase 4 second pass: sourced how-to videos for the diy path. Empty for every
+    # other persona, on an abstain, and when the query names no curated task.
+    media_refs: list[Any] = field(default_factory=list)
 
     @property
     def retrieval(self) -> Any:
@@ -202,6 +206,10 @@ class _PlanState:
     persona_defaulted: bool = False
     abstained: bool = False
     abstain_message: str | None = None
+    # Set by _route_prompt so the media curator can read the resolved persona
+    # (unknown/absent → research → no videos) without re-routing.
+    resolved_persona: str | None = None
+    media_refs: list[Any] = field(default_factory=list)
 
 
 def _agent(name: str) -> Callable[..., Any]:
@@ -449,6 +457,7 @@ def _route_prompt(state: _PlanState) -> Any:
         log.warning("prompt_router failed (%s) — falling back to legacy prompt", exc)
         return None
     state.persona_defaulted = routed.persona_defaulted
+    state.resolved_persona = routed.persona
     # A deterministic step of its own, so fragment ids are attributable at
     # router grain too — not only on the generator step.
     record_step(
@@ -532,6 +541,31 @@ def _generate(state: _PlanState) -> None:
     })
 
 
+def _curate_media(state: _PlanState) -> None:
+    """Attach sourced how-to videos on the diy path (Media Curator, agent #17).
+
+    Runs in the generation wave, conceptually ∥ the Answer Generator — it needs
+    the resolved persona and jurisdiction, not the prose. Only ``diy`` produces
+    videos; every other persona, an abstain, and a query naming no curated task
+    yield an empty list. Results pass the Guardrail source gate (zero unsourced
+    URLs). Best-effort throughout: a media failure never breaks the answer path.
+    """
+    if state.abstained or state.resolved_persona != "diy":
+        return
+    try:
+        refs = _agent("media_curator")(
+            state.request.query,
+            persona=state.resolved_persona,
+            jurisdiction=state.effective_municipality,
+            permit_types=state.permit_types,
+        )
+        state.media_refs = check_media_sources(
+            list(refs), entity_id=state.request.project_id or None
+        )
+    except Exception as exc:  # enrichment is optional; never fatal
+        log.warning("media curator failed (%s) — no videos attached", exc)
+
+
 # ── Summaries — what the Manager sees instead of the payload ─
 
 
@@ -583,7 +617,7 @@ _PLAN: tuple[tuple[Callable[[_PlanState], None], ...], ...] = (
     (_classify_permit_types, _resolve_municipality),
     (_run_retrieval, _check_grounding),
     (_detect_conflicts, _detect_upload_conflicts, _load_project_context),
-    (_generate,),
+    (_generate, _curate_media),
 )
 
 
@@ -651,4 +685,5 @@ def _assemble(state: _PlanState, iterations: int) -> ManagerResult:
         persona_defaulted=state.persona_defaulted,
         abstained=state.abstained,
         abstain_message=state.abstain_message,
+        media_refs=state.media_refs,
     )

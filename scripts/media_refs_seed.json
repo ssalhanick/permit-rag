@@ -1,0 +1,26 @@
+[
+  {
+    "task_key": "install_gfci_outlet",
+    "title": "REPLACE — How to install a GFCI outlet",
+    "url": "https://www.youtube.com/watch?v=REPLACE_WITH_VERIFIED_ID",
+    "provider": "youtube",
+    "jurisdiction": null,
+    "relevance_note": "PLACEHOLDER — replace url with a human-verified how-to before --apply --verified"
+  },
+  {
+    "task_key": "replace_faucet",
+    "title": "REPLACE — How to replace a kitchen faucet",
+    "url": "https://www.youtube.com/watch?v=REPLACE_WITH_VERIFIED_ID",
+    "provider": "youtube",
+    "jurisdiction": null,
+    "relevance_note": "PLACEHOLDER — replace url with a human-verified how-to before --apply --verified"
+  },
+  {
+    "task_key": "install_ceiling_fan",
+    "title": "REPLACE — How to install a ceiling fan",
+    "url": "https://www.youtube.com/watch?v=REPLACE_WITH_VERIFIED_ID",
+    "provider": "youtube",
+    "jurisdiction": null,
+    "relevance_note": "PLACEHOLDER — replace url with a human-verified how-to before --apply --verified"
+  }
+]

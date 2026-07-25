@@ -274,6 +274,60 @@ def test_address_geocoding_fills_the_effective_municipality(stubs: _Calls) -> No
     assert result.effective_municipality == "plano"
 
 
+# ── Media Curator (agent #17) — diy path only ────────────────
+
+_MEDIA_ROW = {
+    "task_key": "install_gfci_outlet", "title": "GFCI how-to",
+    "url": "https://www.youtube.com/watch?v=abc", "provider": "youtube",
+    "jurisdiction": None, "relevance_note": "step by step", "last_verified_at": None,
+}
+
+
+def test_diy_query_surfaces_sourced_media(
+    stubs: _Calls, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A diy persona + a curated task yields vetted videos on the result."""
+    import db.client as db_client
+    monkeypatch.setattr(db_client, "fetch_media_refs", lambda *_a, **_k: [_MEDIA_ROW])
+    # default stub project_context → persona 'diy'
+    result = run_query_plan(
+        ManagerRequest(query="how do I install a gfci outlet", project_id=str(uuid4())),
+        _deps(),
+    )
+    assert [m.url for m in result.media_refs] == ["https://www.youtube.com/watch?v=abc"]
+    assert all(m.sourced for m in result.media_refs)  # zero unsourced URLs
+
+
+def test_non_diy_persona_gets_no_media(
+    stubs: _Calls, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    import db.client as db_client
+    monkeypatch.setattr(db_client, "fetch_media_refs", lambda *_a, **_k: [_MEDIA_ROW])
+    registry.register(
+        AgentSpec(name="project_context", callable=lambda p: {"persona": "contractor"}),
+        replace=True,
+    )
+    result = run_query_plan(
+        ManagerRequest(query="how do I install a gfci outlet", project_id=str(uuid4())),
+        _deps(),
+    )
+    assert result.media_refs == []
+
+
+def test_abstain_attaches_no_media(
+    stubs: _Calls, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A grounding-floor abstain skips generation and media alike."""
+    import db.client as db_client
+    monkeypatch.setattr(db_client, "fetch_media_refs", lambda *_a, **_k: [_MEDIA_ROW])
+    result = run_query_plan(
+        ManagerRequest(query="how do I install a gfci outlet"),
+        _deps(_retrieval([])),  # empty retrieval → abstain
+    )
+    assert result.abstained is True
+    assert result.media_refs == []
+
+
 def test_explicit_municipality_is_never_overridden(stubs: _Calls) -> None:
     """The user's choice wins; the geocoder is not even consulted."""
     result = run_query_plan(

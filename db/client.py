@@ -2629,3 +2629,83 @@ def set_agent_autonomy(
         conn.commit()
     return row
 
+
+# ════════════════════════════════════════════════
+#  MEDIA REFS  (Media Curator, agent #17)
+# ════════════════════════════════════════════════
+
+def fetch_media_refs(
+    task_key: str,
+    *,
+    jurisdiction: str | None = None,
+    limit: int = 3,
+) -> list[dict[str, Any]]:
+    """
+    Fetch active, vetted video links for a task, jurisdiction-aware.
+
+    The deterministic sourced path for the Media Curator: every row returned is a
+    hand-verified link, so the "zero unsourced URLs" gate holds by construction.
+    Jurisdiction-specific rows sort ahead of national ones (NULL jurisdiction),
+    then most-recently-verified first. Returns at most ``limit`` rows.
+
+    Args:
+        task_key: Normalized task, e.g. ``install_gfci_outlet``.
+        jurisdiction: Municipality to prefer (matches ``documents.municipality``),
+            or None to take national how-tos only.
+        limit: Max rows to return.
+
+    Returns:
+        Row dicts (id, task_key, title, url, provider, jurisdiction,
+        relevance_note, last_verified_at, active, created_at), best match first.
+    """
+    sql = """
+        SELECT *
+        FROM media_refs
+        WHERE active
+          AND task_key = %s
+          AND (jurisdiction IS NULL OR jurisdiction = %s)
+        ORDER BY
+            (jurisdiction IS NOT NULL) DESC,       -- jurisdiction match before national
+            last_verified_at DESC NULLS LAST,
+            created_at DESC
+        LIMIT %s;
+    """
+    with get_conn() as conn:
+        return conn.execute(sql, (task_key, jurisdiction, limit)).fetchall()
+
+
+def insert_media_ref(
+    *,
+    task_key: str,
+    title: str,
+    url: str,
+    provider: str = "youtube",
+    jurisdiction: str | None = None,
+    relevance_note: str | None = None,
+    last_verified_at: datetime | None = None,
+    active: bool = True,
+) -> dict[str, Any] | None:
+    """
+    Insert one curated video link. Used by the seed script only.
+
+    Deduped on (task_key, url): re-inserting the same link is a no-op that returns
+    None (the row already exists). All curated links enter the corpus here; the
+    Media Curator never writes.
+    """
+    sql = """
+        INSERT INTO media_refs
+            (task_key, title, url, provider, jurisdiction, relevance_note,
+             last_verified_at, active)
+        VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
+        ON CONFLICT DO NOTHING
+        RETURNING *;
+    """
+    params = (
+        task_key, title, url, provider, jurisdiction, relevance_note,
+        last_verified_at, active,
+    )
+    with get_conn() as conn:
+        row = conn.execute(sql, params).fetchone()
+        conn.commit()
+    return row
+
