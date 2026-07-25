@@ -165,13 +165,39 @@ deterministic result** (never drop the doc) with an `llm_note`; `max_tokens`
 4096; excerpts capped short + quote/newline-free to stop the JSON truncation on
 verbose ordinance docs. Suite **440**.
 
-## Still open at session end (machine B)
+## Deployment + iteration on prod (2026-07-24, later)
 
-- Apply migration 028; run the live validator + backfill; verify the dashboard
-  end-to-end against the corpus.
-- q6 / Dallas ordinance v1-v2-v3 supersession is now *detectable* by
-  `detect_supersession_candidates`; resolving it is a human review action.
-- Prod migration 028 not yet applied/deployed.
+Phase 3 merged to `deployment/sites` and GHA-deployed; `/admin/agents` is live on
+prod. `agents/phase-3` re-synced with `deployment/sites` (merge commit) so the
+feature branch is not stale. Suite is **442** after the additions below.
+
+**Machine-B live validator dry-run — 19/19 clean.** After the `temperature`,
+truncation, and `-vN` fixes: all 19 docs `needs_review`, cited proposals, zero
+drops, zero supersession false-flags. Correct high-conf dates:
+`texas-accessibility-standards` / `ADA-Standards` → 2012-03-15 (0.95 / 0.75). The
+recent low-conf dates (Dallas ordinances, ftworth) read as scrape/"current
+through" dates — reject on review. `checksum_sha256` null on all 19 (separate
+source-identity backfill, not this agent).
+
+**Post-deploy fixes/additions (all on prod):**
+- `list_action_items` `source_agent` param cast to `::text` — a null agent
+  filter (the Action Queue tab) was erroring with "could not determine data type
+  for parameter $2". DB-integration bug the mocked tests can't catch; matches the
+  working cast at `db/client.py:816`.
+- Metadata Review: **proposed values are double-click editable**; the edit is
+  what gets written on approve (`subject_tags` as a comma list; dates/enums as
+  text). Card/table spacing tidied.
+- New **Documents** tab + `GET /admin/agents/documents` — read-only corpus
+  metadata view (all statuses), null date / missing checksum / draft highlighted.
+
+## Still open — operational tail on prod (not code)
+
+- Apply migration 028 to prod RDS; run the backfill `--apply` against prod;
+  approve the good proposals in `/admin/agents` (this is what actually writes the
+  corrected `effective_date`/tags). Until then prod dates stay null.
+- `checksum_sha256` backfill (source-identity) — separate.
+- q6 / Dallas ordinance is a **retrieval** problem (answer spans 3 PDF parts),
+  not supersession — corrected in the arch doc; a Phase 4+ retrieval concern.
 
 ## Machine B block — Phase 3 verification (run in order)
 
@@ -188,48 +214,60 @@ py scripts/backfill_document_metadata.py --local --no-llm --report
 # 4. When the proposals look right, file action items (still no corpus writes).
 py scripts/backfill_document_metadata.py --local --apply --report
 # 5. Regression + offline invariants.
-py -m pytest tests/ -q                 # expect 438 passed
+py -m pytest tests/ -q                 # expect 442 passed
 py scripts/verify_phase2.py --no-db    # 18/18, incl. the anthropic grep
 ```
 
-## Commit message
+## Commit messages (this session)
 
 ```
 feat: Phase 3 Corpus Metadata Validator + governance write path + superadmin dashboard v1
+fix: metadata validator surfaces LLM-dropped docs, raises assessment max_tokens to 2048
+fix: metadata validator degrades to deterministic on LLM parse failure; max_tokens 4096, shorter excerpts
+fix: metadata validator — no supersession false-flag on -vN part suffixes
+hotfix: cast list_action_items source_agent param to text so a null agent filter doesn't error
+feat: inline-editable proposed values in metadata review; tidy card/table spacing
+feat: superadmin read-only corpus metadata view (Documents tab)
 ```
 
 ## Prompt for next session
 
-> Read STATE.md, journals/session_20260724_phase3.md, AGENTS.md, and
+> Read STATE.md, the latest `journals/session_*.md`, AGENTS.md, and
 > docs/agent_architecture.md before touching anything. Restate the current task
 > first — AGENTS.md pre-session protocol.
 >
 > **Machine A (this repo) has an EMPTY database and no `documents/raw/`.** Only
-> these work here: `py -m pytest tests/ -q` (438, fully mocked),
-> `py -m ruff check rag/ tests/`, `py scripts/verify_phase2.py --no-db`. Do not
-> propose the validator, backfill, migration apply, `check_migration_details.py`,
-> or anything DB/corpus-dependent here — collect them into ONE machine-B block.
+> these work here: `py -m pytest tests/ -q` (442, fully mocked),
+> `py -m ruff check rag/ tests/`, `py scripts/verify_phase2.py --no-db`. Anything
+> DB/corpus-dependent (validator, backfill, migration apply,
+> `check_migration_details`, RAGAs) runs on machine B — collect it into ONE block.
 >
-> **Phase 3 code is BUILT and mocked-tested on machine A (438 passed), not yet
-> verified on the corpus or deployed.** Deliverables: migration 028
-> (`028_metadata_validation.sql`, enum extensions only), `ingestion/metadata_agent.py`
-> (agent #13, deterministic-first + one structured `run_agent` call, every
-> proposal cites a source chunk), the governance write path
-> (`apply_metadata_correction` + `flag_document_for_review` — backfill never
-> drafts a live doc), `scripts/backfill_document_metadata.py`, the superadmin
-> dashboard (`api/routes/agents_admin.py` + `frontend/src/admin/`,
-> `/admin/agents`). Validator registered via `api/main._register_di_agents()`.
+> **Phase 3 is SHIPPED and deployed** — Corpus Metadata Validator (agent #13) +
+> backfill + superadmin dashboard v1 (`/admin/agents`: action queue,
+> inline-editable metadata review, read-only Documents view). Machine-A 442 tests
+> + `verify_phase2 --no-db` 18/18; machine-B validator dry-run 19/19 clean; live
+> on prod. **Do not rebuild it.**
 >
-> **Next: run the machine-B block in the journal** (apply 028, dry-run then
-> `--apply` the backfill, confirm 438 tests + verify_phase2 --no-db), then review
-> the filed proposals in the dashboard, approve the good ones (each apply writes
-> through governance + records a correction row), and confirm q6's Dallas
-> ordinance v1/v2/v3 family is flagged by `detect_supersession_candidates`.
-> After machine-B verification: merge to `deployment/sites` and GHA-deploy (028
-> is additive, safe). Then move Phase 3 from README Planned → Completed.
+> **First, finish the Phase 3 operational tail on prod** (STATE punch item 1 —
+> this is corpus work through the shipped tool, not code): apply migration 028 to
+> prod RDS, run `ENVIRONMENT=production py scripts/backfill_document_metadata.py
+> --apply --report`, then approve the good proposals in `/admin/agents` (the two
+> 2012-03-15 ADA/TAS dates; edit/reject the recent low-conf dates and lossy tag
+> sets). That writes the corrected metadata through `governance.apply_metadata_correction`.
 >
-> Carried, still open: the RAGAs harness needs a fresh **live**
-> (`--no-answer-cache`) multi-sample baseline before it is trusted as a Phase 3
-> gate (do not gate on a single number — the judge swings ±0.15 on one query).
-> The `anthropic>=0.104.1` floor is already in `pyproject.toml` — no action.
+> **Then start Phase 4 — Prompt Router + fragment library + Media Curator** (its
+> own chat, own branch, migration **029**). `rag/agents/prompt_router.py` composes
+> the system prompt from versioned fragments (persona ∥ jurisdiction ∥ intent ∥
+> experience ∥ bounded project notes) by lookup, not an LLM call; author the
+> persona playbooks; demote `projects.custom_system_prompt` to bounded notes; wire
+> the **`research` default** (never `diy`) + Clarification nudge; make `max_tokens`
+> persona/intent-aware (kill the hard-coded 1024 that truncates `diy`/`hiring_contractor`
+> at `rag/generator.py`) and make `stop_reason == "max_tokens"` a Guardrail trip
+> that files an action item. This is the highest demo-value phase (one question,
+> three personas, three genuinely different answers).
+>
+> Carried, still open: `checksum_sha256` backfill (source-identity, separate); a
+> fresh **live** (`--no-answer-cache`) multi-sample RAGAs baseline before RAGAs
+> gates anything (judge swings ±0.15 on one query); q6/Dallas is a retrieval
+> (3-part PDF) problem, not governance.
 ```

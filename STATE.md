@@ -1,26 +1,29 @@
 # permit_rag — State
 
-_Updated: 2026-07-24 (Phase 3 code built + mocked-tested on machine A — 438 tests; migration numbering fixed to 028; pending machine-B verification + deploy)_
+_Updated: 2026-07-24 (Phase 3 SHIPPED + deployed — validator + backfill + superadmin dashboard v1 live on prod; 442 tests; remaining is operational corpus review)_
 
 ## Phase
 
-**Agent architecture Phase 3 — CODE BUILT on `agents/phase-3` (machine A),
-pending machine-B verification + deploy.** Corpus Metadata Validator (agent #13)
-+ 27-doc backfill + superadmin dashboard v1 (action queue + metadata review).
-Migration **028** (enum extensions only). Full plan:
-[docs/agent_architecture.md](docs/agent_architecture.md).
+**Agent architecture Phase 3 — SHIPPED and deployed.** Corpus Metadata Validator
+(agent #13) + backfill + superadmin dashboard v1 (action queue + metadata review
++ read-only Documents view). Merged to `deployment/sites` and GHA-deployed; the
+`/admin/agents` dashboard is live on prod. Migration **028** (enum extensions
+only). Full plan: [docs/agent_architecture.md](docs/agent_architecture.md).
+Branch `agents/phase-3` is in sync with `deployment/sites` (merged 2026-07-24).
 
-Phases 0, 1, and 2 are complete and on prod (details in
-`journals/session_20260724_phase2.md`). Phase 3 is built but **not yet verified
-on the corpus and not deployed** — it needs the machine-B block (apply 028, run
-the validator/backfill, confirm the dashboard) before merge to
-`deployment/sites`.
+Phases 0–2 are on prod (details in `journals/session_20260724_phase2.md`). The
+validator was run against the machine-B corpus (19 docs, dry-run): 19/19
+`needs_review`, cited proposals, zero drops, zero supersession false-flags.
+
+**What "shipped" means here:** the validator, backfill, and dashboard are built,
+tested, and deployed. The *operational* tail — apply 028 on prod, run the
+backfill `--apply` against prod, and approve the good proposals in the dashboard
+(which actually writes the corrected `effective_date`/tags) — is corpus work done
+*through* the shipped tool, tracked in the punch list, not more code.
 
 > **Migration numbering collision RESOLVED.** Phase 3 → **028**
 > (`028_metadata_validation.sql`), Phase 4 → 029, Phase 6 → 030. 027 is
-> `027_agent_action_item_dedupe` (applied on prod + machine B); the duplicate
-> 026 is recorded, not renamed. `docs/agent_architecture.md` Files section and
-> phase headers updated.
+> `027_agent_action_item_dedupe`; the duplicate 026 is recorded, not renamed.
 
 ## Phase 2 — SHIPPED (summary; detail in journal)
 
@@ -32,7 +35,7 @@ halves (machine A 398 tests + `verify_phase2 --no-db` 18/18; machine B
 number is a corpus/judge signal, not a gate** (judge swings ±0.15 on one query).
 Full record: `journals/session_20260724_phase2.md`.
 
-## Phase 3 deliverables — BUILT on machine A (pending machine-B verification)
+## Phase 3 deliverables — SHIPPED
 
 - [x] **Migration numbering fixed** — Phase 3 → 028, cascade 029/030;
   `docs/agent_architecture.md` updated.
@@ -61,19 +64,28 @@ Full record: `journals/session_20260724_phase2.md`.
   `governance.apply_metadata_correction` and writes an `agent_corrections` row.
 - [x] `frontend/src/admin/` — `SuperadminRoute` (new frontend guard),
   `AgentDashboardPage`, `ActionQueue`, `MetadataReviewPane` (renders each
-  proposal with its citation). `/admin/agents` route + superadmin nav link.
+  proposal with its citation; **proposed values are double-click editable** and
+  the edit is what gets written on approve), `DocumentMetadataTable`
+  (**read-only corpus metadata view**, Documents tab). `/admin/agents` route +
+  superadmin nav link.
+- [x] `api/routes/agents_admin.py` — added `GET /admin/agents/documents`
+  (read-only corpus metadata, superadmin-gated).
 - [x] `rag/agent_runtime.py` — `_dispatch` learns models that 400 on
   `temperature` (Sonnet 5, Opus 4.8, …) and retries without it. See decisions log.
-- [x] Tests: `test_metadata_agent.py` (24), `test_agents_admin_routes.py` (10),
-  `test_governance_metadata.py` (4), + 2 in `test_agent_runtime.py` (the
-  temperature fallback). **438 total.**
+- [x] **Deploy hardening (post-deploy):** `list_action_items` source_agent param
+  cast to `::text` (a null agent filter was erroring the Action Queue tab);
+  validator `max_tokens` 4096 + short quote-free excerpts + **degrade-to-
+  deterministic** on a failed LLM parse (verbose ordinance docs were truncating
+  the structured JSON); `-vN` no longer read as a version (PDF-part false flag).
+- [x] Tests: `test_metadata_agent.py` (26), `test_agents_admin_routes.py` (12),
+  `test_governance_metadata.py` (4), + 2 in `test_agent_runtime.py`. **442 total.**
 
 ## The Phase 3 acceptance gate
 
 ### Machine A — PASSED
 
 ```powershell
-py -m pytest tests/ -q                 # 438 passed (was 398; +40 Phase 3)
+py -m pytest tests/ -q                 # 442 passed (was 398; +44 Phase 3)
 py -m ruff check rag/ tests/           # clean on new files
 py scripts/verify_phase2.py --no-db    # 18/18, incl. the no-inline-anthropic grep
 ```
@@ -82,21 +94,26 @@ The validator lives in `ingestion/` and every model call goes through
 `run_agent`, so `verify_phase2`'s grep still passes (zero inline
 `anthropic.Anthropic(` in `rag/`).
 
-### Machine B — NOT YET RUN (needs the corpus)
+### Machine B — validator dry-run PASSED
 
-```powershell
-py scripts/check_migration_details.py --local                       # read-only, first
-py scripts/apply_migration.py db/migrations/028_metadata_validation.sql
-py scripts/backfill_document_metadata.py --local --dry-run --report # no writes
-py scripts/backfill_document_metadata.py --local --apply --report   # file items
-py -m pytest tests/ -q                                              # 438 still green
-```
+`backfill_document_metadata.py --local --dry-run --report` over the 19-doc
+corpus: **19/19 `needs_review`**, cited proposals, zero drops, zero supersession
+false-flags. Two `effective_date` proposals landed correct at high confidence
+(`texas-accessibility-standards` / `ADA-Standards` → 2012-03-15, 0.95 / 0.75).
+Migration 028 dry-run validated. The `--apply` run + dashboard approvals are the
+operational tail (punch list).
 
-Acceptance (docs/agent_architecture.md): `effective_date` populated or marked
-unextractable **with an action item**; zero null `doc_type`/`authority_level`;
-zero empty `subject_tags` after review; every proposal carries a source-chunk
-citation; failing docs in `draft` (ingest path only); non-superadmins get 403 on
-every `/admin/agents` route (asserted in `test_agents_admin_routes.py`).
+### Prod — dashboard DEPLOYED
+
+`/admin/agents` is live and superadmin-gated (Action Queue, Metadata Review,
+Documents). Deployed via `deployment/sites`. **Pending on prod:** apply 028, run
+the backfill `--apply`, approve proposals (punch list items 1–3).
+
+Acceptance (docs/agent_architecture.md): every proposal carries a source-chunk
+citation ✔; non-superadmins get 403 on every `/admin/agents` route ✔ (asserted
+in `test_agents_admin_routes.py`); `effective_date` populated-or-flagged, zero
+empty `subject_tags`, and failing-docs-in-draft are satisfied **once the prod
+approvals run** — the mechanism ships; the corpus values are corrected through it.
 
 ## Verification — which machine runs what
 
@@ -164,11 +181,18 @@ _Forward-looking only. Resolved items (Phase 2 verification, prod-027, the
 anthropic floor, the migration-numbering collision) are recorded in the journals,
 per AGENTS.md "completed work → journal only."_
 
-1. **Phase 3 machine-B verification not yet run.** The code is built + mocked on
-   machine A but the corpus half is untouched: apply migration 028, dry-run then
-   `--apply` the backfill, review + approve proposals in the dashboard, confirm
-   438 tests still pass. Block is in `journals/session_20260724_phase3.md`.
-2. **q6 / Dallas ordinance — NOT a supersession.** Corrected on machine B:
+1. **Phase 3 operational tail on PROD (the corpus fix).** The tool is deployed;
+   these correct the actual data: (a) apply migration 028 to prod RDS
+   (`apply_migration.py`, additive enum-only); (b) run
+   `ENVIRONMENT=production py scripts/backfill_document_metadata.py --apply
+   --report` to file the review items; (c) in `/admin/agents`, approve the good
+   proposals (the two 2012-03-15 dates; edit/reject the recent low-conf ones and
+   lossy tag sets). Until (c), prod `effective_date` stays null. The dashboard
+   Documents tab shows the gaps live.
+2. **`checksum_sha256` missing on all 19 docs.** Flagged by the validator's
+   completeness check but not proposable (a checksum is the file bytes, not
+   content). Needs a separate source-identity backfill, not this agent.
+3. **q6 / Dallas ordinance — NOT a supersession.** Corrected on machine B:
    `city-of-dallas-ordiance-v1/v2/v3` are **parts of one oversized PDF** split
    for ingestion, not competing versions. The Phase 2 "supersession" framing was
    wrong. `detect_supersession_candidates` no longer flags `-vN` families (that
@@ -185,12 +209,16 @@ per AGENTS.md "completed work → journal only."_
 
 ## Next tasks
 
-1. Run the Phase 3 machine-B block (`journals/session_20260724_phase3.md`): apply
-   028, backfill dry-run → `--apply`, confirm 438 tests + `verify_phase2
-   --no-db`. Then review/approve proposals in `/admin/agents`.
-2. After machine-B verification: merge `agents/phase-3` → `deployment/sites`,
-   GHA-deploy (028 is additive/safe), then move Phase 3 README Planned → Completed.
-3. Before RAGAs is a Phase 3 quality gate, clear the eval-harness debt (item 3).
+1. **Finish the Phase 3 corpus fix on prod** (punch item 1): apply 028, run the
+   backfill `--apply`, approve the good proposals in `/admin/agents`. Operating
+   the shipped tool — no code.
+2. **Phase 4 — Prompt Router + fragment library + Media Curator** (migration
+   029). Persona playbooks, jurisdiction/intent fragments, demote
+   `custom_system_prompt` to bounded notes, `research` default + Clarification
+   nudge, **persona/intent-aware `max_tokens`** (the 1024 cap that truncates
+   `diy`/`hiring_contractor`), and `stop_reason == "max_tokens"` as a Guardrail
+   trip. Own chat, own branch.
+3. Before RAGAs is a quality gate, clear the eval-harness debt (punch item 4).
 
 ## Migration drift — check before touching any database
 
@@ -200,17 +228,16 @@ probes for the artifact each migration creates** and reports corpus size.
 `scripts/check_migration_details.py` (read-only) verifies migration *contents*.
 Safe to point at prod. Run one of these first on any database.
 
-**Migration 028 (`028_metadata_validation.sql`, Phase 3) is written but NOT yet
-applied anywhere.** It only adds two enum values (`verification_stage +=
-'metadata'`, `verification_result += 'needs_review'`) — additive, idempotent.
-Apply on machine B first (block in `journals/session_20260724_phase3.md`), then
-prod at deploy.
+**Migration 028 (`028_metadata_validation.sql`, Phase 3)** only adds two enum
+values (`verification_stage += 'metadata'`, `verification_result +=
+'needs_review'`) — additive, idempotent. Needed before a backfill `--apply`
+writes verification rows. Apply on prod as part of finishing the corpus fix.
 
 | Database | State (as last recorded) |
 |----------|--------------------------|
 | Local Docker (machine A, this repo) | 018–021, 023–026 applied; **022 missing**; 026 pre-fix so 027 required here. **028 not applied. Corpus empty.** |
-| Machine B local (`localhost:5433`) | **Confirmed current 2026-07-24** (through 027): dedupe fix present, 022 backfilled, 19 docs. **028 pending.** |
-| Prod RDS | **Confirmed current 2026-07-24** (through 027): 026 + dedupe fix (027), dedupe index, 022 backfilled, 19 docs. Do NOT re-apply 027. **028 pending deploy.** |
+| Machine B local (`localhost:5433`) | Current through 027; 19 docs. **028 pending `--apply`** (dry-run needs no migration). |
+| Prod RDS | Current through 027; 19 docs. Do NOT re-apply 027. **028 pending** — apply before the prod backfill `--apply`. |
 
 **Why target confusion keeps happening.** `bootstrap_env` loads `.env` last with
 `override=True`, and `ENVIRONMENT=production` selects `.env.production`; all three
@@ -244,12 +271,12 @@ already applied by name on multiple DBs). The dedupe correction is therefore
 | rag/design_intent | Folded in Phase 1; contract unchanged |
 | ingestion/metadata_agent | **New (Phase 3).** Corpus Metadata Validator (agent #13). Deterministic-first; one structured `run_agent` call; cited proposals; writes nothing (via governance only) |
 | ingestion/governance | **Phase 3:** `apply_metadata_correction` (single corpus writer) + `flag_document_for_review` (draft gated by `set_draft`) |
-| api/routes/agents_admin | **New (Phase 3).** `/admin/agents` action queue + metadata review; superadmin-gated; approve → governance + correction row |
-| frontend/src/admin | **New (Phase 3).** `SuperadminRoute`, `AgentDashboardPage`, `ActionQueue`, `MetadataReviewPane`; `/admin/agents` route |
+| api/routes/agents_admin | **New (Phase 3).** `/admin/agents` action queue + metadata review + read-only `documents`; superadmin-gated; approve → governance + correction row |
+| frontend/src/admin | **New (Phase 3).** `SuperadminRoute`, `AgentDashboardPage` (3 tabs), `ActionQueue`, `MetadataReviewPane` (inline-editable proposals), `DocumentMetadataTable` |
 | audit | `record_step` driven by the runtime; the Manager writes its own deterministic step |
 | db | 026/027 trace + autonomy helpers; Phase 3 added `update_document_metadata_fields` |
 | api/routes/query | Reduced to HTTP concerns; injects retrieval + grounding thresholds into the Manager |
-| tests | **438 passing** (+40 Phase 3) |
+| tests | **442 passing** (+44 Phase 3) |
 
 ## Decisions log
 
@@ -286,7 +313,7 @@ already applied by name on multiple DBs). The dedupe correction is therefore
 
 ```powershell
 # Machine A (repo machine) — no DB needed
-py -m pytest tests/ -q                                # 438 passed
+py -m pytest tests/ -q                                # 442 passed
 py -m ruff check rag/ tests/
 py scripts/verify_phase2.py --no-db                   # 18/18, incl. anthropic grep
 
