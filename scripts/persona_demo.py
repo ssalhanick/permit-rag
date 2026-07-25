@@ -32,7 +32,13 @@ import _db_target
 
 from api.load_env import bootstrap_env
 
-_DEFAULT_QUERY = "Do I need a permit to remodel my kitchen?"
+# A query known to retrieve above the grounding floor against the 19-doc corpus
+# (it is in the RAGAs/langsmith eval set). A vague query abstains before routing,
+# which shows nothing — pick something the corpus actually covers.
+_DEFAULT_QUERY = (
+    "What permits are needed for a bathroom addition with new electrical "
+    "and plumbing in Dallas?"
+)
 _DEFAULT_PERSONAS = ("diy", "contractor", "hiring_contractor")
 
 

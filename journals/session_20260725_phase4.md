@@ -145,6 +145,14 @@ py -m evaluation.ragas_eval --export --no-answer-cache
 feat: Phase 4 core — Prompt Router + versioned fragment library + persona-aware max_tokens + Guardrail truncation trip
 ```
 
+Follow-ups this session (verification + demo):
+
+```
+style: ruff autofix on Phase 4 test files (import order, bool over ternary)   # 5fbdcb4 (also swept in scripts/persona_demo.py)
+chore: persona_demo default query matches the corpus (was abstaining)
+fix(frontend): drop deprecated jsconfig baseUrl; paths resolve relative to config
+```
+
 (Single logical change; if splitting is preferred:)
 
 ```
@@ -155,28 +163,78 @@ feat: wire router through generator+manager; kickoff demoted to bounded notes; p
 feat: Phase 4 eval hooks — fragment-versioned traces, per-persona langsmith_eval, persona_checks
 ```
 
+## Verification — machine A + machine B (2026-07-25)
+
+**Machine A — PASSED.** `py -m pytest tests/ -q` → **474 passed** (was 442; +32).
+`ruff` clean on all Phase-4 files; the ~15 remaining `ruff check rag/ tests/` hits
+are pre-existing (`test_sprint9` SIM117/SIM210 + the `SYSTEM_PROMPT` en-dash
+RUF001) — none introduced here. **Do not "fix" the en-dash**: it is live prompt
+text and changing it would perturb the RAGAs baseline. `verify_phase2 --no-db` →
+18/18; roster now lists `prompt_router` + `guardrail`.
+
+*Ruff housekeeping note:* the owner's `ruff --fix rag/ tests/ evaluation/` applied
+88 safe autofixes, 24 of them to unrelated pre-existing files. Those 24 were
+`git restore`d; only the 2 cosmetic fixes to the new Phase-4 test files were kept
+(committed in `5fbdcb4`).
+
+**Machine B — PASSED.** Migration 029 applied. Added `scripts/persona_demo.py`
+(target-safe via `_db_target`; read-only; runs one question across personas and
+prints the routing evidence). First run abstained on a vague default query
+("remodel my kitchen") — retrieval below the grounding floor, which happens
+*before* routing, so it shows nothing; fixed by defaulting to a corpus-matching
+query (the abstain is expected behaviour, not a bug). On "bathroom addition
+permits in Dallas":
+
+| Persona | max_tokens | output | stop_reason | appropriateness |
+|---------|-----------|--------|-------------|-----------------|
+| diy | 2048 | 407 | end_turn | 100% |
+| contractor | 640 | 301 | end_turn | 100% |
+| hiring_contractor | 1792 | 839 | end_turn | 100% |
+
+Three genuinely different answers, correct fragment composition
+(`base ∥ persona ∥ jurisdiction:dallas ∥ intent:compliance_lookup`), **zero
+truncation**, and `hiring_contractor` emitted its "Questions to ask" + "Red flags"
+sections. **All Phase 4 acceptance items met.** (The answers correctly abstain on
+the *specifics* — retrieval pulled tangential Dallas ordinance chunks, the known
+3-part-PDF weakness — which is the grounding rules working faithfully, and a
+retrieval concern, not a routing one.)
+
+**Fresh LIVE RAGAs baseline** — `evaluation/results/ragas_20260725_011651.json`,
+cache off (every `answer_cache_hit` null). avg_faithfulness **0.843**,
+avg_relevancy 0.982, avg_context_precision 0.693, top_sim avg 0.794. Per-query
+faithfulness: q0 0.80 · q1 0.75 · q2 0.94 · q3 1.0 · q4 0.92 · q5 1.0 · **q6 0.50**.
+The 0.007 miss under 0.85 is entirely q6 ("maximum building height"; its
+context_precision is 1.0, so retrieval was right and the answer/judge disagreed —
+the documented ±0.15 single-query swing). Critically, **`ragas_eval` measures the
+un-routed path** (`generate_answer` with no persona, `ragas_eval.py:657`), so this
+confirms Phase 4 did not move default-path faithfulness — the non-regression goal.
+Measure-not-gate this phase; the first clean *live* baseline (one sample; a real
+gate needs 3+ to average out q6). Not a deploy blocker.
+
 ## Prompt for next session
 
 > Read STATE.md, the latest `journals/session_*.md`, AGENTS.md, and
 > docs/agent_architecture.md before touching anything. Restate the current task
 > first — AGENTS.md pre-session protocol.
 >
-> **Phase 4 core is BUILT on `agents/phase-4` but NOT yet verified or deployed.**
-> First, verify: machine A `py -m pytest tests/ -q` (prior 442 + the four new
-> Phase-4 test files), `py -m ruff check rag/ tests/ evaluation/`,
-> `py scripts/verify_phase2.py --no-db` (18/18). Fix anything red. Then machine B:
-> apply `029_prompt_fragments.sql`, run the 3-persona demo (same question as
-> `diy`/`contractor`/`hiring_contractor` → three genuinely different answers —
-> the headline demo), and establish a fresh **live** RAGAs baseline
-> (`--no-answer-cache`) — measure, don't gate. Then merge to `deployment/sites`
-> and GHA-deploy (apply 029 on prod RDS at deploy).
+> **Phase 4 core is BUILT + VERIFIED on `agents/phase-4` (machine A 474 pytest +
+> machine B 3-persona demo + live RAGAs baseline), NOT yet deployed.** First,
+> deploy: merge `agents/phase-4` → `deployment/sites`, GHA-deploy, and **apply
+> `029_prompt_fragments.sql` on prod RDS** at deploy (additive; safe). Prod smoke:
+> a persona-set project's `/query/answer` returns a routed answer, and an
+> anonymous/no-persona query returns `persona_nudge` (the Clarification nudge). See
+> the acceptance gate + baseline read in this journal / STATE before re-running
+> anything — don't redo the verification.
 >
 > **Then Phase 4 second pass — Media Curator (#17):** sourced URLs only
 > (`web_search` + `allowed_domains:["youtube.com"]`, or a curated `media_refs`
 > table); Guardrail rejects any URL from neither; wire into the `diy` path
 > (Media Curator ∥ Answer Generator). Own branch.
 >
-> Carried, still open: `checksum_sha256` backfill (source-identity, separate);
-> the live multi-sample RAGAs baseline is the start of clearing eval-harness debt
-> (STATE punch 3); q6/Dallas is a retrieval (3-part PDF) problem, not governance.
+> Carried, still open: a **multi-sample** live RAGAs baseline (the 2026-07-25 run
+> is one sample, avg 0.843, q6=0.50 drags it under 0.85) + repoint `eval_guard`
+> off the stale cached `ragas_20260531` baseline (STATE punch 3); `checksum_sha256`
+> backfill (source-identity, separate); the `NLI inference failed ('type')`
+> classifier warning (non-fatal keyword fallback); q6/Dallas is a retrieval (3-part
+> PDF) problem, not governance — all pre-existing, none Phase 4.
 ```

@@ -1,10 +1,10 @@
 # permit_rag — State
 
-_Updated: 2026-07-24 (Phase 4 core BUILT on `agents/phase-4` — Prompt Router + versioned fragment library + persona-aware max_tokens + Guardrail truncation trip + kickoff demotion. Migration 029 written, not yet applied. Machine-A pytest + machine-B live verification + deploy PENDING. Phase 3 done + on prod.)_
+_Updated: 2026-07-25 (Phase 4 core BUILT + VERIFIED — machine-A 474 pytest + ruff-clean + verify_phase2 18/18; machine-B 3-persona demo PASSED (029 applied, 3 genuinely different answers, no truncation, 100% appropriateness) + fresh LIVE RAGAs baseline recorded. Ready to merge to `deployment/sites` + deploy (apply 029 on prod RDS). Phase 3 done + on prod.)_
 
 ## Phase
 
-**Agent architecture Phase 4 core — BUILT (machine A), not yet verified/deployed.**
+**Agent architecture Phase 4 core — BUILT + VERIFIED (machine A + machine B); ready to deploy.**
 Prompt Router (agent #2) composes the system prompt per request from hand-authored
 versioned fragments in `rag/prompts/` by **lookup, not an LLM call**; persona
 playbooks + jurisdiction + intent + experience fragments; `research` default
@@ -69,30 +69,36 @@ backfill + superadmin dashboard v1, live on prod; migration 028 applied; backfil
 
 ### The Phase 4 acceptance gate
 
-**Machine A — pending your run** (I byte-compiled all changed files and smoke-ran
-the fragment loader; I did not run pytest):
+**Machine A — PASSED (2026-07-25).** `py -m pytest tests/ -q` → **474 passed**
+(was 442; +32 Phase-4). `ruff` clean on all Phase-4 files (the ~15 remaining
+`ruff check rag/ tests/` hits are pre-existing — `test_sprint9` SIM nits + the
+`SYSTEM_PROMPT` en-dash — none introduced here; **do not "fix" the en-dash**, it
+is live prompt text that would perturb the RAGAs baseline). `verify_phase2.py
+--no-db` → **18/18**; the roster now shows `prompt_router` + `guardrail`.
 
-```powershell
-py -m pytest tests/ -q                 # expect prior 442 + new (router/guardrail/persona/routing) green
-py -m ruff check rag/ tests/ evaluation/
-py scripts/verify_phase2.py --no-db    # 18/18, incl. the no-inline-anthropic grep
-```
+**Machine B — PASSED (2026-07-25).** Migration 029 applied. `scripts/persona_demo.py
+--local` on "bathroom addition permits in Dallas": three genuinely different
+answers, `max_tokens` 2048/640/1792 per persona, **all `stop_reason: end_turn`
+(zero truncation)**, fragments composed correctly
+(`base ∥ persona ∥ jurisdiction:dallas ∥ intent`), **100% appropriateness** on
+all three — `hiring_contractor` emitted its "Questions to ask" + "Red flags"
+sections. Acceptance items all met: materially different answers; hiring_contractor
+questions+red-flags; missing persona → `research` (unit-tested); no
+`diy`/`hiring_contractor` truncation. (Media Curator's zero-unsourced-URL gate is
+deferred with the agent.)
 
-Acceptance (docs/agent_architecture.md Phase 4): materially different answers
-across personas; `hiring_contractor` always emits questions-to-ask + red-flags;
-**missing persona → `research`, never `diy`**; **no `diy`/`hiring_contractor`
-answer returns `stop_reason == 'max_tokens'`** (the 1024 truncation defect).
-Media Curator's zero-unsourced-URL gate is deferred with the agent.
-
-### Machine B — pending
-
-```powershell
-py scripts/check_migration_details.py --local            # read-only, first
-py scripts/apply_migration.py db/migrations/029_prompt_fragments.sql
-# 3-persona demo: same question as diy / contractor / hiring_contractor → 3 answers
-# Fresh LIVE RAGAs baseline (cache off) BEFORE RAGAs gates anything (STATE punch 3):
-py -m evaluation.ragas_eval --export --no-answer-cache
-```
+**Fresh LIVE RAGAs baseline — recorded (`evaluation/results/ragas_20260725_011651.json`).**
+Cache off (every `answer_cache_hit` null → real generation). avg_faithfulness
+**0.843**, avg_relevancy 0.982, avg_context_precision 0.693, top_sim avg 0.794.
+Per-query faithfulness: q0 0.80 · q1 0.75 · q2 0.94 · q3 1.0 · q4 0.92 · q5 1.0 ·
+**q6 0.50**. **Read:** 0.843 is 0.007 under the 0.85 line and it is *entirely* q6
+("maximum building height in a residential zone"; its context_precision is a
+perfect 1.0, so retrieval was right and the answer/judge disagreed) — the exact
+single-query ±0.15 swing. **`ragas_eval` measures the UN-ROUTED path** (it calls
+`generate_answer` with no persona, `ragas_eval.py:657`), so this confirms Phase 4
+did **not** move default-path faithfulness — the non-regression goal. Faithfulness
+is **measure, not gate** this phase; not a blocker. This is the first clean live
+baseline (one sample); a future RAGAs *gate* needs 3+ samples to average out q6.
 
 ## Phase 2 — SHIPPED (summary; detail in journal)
 
@@ -272,15 +278,22 @@ journal only." **Phase 3 is fully done.**_
 
 ## Next tasks
 
-1. **Verify Phase 4 core.** Machine A: `py -m pytest tests/ -q` + `ruff` +
-   `verify_phase2 --no-db`. Machine B: apply 029, run the 3-persona demo, and
-   establish a fresh **live** RAGAs baseline (`--no-answer-cache`). Then merge to
-   `deployment/sites` + GHA deploy.
+1. **Deploy Phase 4 core.** Verified on both machines (see the acceptance gate).
+   Merge `agents/phase-4` → `deployment/sites`, GHA-deploy, and **apply migration
+   029 on prod RDS** at deploy (`029_prompt_fragments.sql`, additive). Then a prod
+   smoke: a persona-set project's `/query/answer` returns a routed answer +
+   `persona_nudge` when no persona is set.
 2. **Phase 4 second pass — Media Curator (#17).** Sourced URLs only
    (`web_search` + `allowed_domains:["youtube.com"]`, or a curated `media_refs`
    table); Guardrail rejects any URL from neither. Own branch.
-3. Before RAGAs is a quality gate, clear the eval-harness debt (punch item 3) —
-   the live baseline in task 1 is the start of this.
+3. **Multi-sample live RAGAs baseline** before RAGAs gates any phase (punch 3).
+   The 2026-07-25 run (`ragas_20260725_011651.json`, avg 0.843) is the first clean
+   *live* one — but one sample; q6 (0.50) alone drags the mean past 0.85. Run 3+
+   and average, and repoint `eval_guard`'s default baseline off the stale
+   cached-era `ragas_20260531` file. Not a Phase 4 blocker.
+4. **Pre-existing, not Phase 4:** q6 (building height) + q1 (electrical)
+   faithfulness; the `NLI inference failed ('type')` classifier warning (falls
+   back to keyword rules, non-fatal); q6/Dallas 3-part-PDF retrieval weakness.
 
 ## Migration drift — check before touching any database
 
@@ -298,7 +311,7 @@ apply anytime; the Router reads the new columns but tolerates them being NULL.
 | Database | State (as last recorded) |
 |----------|--------------------------|
 | Local Docker (machine A, this repo) | 018–021, 023–026 applied; **022 missing**; 026 pre-fix so 027 required here. **028/029 not applied. Corpus empty.** |
-| Machine B local (`localhost:5433`) | Current through 027; 19 docs. **029 needed before a local Phase-4 persona demo that writes `experience`/`project_notes`.** (028 only needed for a local `--apply`.) |
+| Machine B local (campus corpus DB via `.env.local`) | Current through 027; **029 applied 2026-07-25** (Phase 4 demo); 19 docs. (028 only needed for a local `--apply`.) |
 | Prod RDS | **Current through 028 (applied 2026-07-24).** Backfill `--apply` run; good metadata proposals approved. **029 pending** (apply at Phase 4 deploy). Do NOT re-apply 027/028. |
 
 **Why target confusion keeps happening.** `bootstrap_env` loads `.env` last with
@@ -342,7 +355,7 @@ already applied by name on multiple DBs). The dedupe correction is therefore
 | db | 026/027 trace + autonomy helpers; Phase 3 added `update_document_metadata_fields` |
 | api/routes/query | Reduced to HTTP concerns; injects retrieval + grounding thresholds into the Manager |
 | evaluation | Phase 4: `langsmith_eval.run_pipeline` takes a `persona` (routes + records fragment ids); `evaluation/persona_checks.py` (deterministic appropriateness) |
-| tests | 442 (through Phase 3) **+ Phase 4: `test_prompt_router`, `test_guardrail`, `test_persona_checks`, `test_generator_routing` — pending a machine-A pytest run** |
+| tests | **474 passing** (442 through Phase 3 + 32 Phase 4: `test_prompt_router`, `test_guardrail`, `test_persona_checks`, `test_generator_routing`) |
 
 ## Decisions log
 
