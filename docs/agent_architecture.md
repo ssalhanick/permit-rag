@@ -358,7 +358,7 @@ Auth already exists: `is_superadmin()` (`api/auth.py:138`), `require_admin(min_r
 3. **Content-vs-metadata agreement** (LLM) — sample chunks **spread across the document**, propose values, flag disagreement **with the contradicting chunk** as evidence.
 4. **Effective-date extraction** — codes state adoption dates in text; extract with a source-chunk citation. Unextractable → action item, not a silent null.
 5. **Subject-tag regeneration** against a **closed controlled vocabulary**, whole-document sampled.
-6. **Supersession candidate detection** — relevant to `city-of-dallas-ordiance-v1/v2/v3`, all three present (note the `ordiance` typo).
+6. **Supersession candidate detection** — keyed on the system's own re-scrape convention (`governance.rescrape_document` appends `-YYYYMMDD` to a changed re-pull). **Correction (machine-B, 2026-07-24):** `city-of-dallas-ordiance-v1/v2/v3` are *parts of one oversized PDF* split for ingestion, **not** versions — the earlier assumption they were a supersession family was wrong. The detector no longer treats a `-vN` suffix as a version (that was a false flag); it matches only the datestamp suffix. (Note the `ordiance` typo in the doc_ids.)
 
 **Governance (AGENTS.md, non-negotiable):** writes nothing directly — all mutations through `ingestion/governance.py`; never auto-supersedes; never auto-updates on URL change; failing docs go to `draft` with a blocking action item.
 

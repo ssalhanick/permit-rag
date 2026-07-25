@@ -81,14 +81,15 @@ def test_completeness_clean_when_all_present() -> None:
     assert ma.check_completeness(_doc()) == []
 
 
-def test_supersession_detects_version_family() -> None:
+def test_supersession_ignores_version_part_suffixes() -> None:
+    # -v1/-v2/-v3 are parts of one split PDF in this corpus, NOT versions.
     ids = ["city-of-dallas-ordiance-v1", "city-of-dallas-ordiance-v2",
            "city-of-dallas-ordiance-v3", "plano-fire-code"]
-    fam = ma.detect_supersession_candidates("city-of-dallas-ordiance-v1", ids)
-    assert fam == ["city-of-dallas-ordiance-v2", "city-of-dallas-ordiance-v3"]
+    assert ma.detect_supersession_candidates("city-of-dallas-ordiance-v1", ids) == []
 
 
 def test_supersession_detects_datestamp_family() -> None:
+    # -YYYYMMDD is the real signal: governance.rescrape_document appends it.
     ids = ["dallas-amlegal-code", "dallas-amlegal-code-20260101"]
     assert ma.detect_supersession_candidates("dallas-amlegal-code", ids) == [
         "dallas-amlegal-code-20260101"

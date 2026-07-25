@@ -273,12 +273,18 @@ def check_completeness(doc: dict[str, Any]) -> list[str]:
 
 def detect_supersession_candidates(doc_id: str, all_doc_ids: list[str]) -> list[str]:
     """
-    Return sibling doc_ids that look like other versions of this document.
+    Return sibling doc_ids that look like other *versions* of this document.
 
-    Deliberately conservative: it only *flags* a family for human review (the
-    ``city-of-dallas-ordiance-v1/v2/v3`` case), never proposes a supersession —
-    AGENTS.md forbids auto-supersede. Matches a shared base after stripping a
-    trailing version/date tag.
+    Keyed strictly off the system's own re-scrape convention: when a re-pull
+    changes a document, ``governance.rescrape_document`` ingests the new copy as
+    ``{doc_id}-{YYYYMMDD}`` and supersedes the old one. So a shared base after
+    stripping a trailing ``-YYYYMMDD`` is a genuine version family.
+
+    It deliberately does **not** treat a ``-vN`` suffix as a version. In this
+    corpus ``city-of-dallas-ordiance-v1/v2/v3`` are *parts* of one oversized PDF
+    split for ingestion, not competing versions — flagging them was a false
+    positive (the validator's tracked false-flag rate). Only *flags* for human
+    review; AGENTS.md forbids auto-supersede.
     """
     base = _strip_version_tag(doc_id)
     if not base:
@@ -291,10 +297,16 @@ def detect_supersession_candidates(doc_id: str, all_doc_ids: list[str]) -> list[
 
 
 def _strip_version_tag(doc_id: str) -> str:
-    """Strip a trailing -vN or -YYYYMMDD version tag from a doc_id."""
+    """
+    Strip a trailing ``-YYYYMMDD`` re-scrape datestamp from a doc_id.
+
+    Only the datestamp — that is the suffix ``governance.rescrape_document``
+    actually appends on a changed re-pull. A ``-vN`` suffix is left intact: in
+    this corpus it denotes a document *part* (a split PDF), not a version.
+    """
     import re
 
-    return re.sub(r"-(v\d+|\d{8})$", "", doc_id.strip().lower())
+    return re.sub(r"-\d{8}$", "", doc_id.strip().lower())
 
 
 # ════════════════════════════════════════════════

@@ -149,6 +149,22 @@ docs** on machine B (the arch doc's "27" is stale). Deterministic pass: 19/19
 `needs_review`, all missing `effective_date` + `checksum_sha256` (checksums are a
 separate source-identity backfill, not the validator's job).
 
+## Machine-B correction — `-vN` is a PDF part, not a version
+
+Domain correction from the owner: `city-of-dallas-ordiance-v1/v2/v3` are **parts
+of one oversized PDF** split for ingestion, not superseding versions. The arch
+doc (and the Phase 2 q6 notes) assumed a supersession family — wrong.
+`detect_supersession_candidates` was flagging them off the `-vN` suffix, a false
+positive (the validator's tracked false-flag rate). Fixed: `_strip_version_tag`
+now strips **only** the `-YYYYMMDD` datestamp — the suffix
+`governance.rescrape_document` actually appends on a changed re-pull — and leaves
+`-vN` intact. Test `test_supersession_ignores_version_part_suffixes` asserts the
+`-vN` family is NOT grouped; the datestamp test stays. arch doc + STATE punch
+item 2 corrected. Also this session: LLM parse failures now **degrade to the
+deterministic result** (never drop the doc) with an `llm_note`; `max_tokens`
+4096; excerpts capped short + quote/newline-free to stop the JSON truncation on
+verbose ordinance docs. Suite **440**.
+
 ## Still open at session end (machine B)
 
 - Apply migration 028; run the live validator + backfill; verify the dashboard

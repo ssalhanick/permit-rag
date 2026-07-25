@@ -168,11 +168,13 @@ per AGENTS.md "completed work → journal only."_
    machine A but the corpus half is untouched: apply migration 028, dry-run then
    `--apply` the backfill, review + approve proposals in the dashboard, confirm
    438 tests still pass. Block is in `journals/session_20260724_phase3.md`.
-2. **q6 / Dallas ordinance v1-v2-v3 supersession.** Now *detectable*:
-   `detect_supersession_candidates` flags the `city-of-dallas-ordiance-v1/v2/v3`
-   family for human review (never auto-supersede). Resolving it is a review
-   action in the dashboard; once the supersession is resolved, q6 faithfulness
-   should climb off ~0.25.
+2. **q6 / Dallas ordinance — NOT a supersession.** Corrected on machine B:
+   `city-of-dallas-ordiance-v1/v2/v3` are **parts of one oversized PDF** split
+   for ingestion, not competing versions. The Phase 2 "supersession" framing was
+   wrong. `detect_supersession_candidates` no longer flags `-vN` families (that
+   was a false flag); it keys only on the `-YYYYMMDD` re-scrape datestamp. q6's
+   real weakness is retrieval spanning the three parts — a retrieval/reranker
+   concern, not governance. Not this phase's target.
 3. **Eval-harness debt (from the Phase 2 caching bug).** (a)
    `RAGAS_ANSWER_CACHE_ENABLED=false` from the shell does **not** work —
    `bootstrap_env()` `load_dotenv(override=True)` overwrites it; use
