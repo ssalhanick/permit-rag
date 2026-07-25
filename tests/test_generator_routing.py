@@ -15,11 +15,11 @@ from uuid import uuid4
 
 import pytest
 
+from audit.logger import StepUsage
 from rag import generator
 from rag.agent_runtime import RuntimeResult, Tier
 from rag.agents.prompt_router import route
 from rag.generator import generate_answer
-from audit.logger import StepUsage
 
 
 @dataclass

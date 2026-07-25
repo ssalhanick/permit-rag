@@ -117,7 +117,7 @@ def test_routed_max_tokens_matches_the_table() -> None:
 def test_notes_are_composed_last_and_bounded() -> None:
     long_note = "cabinet swap. " * 200  # ~2800 chars, well over the budget
     routed = route(persona="research", project_notes=long_note)
-    assert "project_notes" == routed.fragment_ids[-1]
+    assert routed.fragment_ids[-1] == "project_notes"
     assert routed.system.rstrip().endswith("…")  # truncated marker
     assert "Project notes" in routed.system
 
