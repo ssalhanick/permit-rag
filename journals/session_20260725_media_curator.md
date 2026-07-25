@@ -82,6 +82,8 @@ Built (all deterministic, no LLM, $0):
   write), and `registry.get('media_curator')` → registered, `parallel_safe`, metrics
   `(link_liveness, relevance, zero_unsourced_urls)`. All pass.
 - `frontend/ npm run build` → clean (JSX valid; same pre-existing chunk warning).
+- **Owner ran `py -m pytest tests/ -q` on machine B → GREEN** (prior 474 + the new
+  media/guardrail/manager/route tests all pass). B1 test gate cleared.
 
 ## Git flow (owner runs — manual per AGENTS.md)
 

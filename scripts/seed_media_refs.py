@@ -46,11 +46,21 @@ def _parse_args(argv: list[str]) -> argparse.Namespace:
         help="Stamp last_verified_at=now (assert you checked every link).",
     )
     parser.add_argument("--seed", default=str(_DEFAULT_SEED), help="Path to the seed JSON.")
+    parser.add_argument(
+        "--prune-placeholders", action="store_true",
+        help="Delete un-vetted placeholder rows (url/title still says REPLACE), then exit.",
+    )
     return parser.parse_args(argv)
 
 
 def _load_seed(path: Path) -> list[dict]:
-    """Read and lightly validate the curated seed entries."""
+    """Read and lightly validate the curated seed entries.
+
+    Refuses the shipped placeholders: a URL/title still carrying ``REPLACE`` means
+    the entry was never vetted, and inserting a dead link is the exact failure the
+    Media Curator exists to prevent. Replace every placeholder with a real,
+    human-checked link before seeding.
+    """
     rows = json.loads(path.read_text(encoding="utf-8"))
     if not isinstance(rows, list):
         raise ValueError(f"{path} must contain a JSON array of entries")
@@ -60,12 +70,30 @@ def _load_seed(path: Path) -> list[dict]:
                 raise ValueError(f"seed entry missing '{key}': {r}")
         if not str(r["url"]).startswith("https://"):
             raise ValueError(f"seed url must be https: {r['url']}")
+        if "REPLACE" in f"{r['url']} {r['title']}".upper():
+            raise ValueError(
+                f"placeholder entry not yet vetted (still says REPLACE): {r['task_key']}. "
+                "Edit scripts/media_refs_seed.json with a real, human-verified link first."
+            )
     return rows
 
 
 def main(argv: list[str] | None = None) -> int:
     """Resolve the target, then dry-run or apply the curated seed."""
     args = _parse_args(argv if argv is not None else sys.argv[1:])
+
+    # Prune runs before loading the seed (the seed now refuses placeholders, so a
+    # cleanup path must not require a valid seed file to exist).
+    if args.prune_placeholders:
+        target = _db_target.resolve(sys.argv[1:], bootstrap_env)
+        _db_target.banner(target, read_only=False)
+        _db_target.ensure_reachable(target)
+        from db.client import delete_placeholder_media_refs
+
+        removed = delete_placeholder_media_refs()
+        print(f"\nPruned {removed} placeholder media_refs row(s).")
+        return 0
+
     seed_path = Path(args.seed)
     rows = _load_seed(seed_path)
 

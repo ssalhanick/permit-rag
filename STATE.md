@@ -1,6 +1,6 @@
 # permit_rag — State
 
-_Updated: 2026-07-25 (Phase 4 core + query-UX pass DEPLOYED to prod. **Media Curator #17 Slice B1 BUILT** on `feat/media-curator` — migration 030_media_refs + deterministic diy-only curator + Guardrail source gate + Manager wave-4 wiring + AnswerResponse.media_refs + QueryPage videos section + seed script + tests; machine-A compile + offline smoke + frontend build all green; pending machine-A pytest, machine-B apply/seed/demo, deploy. Phase 3 done + on prod.)_
+_Updated: 2026-07-25 (Phase 4 core + query-UX pass DEPLOYED to prod. **Media Curator #17 Slice B1 BUILT + pytest GREEN (machine B)** on `feat/media-curator` — migration 030_media_refs + deterministic diy-only curator + Guardrail source gate + Manager wave-4 wiring + AnswerResponse.media_refs + QueryPage videos section + seed script + tests. Remaining to ship: apply 030 + seed vetted links + diy demo on machine B, then deploy. Phase 3 done + on prod.)_
 
 ## Phase
 
@@ -301,7 +301,7 @@ journal only." **Phase 3 is fully done.**_
      wiring (`_curate_media` ∥ `_generate`), `AnswerResponse.media_refs`,
      `QueryPage.jsx` videos section, `scripts/seed_media_refs.py` + seed JSON,
      tests. Plan: `docs/plan_media_curator.md`.
-     **To ship:** (a) machine-A `py -m pytest tests/ -q` (expect prior +new green);
+     **To ship:** (a) ~~pytest~~ **GREEN on machine B (2026-07-25)**;
      (b) machine-B apply `030`, replace the placeholder URLs in
      `scripts/media_refs_seed.json` with vetted links, `seed_media_refs.py --local
      --apply --verified`, run a diy query end-to-end; (c) merge to
