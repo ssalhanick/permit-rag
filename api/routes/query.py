@@ -63,6 +63,18 @@ _AHJ_DISCLAIMER_TEXT = (
     "not a substitute for professional review."
 )
 
+# Clarification nudge (Phase 4): shown when no persona was set and the answer used
+# the neutral `research` default. Set on the response for the frontend to surface.
+_PERSONA_NUDGE_TEXT = (
+    "No role set — answered neutrally. Set your role (DIY, hiring a contractor, "
+    "contractor, or research) for tailored answers."
+)
+
+
+def _nudge_for(plan: Any) -> str | None:
+    """The persona nudge text when the plan defaulted persona, else None."""
+    return _PERSONA_NUDGE_TEXT if plan.persona_defaulted else None
+
 
 def _build_ahj_disclaimer(municipality: str | None) -> AHJDisclaimer:
     """
@@ -207,6 +219,104 @@ def _build_manager_deps(observer: Any) -> ManagerDeps:
         min_top_sim=MIN_GROUNDED_TOP_SIM,
         observer=observer,
     )
+
+
+def _chunk_responses(chunks: list[dict[str, Any]]) -> list[ChunkResponse]:
+    """Map retrieval chunk rows to the response model (shared by both paths)."""
+    return [
+        ChunkResponse(
+            id=chunk["id"],
+            document_id=chunk["document_id"],
+            doc_id=chunk["doc_id"],
+            chunk_index=chunk["chunk_index"],
+            content=chunk["content"],
+            municipality=chunk["municipality"],
+            authority_level=chunk["authority_level"],
+            doc_type=chunk["doc_type"],
+            document_status=chunk["document_status"],
+            source_tier=chunk.get("source_tier", 1),
+            similarity=chunk.get("raw_similarity") or chunk["similarity"],
+            raw_similarity=chunk.get("raw_similarity", chunk["similarity"]),
+            reranked_score=chunk.get("reranked_score", chunk["similarity"]),
+            provenance_weight=chunk.get("provenance_weight", 1.0),
+            filtered_out=chunk.get("filtered_out", False),
+        )
+        for chunk in chunks
+    ]
+
+
+def _build_abstain_response(
+    body: QueryRequest,
+    plan: Any,
+    root_trace: Any,
+    background_tasks: BackgroundTasks,
+    current_user: Any,
+    started_at: float,
+) -> AnswerResponse:
+    """
+    Build the 200 response for a grounding-floor abstain (Phase 4 query-UX).
+
+    The abstain is a normal outcome: `answer` carries the conversational message,
+    citations are empty, `chunks` still shows what retrieval found, and the nudge
+    + disclaimer ride along. Logged to history (model="abstained") so the abstain
+    rate is visible, and the root span closes with outputs, not an error.
+    """
+    result = plan.retrieval
+    all_chunks = _chunk_responses(result.chunks)
+    diagnostics = DiagnosticsResponse(
+        top_similarity=result.top_similarity,
+        mean_similarity=result.mean_similarity,
+        unique_doc_count=len(result.unique_documents),
+        unique_doc_ids=result.unique_documents,
+    )
+    response = AnswerResponse(
+        query=body.query,
+        answer=plan.abstain_message or "",
+        citations=[],
+        model="abstained",
+        input_tokens=0,
+        output_tokens=0,
+        latency_generation_ms=0,
+        latency_retrieval_ms=result.latency_ms,
+        num_chunks=0,
+        total_chunks_retrieved=len(all_chunks),
+        chunks=all_chunks,
+        diagnostics=diagnostics,
+        permit_types=plan.permit_types,
+        ahj_disclaimer=_build_ahj_disclaimer(plan.effective_municipality),
+        resolved_municipality=plan.resolved_municipality,
+        conflict_warnings=[],
+        persona_nudge=_nudge_for(plan),
+        abstained=True,
+    )
+    try:
+        from db import client as db_client
+        background_tasks.add_task(
+            db_client.insert_query_log,
+            query_text=body.query,
+            model="abstained",
+            municipality=body.municipality,
+            top_k=body.top_k,
+            chunk_ids=[c.id for c in all_chunks],
+            answer_text=plan.abstain_message or "",
+            citations=[],
+            latency_ms=int((time.perf_counter() - started_at) * 1000),
+            user_id=current_user["user_id"] if (current_user and isinstance(current_user, dict)) else None,
+            project_id=UUID(body.project_id) if body.project_id else None,
+        )
+    except Exception as exc:
+        log.warning("could not schedule abstain query logging task: %s", exc)
+
+    _end_trace(
+        root_trace,
+        outputs={
+            "abstained": True,
+            "num_chunks_retrieved": result.num_results,
+            "top_similarity": result.top_similarity,
+            "latency_retrieval_ms": result.latency_ms,
+        },
+    )
+    return response
 
 
 @router.post(
@@ -371,6 +481,14 @@ def query_answer(
         _end_trace(root_trace, error=_root_trace_error(exc))
         raise _http_error(exc) from exc
 
+    # Grounding-floor abstain (Phase 4 query-UX): a valid outcome, not an error.
+    # Return a 200 the frontend renders as an assistant message, with the nudge
+    # and disclaimer attached — never a 422 red error.
+    if plan.abstained:
+        return _build_abstain_response(
+            body, plan, root_trace, background_tasks, current_user, started_at
+        )
+
     result = plan.retrieval
     gen = plan.generation
     permit_types = plan.permit_types
@@ -473,11 +591,7 @@ def query_answer(
         ahj_disclaimer=_build_ahj_disclaimer(plan.effective_municipality),
         resolved_municipality=plan.resolved_municipality,
         conflict_warnings=conflict_warnings,
-        persona_nudge=(
-            "No role set — answered neutrally. Set your role (DIY, hiring a "
-            "contractor, contractor, or research) for tailored answers."
-            if plan.persona_defaulted else None
-        ),
+        persona_nudge=_nudge_for(plan),
     )
     # Insert query log in Postgres (background, non-blocking)
     try:

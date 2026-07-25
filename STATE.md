@@ -1,6 +1,6 @@
 # permit_rag — State
 
-_Updated: 2026-07-25 (Phase 4 core DEPLOYED to prod — GHA green, 029 applied on prod RDS, `/api/documents`=19. Before Media Curator: address prod-use findings — grounding-floor abstains read as errors (UX), `persona_nudge` not rendered in the frontend, UI top_k=5. Phase 3 done + on prod.)_
+_Updated: 2026-07-25 (Phase 4 core DEPLOYED to prod. Query-UX pass BUILT + machine-A verified (474 pytest) on `agents/phase-4` — grounding-floor miss now a conversational 200 abstain (was 422), `persona_nudge` rendered, UI top_k 5→8; pending frontend build check + deploy. Phase 3 done + on prod.)_
 
 ## Phase
 
@@ -10,16 +10,17 @@ default-path non-regression confirmed). Prompt Router + versioned fragment libra
 + persona-aware `max_tokens` + Guardrail truncation trip + kickoff demotion are
 live. `agents/phase-4` merged to `deployment/sites`.
 
-**Before Media Curator (#17): a query-UX pass** (owner-requested, from prod use):
-1. Grounding-floor abstains (`top_similarity < 0.74`) surface as a **422 red error**
-   — should read conversationally (chat-style page; abstain as an assistant
-   message that suggests naming a city / rephrasing). Not a routing issue: the
-   guard is wave 2, routing is wave 4.
-2. **`persona_nudge` is returned but never rendered** (`grep persona_nudge
-   frontend/src/` = nothing) — the "set your role" nudge never shows. Also it is
-   only *set* when generation runs, so an abstained query never carries it.
-3. **UI sends `top_k=5`** (`QueryPage.jsx`) vs 10 in the eval harness — fewer
-   chunks clear the 0.74 floor, so the UI abstains more than the demo did.
+**Query-UX pass — BUILT + machine-A verified (474 pytest), pending deploy.** From
+prod use, addressed before Media Curator:
+1. A grounding-floor miss (`top_similarity < 0.74` or `< 3` chunks) is now a
+   **soft abstain returning 200** with a conversational message (was a 422 red
+   error). The Manager sets `abstained` + `abstain_message` instead of raising;
+   the route returns a normal `AnswerResponse(abstained=true)` with the retrieved
+   chunks, disclaimer, and nudge attached; logged to history as `model="abstained"`
+   so the abstain rate is visible. Not a routing issue (guard wave 2, routing wave 4).
+2. **`persona_nudge` is now rendered** (💡 banner in `QueryPage.jsx`) and set even
+   on an abstain (routing runs on the abstain path for exactly this).
+3. **UI `top_k` 5 → 8** so more queries clear the 0.74 floor.
 
 **Phase 3 — SHIPPED and deployed.** Corpus Metadata Validator (agent #13) +
 backfill + superadmin dashboard v1, live on prod; migration 028 applied; backfill
@@ -284,19 +285,12 @@ journal only." **Phase 3 is fully done.**_
 
 ## Next tasks
 
-1. **Query-UX pass (before Media Curator).** From prod use:
-   - **Conversational abstain.** A grounding-floor miss (`top_similarity < 0.74`,
-     or `< 3` chunks) raises `ManagerError(grounding, low_confidence)` → 422 → red
-     error box. Rework so it reads as an assistant message ("I couldn't find enough
-     in the corpus — try naming a city or rephrasing"), not an error. Likely a
-     soft-abstain `200` with an `abstained` flag (or frontend detects the grounding
-     422), plus a chat-style `QueryPage` closer to a normal LLM chat UI.
-   - **Render `persona_nudge`.** It ships in `AnswerResponse` but the frontend
-     ignores it. Show it; consider setting it even on an abstain (routing runs in
-     wave 4, so an abstained query never computes `persona_defaulted` today).
-   - **Reconsider UI `top_k`** (5 → 8–10) and/or the `0.74` floor for the UI path;
-     do NOT blindly lower the floor (it guards against ungrounded answers) — pair
-     any change with the conversational abstain.
+1. **Deploy the query-UX pass.** Built + machine-A verified (474). Do a frontend
+   build check (`cd frontend && npm run build`) + click-through (vague query →
+   blue "no confident answer" card, not red; no-persona project → 💡 nudge), then
+   merge to `deployment/sites` + GHA-deploy. **No migration** (code + frontend only).
+   Deferred from this pass: a full chat-thread `QueryPage` redesign (owner chose
+   quick-wins first).
 2. **Phase 4 second pass — Media Curator (#17).** Sourced URLs only
    (`web_search` + `allowed_domains:["youtube.com"]`, or a curated `media_refs`
    table); Guardrail rejects any URL from neither. Own branch.
@@ -351,7 +345,7 @@ already applied by name on multiple DBs). The dedupe correction is therefore
 
 | Module | Current state |
 |--------|---------------|
-| rag/agents/manager | Phase 2 orchestrator; **Phase 4:** `_generate` routes the prompt (deterministic `prompt_router` step + fragment ids), derives intent, passes `routed=`, runs the Guardrail truncation trip, threads `persona_defaulted` to the nudge |
+| rag/agents/manager | Phase 2 orchestrator; **Phase 4:** `_generate` routes the prompt (deterministic `prompt_router` step + fragment ids), derives intent, passes `routed=`, runs the Guardrail truncation trip, threads `persona_defaulted` to the nudge. **Query-UX:** a grounding-floor miss sets `abstained` + `abstain_message` (soft abstain) instead of raising; `_generate` short-circuits (routes for the nudge, skips generation) |
 | rag/agents/artifacts | **New (Phase 2).** `ArtifactRef` + `ArtifactStore`; bounds the Manager's context |
 | rag/agents/budget | **New (Phase 2).** Deterministic Budget Governor; uncapped default = no-op |
 | rag/agents/registry | Roster is 12 specs, all lazily bound (Phase 4 added `prompt_router` + `guardrail`; Phase 3 added `metadata_validator` via api DI) |
@@ -367,7 +361,8 @@ already applied by name on multiple DBs). The dedupe correction is therefore
 | frontend/src/admin | **New (Phase 3).** `SuperadminRoute`, `AgentDashboardPage` (3 tabs), `ActionQueue`, `MetadataReviewPane` (inline-editable proposals), `DocumentMetadataTable` |
 | audit | `record_step` driven by the runtime; the Manager writes its own deterministic step |
 | db | 026/027 trace + autonomy helpers; Phase 3 added `update_document_metadata_fields` |
-| api/routes/query | Reduced to HTTP concerns; injects retrieval + grounding thresholds into the Manager |
+| api/routes/query | Reduced to HTTP concerns; injects retrieval + grounding thresholds into the Manager. **Query-UX:** `_build_abstain_response` returns a 200 on `plan.abstained`; `_nudge_for` sets `persona_nudge` on both paths |
+| frontend/src/QueryPage | **Query-UX:** renders `persona_nudge` (💡 banner) + abstains as a calm info card (not a red error); `top_k` 5→8 |
 | evaluation | Phase 4: `langsmith_eval.run_pipeline` takes a `persona` (routes + records fragment ids); `evaluation/persona_checks.py` (deterministic appropriateness) |
 | tests | **474 passing** (442 through Phase 3 + 32 Phase 4: `test_prompt_router`, `test_guardrail`, `test_persona_checks`, `test_generator_routing`) |
 
@@ -401,6 +396,7 @@ already applied by name on multiple DBs). The dedupe correction is therefore
 | **Kickoff demotion (Phase 4)** | The kickoff chat emits bounded `notes` (≤200 tok, `bound_notes`-sanitized, composed LAST) instead of a free-text `custom_system_prompt` blob. The blob column stays for back-compat read; the Router prefers `project_notes` and falls back to it. Voice/rules come from versioned persona fragments, not per-project free text (which was an injection surface and defeated cross-project caching) |
 | **Prompt caching still below floor (Phase 4)** | A single composed persona prompt (~base + one persona + small fragments) is still under the 4096-token Haiku/Opus cache minimum, so `cache_read` stays 0 for now — not over-claimed. Caching starts paying off only if the stable prefix grows past the floor. The plumbing (`cache_system`, breakpoint gated on `count_tokens`) is already correct |
 | **Eval: measure, don't gate (Phase 4)** | Faithfulness is measured, not gated, this phase: single-shot RAGAs swings ±0.15 and the baseline is stale-cached (punch 3). The `research` default fragment mirrors today's grounding rules so the default path shouldn't move. Fragment-versioned traces + per-persona experiments + deterministic appropriateness checks are the iterate/measure loop; the LLM-judge persona metric is Phase 5 (Evaluator #23) |
+| **Grounding miss = soft abstain, not 422 (query-UX)** | A grounding-floor miss (`< min_chunks` or `top_sim < 0.74`) is a valid *outcome*, not a client error — retrieval ran; the system chose not to answer. The Manager sets `state.abstained` + a friendly `abstain_message` instead of raising; the route returns a **200** `AnswerResponse(abstained=true)` (message, retrieved chunks, disclaimer, nudge), logged as `model="abstained"`. **Chosen over dressing up the 422 in the frontend** because the abstain then joins chat history, carries the nudge/disclaimer, and needs no error-string matching. 200 is also safer than the old 422 vs the CloudFront-404-rewrite concern. Retrieval/generation *failures* still raise → 500. `_http_error`'s grounding→422 branch is retained defensively (dead for grounding) |
 | **Backfill never drafts (Phase 3)** | `document_status='draft'` is excluded by `match_chunks`, so drafting the 27 null-`effective_date` live docs would empty retrieval. `flag_document_for_review(set_draft=...)` — the backfill passes False (propose only); drafting is the ingest-time path (`draft_on_fail=True`) for brand-new incomplete uploads |
 | **Metadata write path (Phase 3)** | Corrected metadata lands in the DB (the corpus's source of truth) via `ingestion/governance.apply_metadata_correction` **only** — the single writer. Sidecars stay gitignored local cache. The validator writes nothing; it files cited `needs_review` proposals |
 | **Validator autonomy (Phase 3)** | `apply_metadata_correction` is **not** gated by `enforce_autonomy` — the superadmin approving in the dashboard is the L1 human gate. The runtime ceiling (`metadata_validator/semantic` = L1) governs *auto*-application, which this phase never does |

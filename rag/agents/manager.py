@@ -55,6 +55,22 @@ log = logging.getLogger(__name__)
 # Hard ceiling on Manager ReAct iterations (docs/agent_architecture.md).
 MAX_ITERATIONS = 6
 
+# User-facing abstain messages. A grounding-floor miss is a valid *outcome*, not
+# an error (Phase 4 query-UX pass): retrieval ran fine, the system simply chose
+# not to answer without enough support. These read conversationally so the route
+# can return a 200 the frontend renders as an assistant turn, not a red error.
+_ABSTAIN_EMPTY = (
+    "I couldn't find anything in the code corpus that matches this question. "
+    "Try naming a specific city (Dallas, Plano, Frisco, McKinney, or Fort Worth) "
+    "or rephrasing with the type of work involved."
+)
+_ABSTAIN_LOW_CONFIDENCE = (
+    "I found some possibly related material, but not enough to answer this "
+    "confidently from the code. Try naming a specific city (Dallas, Plano, Frisco, "
+    "McKinney, or Fort Worth), or rephrasing to be more specific about the permit "
+    "or work type — I'd rather say so than guess on a compliance question."
+)
+
 
 # ── Failure signalling ───────────────────────────────────────
 
@@ -140,7 +156,7 @@ class ManagerResult:
     store: ArtifactStore
     artifacts: list[ArtifactRef]
     retrieval_ref: ArtifactRef
-    generation_ref: ArtifactRef
+    generation_ref: ArtifactRef | None = None
     permit_types: list[str] = field(default_factory=list)
     resolved_municipality: str | None = None
     effective_municipality: str | None = None
@@ -148,6 +164,11 @@ class ManagerResult:
     project_context: dict[str, Any] | None = None
     iterations: int = 0
     persona_defaulted: bool = False
+    # Phase 4 query-UX: a grounding-floor miss is a soft abstain, not a raise.
+    # When True, ``generation_ref`` is None and ``abstain_message`` is the
+    # user-facing text; the route returns it as a 200, not a 422.
+    abstained: bool = False
+    abstain_message: str | None = None
 
     @property
     def retrieval(self) -> Any:
@@ -156,8 +177,8 @@ class ManagerResult:
 
     @property
     def generation(self) -> Any:
-        """The ``GenerationResult`` produced by the generation wave."""
-        return self.store.get(self.generation_ref)
+        """The ``GenerationResult`` produced by the generation wave (None if abstained)."""
+        return self.store.get_or_none(self.generation_ref)
 
 
 # ── Plan state ───────────────────────────────────────────────
@@ -179,6 +200,8 @@ class _PlanState:
     retrieval_ref: ArtifactRef | None = None
     generation_ref: ArtifactRef | None = None
     persona_defaulted: bool = False
+    abstained: bool = False
+    abstain_message: str | None = None
 
 
 def _agent(name: str) -> Callable[..., Any]:
@@ -285,26 +308,32 @@ def _run_retrieval(state: _PlanState) -> None:
 
 def _check_grounding(state: _PlanState) -> None:
     """
-    Enforce the grounding floor. Raises ``ManagerError`` the caller maps to 422.
+    Enforce the grounding floor as a soft **abstain**, not an exception.
 
-    Message text is preserved verbatim from the pre-Phase-2 route: it is asserted
-    on by tests and read by users.
+    A grounding-floor miss is a valid outcome — retrieval ran; the system chose
+    not to answer without support. Phase 4's query-UX pass turned this from a
+    ``ManagerError`` (→ 422 red error) into an abstain the route returns as a 200
+    the frontend renders conversationally. ``_generate`` skips generation when
+    ``state.abstained`` is set. The diagnostic numbers still reach the caller via
+    the retrieval result's ``diagnostics``; only the user-facing text is friendly.
+
+    Genuine retrieval and generation *failures* still raise ``ManagerError`` (500).
     """
     result = state.store.get(state.retrieval_ref)
     if not result.chunks:
-        raise ManagerError(
-            "No relevant chunks found for this query.", stage="grounding", kind="empty"
-        )
+        state.abstained = True
+        state.abstain_message = _ABSTAIN_EMPTY
+        log.info("grounding abstain: no chunks retrieved for %r", state.request.query)
+        return
     deps = state.deps
     if result.num_results >= deps.min_chunks and result.top_similarity >= deps.min_top_sim:
         return
-    raise ManagerError(
-        "Insufficient retrieval confidence for grounded answer. "
-        f"chunks={result.num_results}, top_similarity={result.top_similarity:.4f}, "
-        f"required_chunks>={deps.min_chunks}, "
-        f"required_top_similarity>={deps.min_top_sim:.2f}",
-        stage="grounding",
-        kind="low_confidence",
+    state.abstained = True
+    state.abstain_message = _ABSTAIN_LOW_CONFIDENCE
+    log.info(
+        "grounding abstain: chunks=%d top_sim=%.4f (need >=%d / >=%.2f) for %r",
+        result.num_results, result.top_similarity, deps.min_chunks,
+        deps.min_top_sim, state.request.query,
     )
 
 
@@ -453,6 +482,13 @@ def _generate(state: _PlanState) -> None:
     the Guardrail trips when a generation still truncates.
     """
     request, deps = state.request, state.deps
+    # A grounding-floor abstain skips generation entirely (no LLM call), but still
+    # routes so ``persona_defaulted`` is set — the Clarification nudge should show
+    # on an abstain too. No generation_ref is produced; the route returns the
+    # abstain message as a 200.
+    if state.abstained:
+        _route_prompt(state)
+        return
     result = state.store.get(state.retrieval_ref)
     chunks, _ = state.governor.degrade(
         "answer_generator", list(result.passing_chunks), overhead_tokens=600
@@ -598,7 +634,9 @@ def _record_manager_step(state: _PlanState, iterations: int, *, status: str) -> 
 
 def _assemble(state: _PlanState, iterations: int) -> ManagerResult:
     """Package the plan's artifacts into the caller's result object."""
-    assert state.retrieval_ref is not None and state.generation_ref is not None
+    # generation_ref is None on an abstain; retrieval always ran.
+    assert state.retrieval_ref is not None
+    assert state.generation_ref is not None or state.abstained
     return ManagerResult(
         store=state.store,
         artifacts=state.store.refs(),
@@ -611,4 +649,6 @@ def _assemble(state: _PlanState, iterations: int) -> ManagerResult:
         project_context=state.store.get_or_none(state.project_context_ref),
         iterations=iterations,
         persona_defaulted=state.persona_defaulted,
+        abstained=state.abstained,
+        abstain_message=state.abstain_message,
     )

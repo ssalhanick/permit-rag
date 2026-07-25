@@ -264,6 +264,17 @@ class AnswerResponse(BaseModel):
             "'research' default. A hint to ask the user for their role."
         ),
     )
+    # Phase 4 query-UX: a grounding-floor miss returns 200 with abstained=true and
+    # a conversational message in `answer` (not a 422 error). Citations are empty;
+    # `chunks` still carries what retrieval found so the UI can show context.
+    abstained: bool = Field(
+        default=False,
+        description=(
+            "True when the system declined to answer because retrieval fell below "
+            "the grounding floor. `answer` holds a conversational explanation; this "
+            "is a normal outcome, not an error."
+        ),
+    )
 
 
 class ErrorResponse(BaseModel):

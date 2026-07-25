@@ -205,22 +205,23 @@ def test_retrieval_failure_is_a_500_shaped_error(stubs: _Calls) -> None:
     assert str(caught.value).startswith("Retrieval error: ")
 
 
-def test_empty_retrieval_is_a_422_shaped_error(stubs: _Calls) -> None:
-    """Message asserted verbatim by tests/test_query_answer_route.py."""
-    with pytest.raises(ManagerError) as caught:
-        run_query_plan(ManagerRequest(query="q"), _deps(_retrieval([])))
-    assert (caught.value.stage, caught.value.kind) == ("grounding", "empty")
-    assert str(caught.value) == "No relevant chunks found for this query."
+def test_empty_retrieval_abstains_not_raises(stubs: _Calls) -> None:
+    """Phase 4 query-UX: no chunks is a soft abstain (200), not a raise (422)."""
+    result = run_query_plan(ManagerRequest(query="q"), _deps(_retrieval([])))
+    assert result.abstained is True
+    assert result.generation is None           # generation skipped
+    assert result.abstain_message              # a user-facing message is set
+    assert "answer_generator" not in stubs.order  # the model was never called
 
 
-def test_low_confidence_reports_both_thresholds(stubs: _Calls) -> None:
-    """The user-facing message names what failed and what was required."""
+def test_low_confidence_abstains_not_raises(stubs: _Calls) -> None:
+    """A below-floor top_similarity abstains rather than raising a grounding 422."""
     deps = ManagerDeps(retrieve=lambda *_a, **_k: _retrieval(),
                        min_chunks=3, min_top_sim=0.99)
-    with pytest.raises(ManagerError) as caught:
-        run_query_plan(ManagerRequest(query="q"), deps)
-    assert caught.value.kind == "low_confidence"
-    assert "required_top_similarity>=0.99" in str(caught.value)
+    result = run_query_plan(ManagerRequest(query="q"), deps)
+    assert result.abstained is True
+    assert result.generation is None
+    assert "answer_generator" not in stubs.order
 
 
 def test_generator_config_error_is_distinguishable(stubs: _Calls) -> None:

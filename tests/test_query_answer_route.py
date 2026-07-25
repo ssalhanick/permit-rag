@@ -97,9 +97,9 @@ def _generation_result() -> SimpleNamespace:
 
 def test_query_answer_returns_multi_permit_types_and_citations(monkeypatch) -> None:
     """Route should return permit_types + structured citations for multi-scope query."""
-    from api.routes import query as query_route
     import rag.generator as generator_module
     import rag.permit_classifier as classifier_module
+    from api.routes import query as query_route
     from db import client as db_client
 
     monkeypatch.setattr(db_client, "insert_query_log", lambda **kwargs: {})
@@ -141,9 +141,9 @@ def test_query_answer_returns_multi_permit_types_and_citations(monkeypatch) -> N
 
 def test_query_answer_classifier_failure_falls_back_to_empty_list(monkeypatch) -> None:
     """Classifier failure should not break route; permit_types should default to []."""
-    from api.routes import query as query_route
     import rag.generator as generator_module
     import rag.permit_classifier as classifier_module
+    from api.routes import query as query_route
     from db import client as db_client
 
     monkeypatch.setattr(db_client, "insert_query_log", lambda **kwargs: {})
@@ -177,22 +177,30 @@ def test_query_answer_classifier_failure_falls_back_to_empty_list(monkeypatch) -
         app.dependency_overrides.clear()
 
 
-def test_query_answer_empty_corpus_returns_422(monkeypatch) -> None:
-    """Empty retrieval must return 422 (not 404) so CloudFront does not rewrite to SPA index.html."""
+def test_query_answer_empty_corpus_returns_200_abstain(monkeypatch) -> None:
+    """Phase 4 query-UX: empty retrieval is a conversational 200 abstain, not a 422.
+
+    A 200 also stays clear of the CloudFront concern that first drove this off 404
+    (a 404 was rewritten to the SPA index.html) — a real 200 body is never rewritten.
+    """
     from api.routes import query as query_route
+    from db import client as db_client
 
     empty_result = SimpleNamespace(
         query="test",
-        top_k=5,
+        top_k=8,
         municipality=None,
         chunks=[],
+        passing_chunks=[],
         num_results=0,
         top_similarity=0.0,
         mean_similarity=0.0,
         unique_documents=[],
         latency_ms=10,
     )
+    monkeypatch.setattr(db_client, "insert_query_log", lambda **kwargs: {})
     monkeypatch.setattr(query_route, "retrieve_with_project", lambda *_a, **_k: empty_result)
+    monkeypatch.setattr(query_route, "get_jurisdiction", lambda _m: None)
 
     app.dependency_overrides[query_route.get_current_user] = lambda: {
         "user_id": uuid4(),
@@ -204,9 +212,13 @@ def test_query_answer_empty_corpus_returns_422(monkeypatch) -> None:
         client = TestClient(app)
         response = client.post(
             "/api/query/answer",
-            json={"query": "fence permit in Dallas", "top_k": 5},
+            json={"query": "fence permit in Dallas", "top_k": 8},
         )
-        assert response.status_code == 422
-        assert "No relevant chunks" in response.json()["detail"]
+        assert response.status_code == 200
+        body = response.json()
+        assert body["abstained"] is True
+        assert body["answer"]                       # a conversational message
+        assert body["citations"] == []
+        assert body["ahj_disclaimer"]["text"]       # disclaimer still attached
     finally:
         app.dependency_overrides.clear()

@@ -128,7 +128,9 @@ export default function QueryPage() {
 
     const payload = {
       query: query.trim(),
-      top_k: 5,
+      // top_k 8 (was 5): more chunks clear the 0.74 grounding floor, so the UI
+      // abstains less often than the low-k default did.
+      top_k: 8,
     };
     if (activeProjectId) {
       payload.project_id = activeProjectId;
@@ -300,7 +302,9 @@ export default function QueryPage() {
           {activeAnswer && (
             <Card className="p-4">
               <CardHeader>
-                <CardTitle className="text-xl">Generated Compliance Answer</CardTitle>
+                <CardTitle className="text-xl">
+                  {activeAnswer.abstained ? "No confident answer found" : "Generated Compliance Answer"}
+                </CardTitle>
                 {activeAnswer.resolved_municipality && (
                   <CardDescription className="text-blue-600 font-medium">
                     📍 Auto-detected Jurisdiction: {activeAnswer.resolved_municipality.toUpperCase()}
@@ -308,7 +312,21 @@ export default function QueryPage() {
                 )}
               </CardHeader>
               <CardContent className="space-y-4">
-                <div className="p-4 bg-slate-50 border border-slate-200 rounded-lg whitespace-pre-wrap text-slate-800 leading-relaxed text-sm">
+                {/* Clarification nudge (Phase 4): no persona was set, answered neutrally */}
+                {activeAnswer.persona_nudge && (
+                  <div className="flex gap-3 p-3 bg-blue-50 border border-blue-200 text-blue-800 rounded-lg text-sm">
+                    <span className="text-base">💡</span>
+                    <span>{activeAnswer.persona_nudge}</span>
+                  </div>
+                )}
+
+                <div
+                  className={`p-4 border rounded-lg whitespace-pre-wrap leading-relaxed text-sm ${
+                    activeAnswer.abstained
+                      ? "bg-blue-50 border-blue-200 text-blue-900"
+                      : "bg-slate-50 border-slate-200 text-slate-800"
+                  }`}
+                >
                   {activeAnswer.answer}
                 </div>
 
@@ -354,7 +372,8 @@ export default function QueryPage() {
                   </div>
                 )}
 
-                {/* Citations List */}
+                {/* Citations List — hidden on an abstain (no citations) */}
+                {(activeAnswer.citations || []).length > 0 && (
                 <div className="pt-4 border-t border-slate-100">
                   <h4 className="font-semibold text-sm text-slate-700 mb-2">Source Citations:</h4>
                   <div className="flex flex-wrap gap-2">
@@ -373,6 +392,7 @@ export default function QueryPage() {
                     })}
                   </div>
                 </div>
+                )}
               </CardContent>
             </Card>
           )}

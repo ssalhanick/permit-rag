@@ -237,24 +237,47 @@ Owner hit these using the live app:
    the `/admin/agents` Action Queue for `answer_truncated` guardrail trips, or SQL
    on `agent_steps` (`prompt_fragment_ids` shows `persona:diy@1` per query).
 
+## Query-UX pass — BUILT + machine-A verified (474 pytest)
+
+Owner chose **Option A (soft-abstain 200)** and **quick-wins scope** (full
+chat-thread redesign deferred).
+
+- **Backend soft-abstain.** `_check_grounding` sets `state.abstained` +
+  `abstain_message` instead of raising `ManagerError(grounding, …)`. `_generate`
+  short-circuits on abstain — it still routes (so `persona_defaulted`/the nudge is
+  set) but skips the LLM call. `ManagerResult`/`_PlanState` gained `abstained` +
+  `abstain_message`; `generation_ref` is now optional. The route's
+  `_build_abstain_response` returns a **200** `AnswerResponse(abstained=true)` with
+  the message, the retrieved chunks, the disclaimer, and the nudge, logged as
+  `model="abstained"`. Retrieval/generation *failures* still 500.
+- **Frontend** (`QueryPage.jsx`): renders `persona_nudge` (💡 banner), shows an
+  abstain as a calm blue "No confident answer found" card (not a red error),
+  hides the empty citations block, and bumps `top_k` 5→8.
+- **Tests:** the two grounding tests flipped from "raises 422" to "abstains / 200"
+  (`test_agent_manager`, `test_query_answer_route`). `test_query_manager_wiring`
+  still passes (it unit-tests `_http_error`, whose grounding→422 branch is retained
+  defensively). `test_sprint8` disables the guard, unaffected. Suite **474**.
+- **One bug caught in review:** `abstained` was declared on `ManagerResult` but
+  not `_PlanState`, so the *success* path read a missing attribute → 22 failures.
+  Fixed by declaring it (default `False`) on `_PlanState` too.
+- **Not done (scope):** the full chat-thread `QueryPage` redesign. Also: only my
+  changed files are ruff-clean; a broad `ruff check api/` surfaces ~20 pre-existing
+  issues (newer local ruff) — do NOT `--fix` the whole scope (it rewrites dozens of
+  unrelated files, as it did once already).
+
 ## Prompt for next session
 
 > Read STATE.md, the latest `journals/session_*.md`, AGENTS.md, and
 > docs/agent_architecture.md before touching anything. Restate the current task
 > first — AGENTS.md pre-session protocol.
 >
-> **Phase 4 core is DEPLOYED to prod (2026-07-25) — do not redo it.** The next
-> task is a **query-UX pass, before Media Curator** (owner-requested, from prod
-> use — see "Prod-use findings" in this journal / STATE Next tasks):
-> 1. **Conversational abstain.** A grounding-floor miss (`top_similarity < 0.74`
->    or `< 3` chunks) currently 422s into a red error box. Make it read as an
->    assistant message (suggest naming a city / rephrasing); likely a soft-abstain
->    `200` with an `abstained` flag, plus a chat-style `QueryPage.jsx` closer to a
->    normal LLM chat UI. NOT a routing bug (guard is wave 2, routing wave 4).
-> 2. **Render `persona_nudge`** (frontend ignores it today); consider computing it
->    even on an abstain.
-> 3. Reconsider UI `top_k` (5 → 8–10) and/or the `0.74` floor for the UI path —
->    but never blindly lower the floor; pair it with the conversational abstain.
+> **Phase 4 core is DEPLOYED to prod; the query-UX pass is BUILT + machine-A
+> verified (474 pytest) on `agents/phase-4` but NOT yet deployed — do not redo
+> it.** First, deploy the query-UX pass: `cd frontend && npm run build` + a
+> click-through (vague query → blue "no confident answer" card, not red;
+> no-persona project → 💡 nudge), then merge to `deployment/sites` + GHA-deploy.
+> **No migration** (code + frontend only). The full chat-thread `QueryPage`
+> redesign was deferred (owner chose quick-wins) — pick it up if wanted.
 >
 > **Then Phase 4 second pass — Media Curator (#17):** sourced URLs only
 > (`web_search` + `allowed_domains:["youtube.com"]`, or a curated `media_refs`
