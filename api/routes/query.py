@@ -308,6 +308,7 @@ def _build_abstain_response(
         conflict_warnings=[],
         persona_nudge=_nudge_for(plan),
         abstained=True,
+        media_refs=_media_ref_responses(plan),
     )
     try:
         from db import client as db_client

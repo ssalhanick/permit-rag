@@ -314,15 +314,33 @@ def test_non_diy_persona_gets_no_media(
     assert result.media_refs == []
 
 
-def test_abstain_attaches_no_media(
+def test_diy_abstain_still_surfaces_media(
     stubs: _Calls, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """A grounding-floor abstain skips generation and media alike."""
+    """A diy abstain has no answer, but the curated how-to links still show."""
     import db.client as db_client
     monkeypatch.setattr(db_client, "fetch_media_refs", lambda *_a, **_k: [_MEDIA_ROW])
     result = run_query_plan(
-        ManagerRequest(query="how do I install a gfci outlet"),
+        ManagerRequest(query="how do I install a gfci outlet", project_id=str(uuid4())),
         _deps(_retrieval([])),  # empty retrieval → abstain
+    )
+    assert result.abstained is True
+    assert [m.url for m in result.media_refs] == ["https://www.youtube.com/watch?v=abc"]
+
+
+def test_non_diy_abstain_has_no_media(
+    stubs: _Calls, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A non-diy abstain surfaces neither an answer nor videos."""
+    import db.client as db_client
+    monkeypatch.setattr(db_client, "fetch_media_refs", lambda *_a, **_k: [_MEDIA_ROW])
+    registry.register(
+        AgentSpec(name="project_context", callable=lambda p: {"persona": "research"}),
+        replace=True,
+    )
+    result = run_query_plan(
+        ManagerRequest(query="how do I install a gfci outlet", project_id=str(uuid4())),
+        _deps(_retrieval([])),
     )
     assert result.abstained is True
     assert result.media_refs == []

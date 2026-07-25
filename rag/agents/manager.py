@@ -546,11 +546,14 @@ def _curate_media(state: _PlanState) -> None:
 
     Runs in the generation wave, conceptually ∥ the Answer Generator — it needs
     the resolved persona and jurisdiction, not the prose. Only ``diy`` produces
-    videos; every other persona, an abstain, and a query naming no curated task
-    yield an empty list. Results pass the Guardrail source gate (zero unsourced
-    URLs). Best-effort throughout: a media failure never breaks the answer path.
+    videos; every other persona and a query naming no curated task yield an empty
+    list. **Runs on an abstain too**: when retrieval falls below the grounding
+    floor there is no answer, but the curated how-to links are still worth showing
+    (they come from the vetted table, not the missing corpus). Results pass the
+    Guardrail source gate (zero unsourced URLs). Best-effort throughout: a media
+    failure never breaks the answer path.
     """
-    if state.abstained or state.resolved_persona != "diy":
+    if state.resolved_persona != "diy":
         return
     try:
         refs = _agent("media_curator")(
