@@ -211,20 +211,50 @@ confirms Phase 4 did not move default-path faithfulness — the non-regression g
 Measure-not-gate this phase; the first clean *live* baseline (one sample; a real
 gate needs 3+ to average out q6). Not a deploy blocker.
 
+## Deployed to prod (2026-07-25)
+
+`agents/phase-4` merged to `deployment/sites`; migration 029 applied on prod RDS
+by hand (read-only `check_migration_details` first); GHA backend deploy green;
+`/api/documents` = 19 (corpus intact → default-path non-regression confirmed).
+Phase 4 core is live.
+
+## Prod-use findings → a query-UX pass before Media Curator
+
+Owner hit these using the live app:
+1. **Grounding-floor abstains read as errors.** Many queries return "Insufficient
+   retrieval confidence for grounded answer" — a `ManagerError(grounding,
+   low_confidence)` → 422 → red error box in `QueryPage.jsx`. **Not persona
+   routing:** the guard is wave 2 (`_check_grounding`), routing is wave 4. Causes
+   are pre-existing: `RAG_GUARD_MIN_TOP_SIM=0.74` (live top-sims run 0.75–0.83, so
+   queries sit on the line) and the UI sending `top_k=5` (vs 10 in eval → fewer
+   chunks clear the floor). Fix = conversational abstain + chat-style page.
+2. **`persona_nudge` never shows.** Returned in `AnswerResponse`, but
+   `grep persona_nudge frontend/src/` = nothing — the UI ignores it. And it is
+   only computed during generation (wave 4), so an abstained query never carries
+   it. Fix in the same UX pass.
+3. **Watching traces (answer to the owner):** no trace-explorer UI yet (Phase 5).
+   Use LangSmith (project `permit-rag-app`, if `LANGCHAIN_TRACING_V2` set on prod),
+   the `/admin/agents` Action Queue for `answer_truncated` guardrail trips, or SQL
+   on `agent_steps` (`prompt_fragment_ids` shows `persona:diy@1` per query).
+
 ## Prompt for next session
 
 > Read STATE.md, the latest `journals/session_*.md`, AGENTS.md, and
 > docs/agent_architecture.md before touching anything. Restate the current task
 > first — AGENTS.md pre-session protocol.
 >
-> **Phase 4 core is BUILT + VERIFIED on `agents/phase-4` (machine A 474 pytest +
-> machine B 3-persona demo + live RAGAs baseline), NOT yet deployed.** First,
-> deploy: merge `agents/phase-4` → `deployment/sites`, GHA-deploy, and **apply
-> `029_prompt_fragments.sql` on prod RDS** at deploy (additive; safe). Prod smoke:
-> a persona-set project's `/query/answer` returns a routed answer, and an
-> anonymous/no-persona query returns `persona_nudge` (the Clarification nudge). See
-> the acceptance gate + baseline read in this journal / STATE before re-running
-> anything — don't redo the verification.
+> **Phase 4 core is DEPLOYED to prod (2026-07-25) — do not redo it.** The next
+> task is a **query-UX pass, before Media Curator** (owner-requested, from prod
+> use — see "Prod-use findings" in this journal / STATE Next tasks):
+> 1. **Conversational abstain.** A grounding-floor miss (`top_similarity < 0.74`
+>    or `< 3` chunks) currently 422s into a red error box. Make it read as an
+>    assistant message (suggest naming a city / rephrasing); likely a soft-abstain
+>    `200` with an `abstained` flag, plus a chat-style `QueryPage.jsx` closer to a
+>    normal LLM chat UI. NOT a routing bug (guard is wave 2, routing wave 4).
+> 2. **Render `persona_nudge`** (frontend ignores it today); consider computing it
+>    even on an abstain.
+> 3. Reconsider UI `top_k` (5 → 8–10) and/or the `0.74` floor for the UI path —
+>    but never blindly lower the floor; pair it with the conversational abstain.
 >
 > **Then Phase 4 second pass — Media Curator (#17):** sourced URLs only
 > (`web_search` + `allowed_domains:["youtube.com"]`, or a curated `media_refs`

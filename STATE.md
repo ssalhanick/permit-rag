@@ -1,19 +1,25 @@
 # permit_rag — State
 
-_Updated: 2026-07-25 (Phase 4 core BUILT + VERIFIED — machine-A 474 pytest + ruff-clean + verify_phase2 18/18; machine-B 3-persona demo PASSED (029 applied, 3 genuinely different answers, no truncation, 100% appropriateness) + fresh LIVE RAGAs baseline recorded. Ready to merge to `deployment/sites` + deploy (apply 029 on prod RDS). Phase 3 done + on prod.)_
+_Updated: 2026-07-25 (Phase 4 core DEPLOYED to prod — GHA green, 029 applied on prod RDS, `/api/documents`=19. Before Media Curator: address prod-use findings — grounding-floor abstains read as errors (UX), `persona_nudge` not rendered in the frontend, UI top_k=5. Phase 3 done + on prod.)_
 
 ## Phase
 
-**Agent architecture Phase 4 core — BUILT + VERIFIED (machine A + machine B); ready to deploy.**
-Prompt Router (agent #2) composes the system prompt per request from hand-authored
-versioned fragments in `rag/prompts/` by **lookup, not an LLM call**; persona
-playbooks + jurisdiction + intent + experience fragments; `research` default
-(never `diy`); persona/intent-aware `max_tokens` (kills the hard-coded 1024);
-`stop_reason == 'max_tokens'` → Guardrail action item; kickoff demoted to bounded
-notes; Clarification nudge; fragment-versioned eval hooks. Media Curator (#17)
-deferred to a second pass. Migration **029** (`029_prompt_fragments.sql`, additive:
-`projects.experience` + `projects.project_notes`). Own branch `agents/phase-4`.
-Full plan: [docs/agent_architecture.md](docs/agent_architecture.md).
+**Agent architecture Phase 4 core — DEPLOYED to prod (2026-07-25).** GHA green;
+migration 029 applied on prod RDS; `/api/documents` = 19 (corpus intact →
+default-path non-regression confirmed). Prompt Router + versioned fragment library
++ persona-aware `max_tokens` + Guardrail truncation trip + kickoff demotion are
+live. `agents/phase-4` merged to `deployment/sites`.
+
+**Before Media Curator (#17): a query-UX pass** (owner-requested, from prod use):
+1. Grounding-floor abstains (`top_similarity < 0.74`) surface as a **422 red error**
+   — should read conversationally (chat-style page; abstain as an assistant
+   message that suggests naming a city / rephrasing). Not a routing issue: the
+   guard is wave 2, routing is wave 4.
+2. **`persona_nudge` is returned but never rendered** (`grep persona_nudge
+   frontend/src/` = nothing) — the "set your role" nudge never shows. Also it is
+   only *set* when generation runs, so an abstained query never carries it.
+3. **UI sends `top_k=5`** (`QueryPage.jsx`) vs 10 in the eval harness — fewer
+   chunks clear the 0.74 floor, so the UI abstains more than the demo did.
 
 **Phase 3 — SHIPPED and deployed.** Corpus Metadata Validator (agent #13) +
 backfill + superadmin dashboard v1, live on prod; migration 028 applied; backfill
@@ -22,10 +28,10 @@ backfill + superadmin dashboard v1, live on prod; migration 028 applied; backfil
 (`journals/session_20260724_phase2.md`).
 
 > **Migration numbering.** Phase 3 → **028** (applied on prod). Phase 4 → **029**
-> (`029_prompt_fragments.sql`, written, NOT applied anywhere). Phase 6 → 030. 027
+> (`029_prompt_fragments.sql`, applied on prod RDS + machine B). Phase 6 → 030. 027
 > is `027_agent_action_item_dedupe`; the duplicate 026 is recorded, not renamed.
 
-## Phase 4 core deliverables — BUILT (machine A), verification + deploy pending
+## Phase 4 core deliverables — DEPLOYED (2026-07-25)
 
 - [x] `db/migrations/029_prompt_fragments.sql` — additive/idempotent
   (`ADD COLUMN IF NOT EXISTS`): `projects.experience`, `projects.project_notes`.
@@ -278,11 +284,19 @@ journal only." **Phase 3 is fully done.**_
 
 ## Next tasks
 
-1. **Deploy Phase 4 core.** Verified on both machines (see the acceptance gate).
-   Merge `agents/phase-4` → `deployment/sites`, GHA-deploy, and **apply migration
-   029 on prod RDS** at deploy (`029_prompt_fragments.sql`, additive). Then a prod
-   smoke: a persona-set project's `/query/answer` returns a routed answer +
-   `persona_nudge` when no persona is set.
+1. **Query-UX pass (before Media Curator).** From prod use:
+   - **Conversational abstain.** A grounding-floor miss (`top_similarity < 0.74`,
+     or `< 3` chunks) raises `ManagerError(grounding, low_confidence)` → 422 → red
+     error box. Rework so it reads as an assistant message ("I couldn't find enough
+     in the corpus — try naming a city or rephrasing"), not an error. Likely a
+     soft-abstain `200` with an `abstained` flag (or frontend detects the grounding
+     422), plus a chat-style `QueryPage` closer to a normal LLM chat UI.
+   - **Render `persona_nudge`.** It ships in `AnswerResponse` but the frontend
+     ignores it. Show it; consider setting it even on an abstain (routing runs in
+     wave 4, so an abstained query never computes `persona_defaulted` today).
+   - **Reconsider UI `top_k`** (5 → 8–10) and/or the `0.74` floor for the UI path;
+     do NOT blindly lower the floor (it guards against ungrounded answers) — pair
+     any change with the conversational abstain.
 2. **Phase 4 second pass — Media Curator (#17).** Sourced URLs only
    (`web_search` + `allowed_domains:["youtube.com"]`, or a curated `media_refs`
    table); Guardrail rejects any URL from neither. Own branch.
