@@ -1,26 +1,34 @@
 [
   {
     "task_key": "install_gfci_outlet",
-    "title": "REPLACE — How to install a GFCI outlet",
-    "url": "https://www.youtube.com/watch?v=REPLACE_WITH_VERIFIED_ID",
+    "title": "How to install a GFCI outlet",
+    "url": "https://www.youtube.com/watch?v=TqTNJUT_lKg",
     "provider": "youtube",
     "jurisdiction": null,
     "relevance_note": "PLACEHOLDER — replace url with a human-verified how-to before --apply --verified"
   },
   {
     "task_key": "replace_faucet",
-    "title": "REPLACE — How to replace a kitchen faucet",
-    "url": "https://www.youtube.com/watch?v=REPLACE_WITH_VERIFIED_ID",
+    "title": "How to replace a kitchen sink faucet",
+    "url": "https://www.youtube.com/watch?v=eSgTj4KPRXI",
     "provider": "youtube",
     "jurisdiction": null,
     "relevance_note": "PLACEHOLDER — replace url with a human-verified how-to before --apply --verified"
   },
   {
     "task_key": "install_ceiling_fan",
-    "title": "REPLACE — How to install a ceiling fan",
-    "url": "https://www.youtube.com/watch?v=REPLACE_WITH_VERIFIED_ID",
+    "title": "How to Wire a Ceiling Fan with Light on Two Switches (Fan & Light Controlled Separately)",
+    "url": "https://www.youtube.com/watch?v=NnCv2HY8j1E",
     "provider": "youtube",
     "jurisdiction": null,
+    "relevance_note": "PLACEHOLDER — replace url with a human-verified how-to before --apply --verified"
+  },
+  {
+    "task_key":"find-correct-wiring-for-3-way-switch",
+    "title": "Find the correct wiring for a 3-way switch in 2-minutes",
+    "url":"https://www.youtube.com/watch?v=Xp4FWJRzHdo",
+    "provider": "youtube",
+    "jurisdiction":null,
     "relevance_note": "PLACEHOLDER — replace url with a human-verified how-to before --apply --verified"
   }
 ]
