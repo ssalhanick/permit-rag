@@ -36,15 +36,21 @@ def test_video_id_from_url(url: str, expected: str | None) -> None:
 
 
 def _install_fake_api(monkeypatch: pytest.MonkeyPatch, *, segments: Any = None, raises: Exception | None = None) -> None:
-    """Inject a fake youtube_transcript_api module for the lazy import."""
+    """Inject a fake youtube_transcript_api module (1.x instance .fetch() API)."""
     mod = types.ModuleType("youtube_transcript_api")
 
+    class _Fetched:
+        def __init__(self, data: Any) -> None:
+            self._data = data
+
+        def to_raw_data(self) -> Any:
+            return self._data
+
     class _Api:
-        @staticmethod
-        def get_transcript(video_id: str, languages: list[str] | None = None) -> Any:
+        def fetch(self, video_id: str, languages: list[str] | None = None) -> Any:
             if raises is not None:
                 raise raises
-            return segments
+            return _Fetched(segments)
 
     mod.YouTubeTranscriptApi = _Api  # type: ignore[attr-defined]
     monkeypatch.setitem(sys.modules, "youtube_transcript_api", mod)

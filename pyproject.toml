@@ -39,9 +39,10 @@ dependencies = [
     "langchain-text-splitters>=0.2.0",
 
     # --- Media Curator: how-to video transcripts (Slice C) ---
-    # Pinned <1.0: 1.x replaced the YouTubeTranscriptApi.get_transcript classmethod
-    # (used in ingestion/transcript.py) with an instance .fetch() API.
-    "youtube-transcript-api>=0.6.2,<1.0",
+    # 1.x required: the 0.6.x line is out of sync with YouTube's current transcript
+    # API and returns empty responses (empty-XML parse error). 1.x uses the instance
+    # .fetch() API (ingestion/transcript.py) and raises explicit block exceptions.
+    "youtube-transcript-api>=1.0.0",
 
     # --- API ---
     "fastapi>=0.111.0",

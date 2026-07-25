@@ -71,8 +71,12 @@ def fetch_transcript(url: str, *, languages: tuple[str, ...] = ("en",)) -> str |
     try:
         from youtube_transcript_api import YouTubeTranscriptApi
 
-        segments = YouTubeTranscriptApi.get_transcript(vid, languages=list(languages))
-    except Exception as exc:  # NoTranscriptFound / TranscriptsDisabled / network
+        # youtube-transcript-api 1.x: instance .fetch() returns a FetchedTranscript;
+        # .to_raw_data() gives [{'text','start','duration'}, ...]. (The 0.x
+        # YouTubeTranscriptApi.get_transcript classmethod was removed in 1.0.)
+        fetched = YouTubeTranscriptApi().fetch(vid, languages=list(languages))
+        segments = fetched.to_raw_data()
+    except Exception as exc:  # NoTranscriptFound / TranscriptsDisabled / RequestBlocked
         log.warning("transcript: no transcript for %s (%s): %s", vid, url, exc)
         return None
 
