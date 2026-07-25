@@ -1336,6 +1336,8 @@ def update_project(
     budget: str | None = None,
     persona: str | None = None,
     custom_system_prompt: str | None = None,
+    experience: str | None = None,
+    project_notes: str | None = None,
 ) -> dict[str, Any] | None:
     """Update mutable project fields."""
     import json as _json
@@ -1390,6 +1392,12 @@ def update_project(
     if custom_system_prompt is not None:
         assignments.append("custom_system_prompt = %(custom_system_prompt)s")
         params["custom_system_prompt"] = custom_system_prompt
+    if experience is not None:
+        assignments.append("experience = %(experience)s")
+        params["experience"] = experience
+    if project_notes is not None:
+        assignments.append("project_notes = %(project_notes)s")
+        params["project_notes"] = project_notes
     if not assignments:
         return get_project(project_id)
     sql = f"UPDATE projects SET {', '.join(assignments)} WHERE id = %(id)s RETURNING *;"

@@ -31,6 +31,11 @@ def load_project_context(project_id: UUID | str) -> dict[str, Any] | None:
         "recommended_permits": project.get("recommended_permits") or [],
         "budget": project.get("budget"),
         "persona": project.get("persona"),
+        # Phase 4: the Prompt Router reads persona/experience/project_notes.
+        # custom_system_prompt is retained for rows written before the kickoff
+        # demotion (the router falls back to it when project_notes is empty).
+        "experience": project.get("experience"),
+        "project_notes": project.get("project_notes"),
         "custom_system_prompt": project.get("custom_system_prompt"),
     }
     if active_room:

@@ -40,6 +40,24 @@ _RAG_AGENTS: tuple[AgentSpec, ...] = (
         parallel_safe=True,
         metrics=("budget_trips", "degradation_rate"),
     ),
+    AgentSpec(
+        name="prompt_router",
+        callable=lazy("rag.agents.prompt_router", "route"),
+        tier=Tier.CHEAP,  # deterministic: fragment lookup, never a model call
+        parallel_safe=True,
+        metrics=(
+            "fragment_selection_accuracy",
+            "persona_appropriateness",
+            "default_to_research_rate",
+        ),
+    ),
+    AgentSpec(
+        name="guardrail",
+        callable=lazy("rag.agents.guardrail", "check_truncation"),
+        tier=Tier.CHEAP,  # deterministic checks; L3 by design (a blocker, not a proposer)
+        parallel_safe=True,
+        metrics=("guard_trip_rate",),
+    ),
     # Tier 1 — answer path
     AgentSpec(
         name="answer_generator",

@@ -253,6 +253,17 @@ class AnswerResponse(BaseModel):
             "for the same subject."
         ),
     )
+    # Phase 4 — Clarification nudge: set when persona was absent and the Prompt
+    # Router fell back to the neutral `research` default. The UI can offer a
+    # one-time prompt to set a role for tailored answers. Null when a persona
+    # was known (no nudge needed).
+    persona_nudge: str | None = Field(
+        default=None,
+        description=(
+            "Present only when no persona was set and the answer used the neutral "
+            "'research' default. A hint to ask the user for their role."
+        ),
+    )
 
 
 class ErrorResponse(BaseModel):
@@ -426,7 +437,9 @@ class UpdateProjectRequest(BaseModel):
     recommended_permits: list[str] | None = Field(default=None, description="Permit categories recommended at creation time")
     budget: str | None = Field(default=None, description="Project budget context")
     persona: str | None = Field(default=None, description="User role persona (diy, hiring_contractor, contractor)")
-    custom_system_prompt: str | None = Field(default=None, description="Generated system prompt instructions")
+    custom_system_prompt: str | None = Field(default=None, description="Deprecated (Phase 4): use project_notes")
+    experience: str | None = Field(default=None, description="Experience modifier: first_timer | experienced")
+    project_notes: str | None = Field(default=None, max_length=1200, description="Bounded project notes (<=200 tokens) composed last by the Prompt Router")
 
 
 class SetProjectStatusRequest(BaseModel):
@@ -458,6 +471,8 @@ class ProjectResponse(BaseModel):
     budget: str | None = None
     persona: str | None = None
     custom_system_prompt: str | None = None
+    experience: str | None = None
+    project_notes: str | None = None
 
 
 class KickoffChatMessage(BaseModel):
@@ -476,12 +491,16 @@ class KickoffChatRequest(BaseModel):
 
 
 class KickoffChatResponse(BaseModel):
-    """Kickoff chat response showing next question or final prompt synthesis."""
+    """Kickoff chat response showing next question or final profile extraction."""
     next_question: str | None = Field(default=None, description="Next prompt question from LLM")
     is_complete: bool = Field(..., description="True if LLM has gathered enough context to construct project profile")
     budget: str | None = Field(default=None, description="Extracted budget string if complete")
     persona: str | None = Field(default=None, description="Extracted persona string if complete")
-    custom_system_prompt: str | None = Field(default=None, description="Synthesized system prompt if complete")
+    # Phase 4: kickoff emits bounded project notes composed last by the Prompt
+    # Router, not a full system-prompt blob. custom_system_prompt kept for
+    # back-compat with older clients; no longer populated by the kickoff chat.
+    notes: str | None = Field(default=None, description="Bounded project notes (<=200 tokens) if complete")
+    custom_system_prompt: str | None = Field(default=None, description="Deprecated (Phase 4): use notes")
 
 
 

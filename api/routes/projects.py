@@ -189,7 +189,8 @@ def update_project(
     db_params = {}
     for field in [
         "name", "description", "municipality", "address", "spaces",
-        "work_types", "recommended_permits", "budget", "persona", "custom_system_prompt"
+        "work_types", "recommended_permits", "budget", "persona", "custom_system_prompt",
+        "experience", "project_notes",
     ]:
         if field in update_fields:
             db_params[field] = update_fields[field]

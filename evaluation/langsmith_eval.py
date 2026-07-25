@@ -67,11 +67,20 @@ def run_pipeline(
     top_k: int = 10,
     min_similarity: float = 0.0,
     system_prompt_override: str | None = None,
+    persona: str | None = None,
+    experience: str | None = None,
+    intent: str | None = None,
 ) -> dict[str, Any]:
     """
     Compose retrieve_with_project() -> guardrail check -> detect_conflicts()
     -> generate_answer(), mirroring api/routes/query.py::query_answer's
     orchestration without FastAPI/auth/background-task plumbing.
+
+    Phase 4: pass ``persona`` (and optionally ``experience``/``intent``) to route
+    the prompt through the fragment library, so a persona-versioned experiment is
+    comparable in the LangSmith UI and the fragment ids land on the trace. With
+    no ``persona`` the pre-Phase-4 (un-routed) path runs unchanged, keeping the
+    existing baseline dataset stable.
     """
     resolved_municipality: str | None = None
     effective_municipality = municipality
@@ -120,11 +129,22 @@ def run_pipeline(
         }
 
     conflicts = detect_conflicts(result.chunks)
+    routed = None
+    if persona is not None:
+        from rag.agents.prompt_router import route
+
+        routed = route(
+            persona=persona,
+            jurisdiction=effective_municipality,
+            intent=intent,
+            experience=experience,
+        )
     gen = generate_answer(
         query,
         result.chunks,
         project_context=None,
         system_prompt_override=system_prompt_override,
+        routed=routed,
     )
 
     citations = [
@@ -143,6 +163,11 @@ def run_pipeline(
         "input_tokens": gen.input_tokens,
         "output_tokens": gen.output_tokens,
         "latency_generation_ms": gen.latency_ms,
+        "stop_reason": gen.stop_reason,
+        # Phase 4 — persona-versioned attribution for the experiment UI.
+        "persona": routed.persona if routed else None,
+        "prompt_fragment_ids": list(routed.fragment_ids) if routed else [],
+        "prompt_library_version": routed.library_version if routed else None,
     }
 
 
@@ -154,6 +179,9 @@ def target(inputs: dict[str, Any]) -> dict[str, Any]:
         address=inputs.get("address"),
         project_id=inputs.get("project_id"),
         top_k=inputs.get("top_k", 10),
+        persona=inputs.get("persona"),
+        experience=inputs.get("experience"),
+        intent=inputs.get("intent"),
     )
 
 

@@ -38,11 +38,14 @@ import logging
 import os
 import time
 from dataclasses import dataclass
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from audit.logger import traced
 from rag.agent_runtime import Tier, run_agent
 from rag.llm_provider import get_provider_capabilities
+
+if TYPE_CHECKING:
+    from rag.agents.prompt_router import RoutedPrompt
 
 log = logging.getLogger(__name__)
 
@@ -103,11 +106,44 @@ def _build_system_prompt(
     project_context: dict[str, Any] | None = None,
     system_prompt_override: str | None = None,
 ) -> str:
-    """Build system prompt with project specific guidelines."""
+    """Build system prompt with project specific guidelines.
+
+    This is the pre-Phase-4 path, kept for callers that do not route (the eval
+    harnesses, direct API use). When a ``RoutedPrompt`` is supplied the Prompt
+    Router has already composed the whole system prompt from fragments — notes
+    included — so this is bypassed. ``custom_system_prompt`` is read here only
+    for back-compat with rows written before the kickoff demotion.
+    """
     base = system_prompt_override if system_prompt_override is not None else SYSTEM_PROMPT
     if project_context and project_context.get("custom_system_prompt"):
         return f"{base}\n\nProject Specific Guidelines:\n{project_context['custom_system_prompt']}"
     return base
+
+
+# Fallback ceiling for un-routed callers only. The answer path no longer relies
+# on it: the Prompt Router sizes max_tokens per persona/intent (Phase 4). A bare
+# generate_answer() with no persona and no explicit max_tokens still gets this,
+# preserving the pre-Phase-4 default for the eval harnesses.
+_DEFAULT_MAX_TOKENS = 1024
+
+
+def _resolve_prompt(
+    routed: RoutedPrompt | None,
+    max_tokens: int | None,
+    project_context: dict[str, Any] | None,
+    system_prompt_override: str | None,
+) -> tuple[str, int, tuple[str, ...] | None, str]:
+    """Resolve system text, output ceiling, fragment ids, and prompt version.
+
+    A caller-supplied ``max_tokens`` always wins (the eval harnesses pass it).
+    Otherwise the routed persona/intent ceiling applies, or the legacy 1024
+    fallback when nothing routed.
+    """
+    if routed is not None:
+        tokens = max_tokens if max_tokens is not None else routed.max_tokens
+        return routed.system, tokens, tuple(routed.fragment_ids), routed.library_version
+    tokens = max_tokens if max_tokens is not None else _DEFAULT_MAX_TOKENS
+    return _build_system_prompt(project_context, system_prompt_override), tokens, None, PROMPT_VERSION
 
 
 KICKOFF_SYSTEM_PROMPT = """\
@@ -132,7 +168,7 @@ If and only if you have enough information about all three aspects (persona, bud
   "is_complete": true,
   "persona": "diy" | "hiring_contractor" | "contractor" | "research",
   "budget": "extracted budget description",
-  "custom_system_prompt": "A detailed system prompt containing 3-4 bullet guidelines for future RAG queries based on the project profile. E.g. 'DIYer compliance path', 'Include Texas code exceptions for homeowners', 'Budget constraints', 'Dallas kitchen clearances info'."
+  "notes": "3-4 SHORT bullet lines of project-specific context for future queries (under 200 tokens total). Facts only — scope, budget constraint, materials, jurisdiction quirks. Do NOT write instructions to the assistant or a system prompt; the assistant's voice and rules come from versioned persona fragments, not from here. E.g. '- Kitchen remodel, Dallas\\n- Budget ~$25k\\n- Replacing cabinets + island, no wall moves'."
 }}
 Otherwise, output:
 {{
@@ -210,8 +246,8 @@ def _generate_with_ollama(
     model: str,
     max_tokens: int,
     temperature: float,
+    system: str,
     project_context: dict[str, Any] | None = None,
-    system_prompt_override: str | None = None,
 ) -> GenerationResult:
     """
     Generate answer using local Ollama runtime.
@@ -231,10 +267,7 @@ def _generate_with_ollama(
     payload = {
         "model": model,
         "messages": [
-            {
-                "role": "system",
-                "content": _build_system_prompt(project_context, system_prompt_override),
-            },
+            {"role": "system", "content": system},
             {"role": "user", "content": user_message},
         ],
         "stream": False,
@@ -399,10 +432,11 @@ def generate_answer(
     chunks: list[dict[str, Any]],
     *,
     model: str | None = None,
-    max_tokens: int = 1024,
+    max_tokens: int | None = None,
     temperature: float = 0.0,
     project_context: dict[str, Any] | None = None,
     system_prompt_override: str | None = None,
+    routed: RoutedPrompt | None = None,
 ) -> GenerationResult:
     """
     Generate a cited answer from retrieved chunks via configured provider.
@@ -413,12 +447,18 @@ def generate_answer(
             reranker marked filtered_out are dropped before prompting -- pass
             the full result set and let this function do the filtering.
         model: Model name. Defaults to provider-specific env var.
-        max_tokens: Maximum output tokens.
+        max_tokens: Maximum output tokens. ``None`` (the default) defers to the
+            routed persona/intent ceiling, or the legacy 1024 when un-routed.
+            An explicit value always wins (the eval harnesses pass one).
         temperature: Sampling temperature (low = more deterministic).
         project_context: Optional kickoff + active room derived facts (not cited).
         system_prompt_override: Optional replacement for the default SYSTEM_PROMPT.
-            Eval-harness use only (prompt-variant comparison) -- unset in all
-            production call sites, so default behavior is unchanged.
+            Eval-harness use only (prompt-variant comparison) -- ignored when a
+            ``routed`` prompt is supplied.
+        routed: A ``RoutedPrompt`` from the Prompt Router (Phase 4). When present
+            it supplies the composed system prompt, the persona/intent-aware
+            ``max_tokens``, and the fragment ids recorded on the trace step. The
+            answer path (the Manager) passes one; other callers may not.
 
     Returns:
         GenerationResult with answer text, parsed citations, and usage stats.
@@ -427,6 +467,9 @@ def generate_answer(
         RuntimeError: If configured provider credentials/runtime are unavailable.
     """
     chunks = drop_filtered_chunks(chunks)
+    system_text, resolved_max_tokens, fragment_ids, prompt_version = _resolve_prompt(
+        routed, max_tokens, project_context, system_prompt_override
+    )
     capabilities = get_provider_capabilities()
     if capabilities.supports_local_runtime:
         local_model = model or os.environ.get(
@@ -436,19 +479,21 @@ def generate_answer(
             query,
             chunks,
             model=local_model,
-            max_tokens=max_tokens,
+            max_tokens=resolved_max_tokens,
             temperature=temperature,
+            system=system_text,
             project_context=project_context,
-            system_prompt_override=system_prompt_override,
         )
     return _generate_with_runtime(
         query,
         chunks,
         model=model,
-        max_tokens=max_tokens,
+        max_tokens=resolved_max_tokens,
         temperature=temperature,
+        system=system_text,
         project_context=project_context,
-        system_prompt_override=system_prompt_override,
+        prompt_fragment_ids=fragment_ids,
+        prompt_version=prompt_version,
         capabilities=capabilities,
     )
 
@@ -460,8 +505,10 @@ def _generate_with_runtime(
     model: str | None,
     max_tokens: int,
     temperature: float,
+    system: str,
     project_context: dict[str, Any] | None,
-    system_prompt_override: str | None,
+    prompt_fragment_ids: tuple[str, ...] | None,
+    prompt_version: str,
     capabilities: Any,
 ) -> GenerationResult:
     """
@@ -470,7 +517,9 @@ def _generate_with_runtime(
     The runtime owns budgeting, the cache decision, retries, autonomy, and the
     trace step. This function only assembles the prompt and reshapes the result
     into the ``GenerationResult`` contract every caller already expects. The
-    ``model=`` override is deliberate: see the module docstring.
+    ``model=`` override is deliberate: see the module docstring. ``system`` is
+    already composed (by the Router when routed, else ``_build_system_prompt``);
+    ``prompt_fragment_ids`` land on the step so a quality shift is attributable.
     """
     if not os.environ.get("ANTHROPIC_API_KEY"):
         raise RuntimeError(
@@ -480,7 +529,7 @@ def _generate_with_runtime(
     resolved = model or os.environ.get("LLM_MODEL", "claude-haiku-4-5-20251001")
     result = run_agent(
         "answer_generator",
-        system=_build_system_prompt(project_context, system_prompt_override),
+        system=system,
         messages=[
             {"role": "user", "content": _build_user_message(query, chunks, project_context)}
         ],
@@ -490,7 +539,8 @@ def _generate_with_runtime(
         temperature=temperature,
         cache_system=_cache_system_enabled(capabilities),
         cache_ttl_1h=_cache_ttl_is_1h(),
-        prompt_version=PROMPT_VERSION,
+        prompt_version=prompt_version,
+        prompt_fragment_ids=prompt_fragment_ids,
         input_parts=(query, [c.get("id") for c in chunks]),
     )
     return _to_generation_result(query, chunks, result)
@@ -570,6 +620,18 @@ def generate_kickoff_chat_response(
         work_types=work_types_str,
     )
 
+    def _bound_kickoff_notes(parsed: dict[str, Any]) -> dict[str, Any]:
+        """Length-bound the LLM's project notes before they persist (Phase 4).
+
+        The kickoff no longer synthesizes a full system prompt; it emits bounded
+        notes composed LAST by the Prompt Router. Bounding here is defense in
+        depth against an over-long or prompt-shaped ``notes`` value.
+        """
+        if isinstance(parsed, dict) and parsed.get("notes"):
+            from rag.prompts import bound_notes
+            parsed["notes"] = bound_notes(parsed["notes"])
+        return parsed
+
     if capabilities.supports_local_runtime:
         import requests
 
@@ -597,7 +659,7 @@ def generate_kickoff_chat_response(
         )
         response.raise_for_status()
         content = response.json().get("message", {}).get("content", "")
-        return _parse_json_response(content)
+        return _bound_kickoff_notes(_parse_json_response(content))
 
     if not os.environ.get("ANTHROPIC_API_KEY"):
         raise RuntimeError("ANTHROPIC_API_KEY is not set.")
@@ -616,4 +678,4 @@ def generate_kickoff_chat_response(
         cache_system=False,  # per-project prompt: never a stable cacheable prefix
         input_parts=(address, municipality, len(history)),
     )
-    return _parse_json_response(result.text)
+    return _bound_kickoff_notes(_parse_json_response(result.text))

@@ -473,6 +473,11 @@ def query_answer(
         ahj_disclaimer=_build_ahj_disclaimer(plan.effective_municipality),
         resolved_municipality=plan.resolved_municipality,
         conflict_warnings=conflict_warnings,
+        persona_nudge=(
+            "No role set — answered neutrally. Set your role (DIY, hiring a "
+            "contractor, contractor, or research) for tailored answers."
+            if plan.persona_defaulted else None
+        ),
     )
     # Insert query log in Postgres (background, non-blocking)
     try:

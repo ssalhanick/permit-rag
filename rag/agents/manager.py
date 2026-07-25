@@ -147,6 +147,7 @@ class ManagerResult:
     conflict_warnings: list[dict[str, Any]] = field(default_factory=list)
     project_context: dict[str, Any] | None = None
     iterations: int = 0
+    persona_defaulted: bool = False
 
     @property
     def retrieval(self) -> Any:
@@ -177,6 +178,7 @@ class _PlanState:
     project_context_ref: ArtifactRef | None = None
     retrieval_ref: ArtifactRef | None = None
     generation_ref: ArtifactRef | None = None
+    persona_defaulted: bool = False
 
 
 def _agent(name: str) -> Callable[..., Any]:
@@ -377,21 +379,85 @@ def _load_project_context(state: _PlanState) -> None:
         )
 
 
-# ── Wave 4 — generation ──────────────────────────────────────
+# ── Wave 4 — prompt routing + generation ─────────────────────
+
+
+def _derive_intent(query: str) -> str:
+    """Deterministically pick an intent fragment from the query. No model call.
+
+    A cheap heuristic, not a classifier — the Prompt Router treats an unknown
+    intent as compliance_lookup anyway, so a miss here degrades safely. A learned
+    intent (from the Manager/Deconstructor) can replace this later.
+    """
+    q = query.lower()
+    if any(k in q for k in ("how do i", "how to", "how can i", "steps to", "install")):
+        return "how_to"
+    if any(k in q for k in ("cost", "fee", "how much", "price", "estimate")):
+        return "cost_estimate"
+    if "bid" in q:
+        return "bid_review"
+    return "compliance_lookup"
+
+
+def _route_prompt(state: _PlanState) -> Any:
+    """Compose the system prompt via the Prompt Router (Phase 4). Deterministic.
+
+    Reads persona/experience/notes from the loaded project context and the
+    jurisdiction the plan already resolved; returns a ``RoutedPrompt`` or None.
+    A router failure degrades to the legacy (un-routed) prompt rather than
+    failing the query — composition must never be the reason an answer 500s.
+    """
+    ctx = state.store.get_or_none(state.project_context_ref) or {}
+    try:
+        routed = _agent("prompt_router")(
+            persona=ctx.get("persona"),
+            jurisdiction=state.effective_municipality,
+            intent=_derive_intent(state.request.query),
+            experience=ctx.get("experience"),
+            project_notes=ctx.get("project_notes") or ctx.get("custom_system_prompt"),
+        )
+    except Exception as exc:
+        log.warning("prompt_router failed (%s) — falling back to legacy prompt", exc)
+        return None
+    state.persona_defaulted = routed.persona_defaulted
+    # A deterministic step of its own, so fragment ids are attributable at
+    # router grain too — not only on the generator step.
+    record_step(
+        "prompt_router",
+        deterministic=True,
+        prompt_version=routed.library_version,
+        prompt_fragment_ids=list(routed.fragment_ids),
+        status="ok",
+    )
+    return routed
+
+
+def _guard_truncation(state: _PlanState, gen: Any) -> None:
+    """Fire the Guardrail truncation trip. Never blocks the answer."""
+    try:
+        _agent("guardrail")(
+            gen, query=state.request.query, entity_id=state.request.project_id or None
+        )
+    except Exception as exc:  # guardrail is best-effort; never fatal
+        log.warning("guardrail truncation check failed (%s)", exc)
 
 
 def _generate(state: _PlanState) -> None:
     """
-    Delegate to the answer generator over the reranker-passing chunks only.
+    Route the prompt, then delegate to the answer generator over the
+    reranker-passing chunks only.
 
     Rejected chunks must not be prompted or billed (Phase 0, defect #2); the
-    generator re-filters defensively for its other callers.
+    generator re-filters defensively for its other callers. The Prompt Router
+    (Phase 4) composes the persona-aware system prompt and sizes ``max_tokens``;
+    the Guardrail trips when a generation still truncates.
     """
     request, deps = state.request, state.deps
     result = state.store.get(state.retrieval_ref)
     chunks, _ = state.governor.degrade(
         "answer_generator", list(result.passing_chunks), overhead_tokens=600
     )
+    routed = _route_prompt(state)
     _notify(deps, "started", "generation", {
         "query": request.query,
         "num_chunks": result.num_results,
@@ -401,6 +467,7 @@ def _generate(state: _PlanState) -> None:
         gen = _agent("answer_generator")(
             request.query, chunks,
             project_context=state.store.get_or_none(state.project_context_ref),
+            routed=routed,
         )
     except RuntimeError as exc:  # provider credentials missing
         log.error("Generator config error: %s", exc)
@@ -413,6 +480,7 @@ def _generate(state: _PlanState) -> None:
             f"Generation error: {exc}", stage="generation", kind="failure"
         ) from exc
 
+    _guard_truncation(state, gen)
     state.generation_ref = state.store.put(
         "answer", gen, summary=_summarise_generation(gen)
     )
@@ -542,4 +610,5 @@ def _assemble(state: _PlanState, iterations: int) -> ManagerResult:
         conflict_warnings=state.conflict_warnings,
         project_context=state.store.get_or_none(state.project_context_ref),
         iterations=iterations,
+        persona_defaulted=state.persona_defaulted,
     )
