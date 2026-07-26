@@ -1,6 +1,6 @@
 # permit_rag — State
 
-_Updated: 2026-07-25 (Phase 4 core + query-UX pass + **Media Curator B1 (links) + C1 (transcript ingest/segregation) DEPLOYED to prod** — 030+031 applied, media_refs seeded, transcripts ingested (local embed → prod RDS); C1 RAGAs clean (0.849, retrieval unchanged). **C2 (diy how-to answer from transcripts) BUILT** — pytest + frontend build green; NOT deployed. **Canonical Media plan revised:** `docs/media-curator-plan.md`. Phase 3 done + on prod.)_
+_Updated: 2026-07-26 (**Phase 4 near-closed.** Media Curator on prod: B1 links, C1 transcripts, C2 how-to answers, semantic links (H2-6.1), + This Old House channel data (18 videos synced via `sync_how_to_to_prod`). Persona/jurisdiction/settings fixes + `/api/documents` fix deployed. **Deploy-pending (ops tooling, not on query hot path):** channel crawl (H2-6.2, migration 032 — 032 already applied on prod), throttle + sync scripts — ff-merge `agents/phase-4`→`deployment/sites` to close. **Deferred (not Phase 4):** B2 web_search, link liveness→Freshness#15, proxy, multi-sample RAGAs→Evaluator#23. Canonical plan: `docs/media-curator-plan.md`. **Next: close Phase 4 → Phase 5.**)_
 
 ## Phase
 
@@ -296,33 +296,28 @@ journal only." **Phase 3 is fully done.**_
 
 ## Next tasks
 
-1. **Media Curator (#17) — deploy C2, then Half 2.**
-   Canonical plan: `docs/media-curator-plan.md` (revised 2026-07-25).
-   Slice detail: `docs/plan_media_curator.md` (B1/B2), `docs/plan_media_transcripts.md` (C1/C2).
-   - **B1 BUILT + DEPLOYED** (curated `media_refs`, $0, no runtime change): migration
-     `030_media_refs.sql`, `db.client.fetch_media_refs`/`insert_media_ref`,
-     `rag/agents/media.py` (diy-only, keyword task-map),
-     `guardrail.check_media_sources` (zero-unsourced-URL gate), Manager wave-4
-     wiring (`_curate_media` ∥ `_generate`), `AnswerResponse.media_refs`,
-     `QueryPage.jsx` videos section, `scripts/seed_media_refs.py` + seed JSON,
-     tests. Abstain quick-win: diy abstain still surfaces links.
-   - **C1 BUILT + VERIFIED + DEPLOYED:** migration `031_media_transcripts.sql`,
-     transcript ingest, `content_class` segregation; RAGAs clean (0.849,
-     retrieval unchanged). Prod: 030+031 applied, media_refs seeded, transcripts
-     ingested (local embed → prod RDS).
-   - **C2 BUILT (not deployed):** `retrieve_how_to`, `manager._how_to_fallback`
-     (diy compliance-abstain → grounded how-to), `how_to` + educational
-     disclaimer UI. **Next: deploy C2**, then H2-1 corpus growth → H2-2 B2
-     `web_search` → H2-3 link liveness → H2-4 citation polish → H2-5 legal.
-   - **B2 (deferred):** `web_search` youtube-only; needs `claude-api` skill +
-     `run_agent` `tools=` + Budget cap. Same Guardrail gate.
-   _(Query-UX pass done + deployed 2026-07-25. Still deferred: full chat-thread
-   `QueryPage` redesign.)_
-2. **Multi-sample live RAGAs baseline** before RAGAs gates any phase (punch 3).
-   The 2026-07-25 run (`ragas_20260725_011651.json`, avg 0.843) is the first clean
-   *live* one — but one sample; q6 (0.50) alone drags the mean past 0.85. Run 3+
-   and average, and repoint `eval_guard`'s default baseline off the stale
-   cached-era `ragas_20260531` file. Not a Phase 4 blocker.
+1. **Close Phase 4 (Router + fragments + Media Curator).** All user-facing Media
+   Curator work is on prod (B1 links, C1 transcripts, C2 how-to answers, semantic
+   links, This Old House channel data). Canonical plan: `docs/media-curator-plan.md`.
+   To close:
+   - Commit the throttle (`ingestion/transcript.py`, `ingest_media_transcripts.py`)
+     + `sync_how_to_to_prod.py`, then **ff-merge `agents/phase-4` → `deployment/sites`**
+     (brings channel crawl `63a2bd2`/`912bce5` + throttle + sync to the deployed
+     branch). Migration `032` already on prod; all ops tooling, not on the query hot
+     path, so prod already works — this is repo parity.
+   - `py -m pytest tests/ -q` green; move **Media Curator / Phase 4 → Completed** in
+     README.
+   - **Deferred, NOT Phase 4 blockers** (in the plan): B2 `web_search` (needs
+     `claude-api` skill + `run_agent tools=`); link liveness → **Freshness Watcher
+     #15**; proxy (`YOUTUBE_PROXY_*`) for at-scale ingest; multi-sample RAGAs →
+     **Evaluator #23**.
+2. **Phase 5 (course cut line).** Answer agents — Query Deconstructor (#5),
+   Citation Verifier (#9), Permit Strategy (#11) — + **Evaluator (#23)** +
+   Performance Review (#24) + feedback UI + dashboard v2 + Field Ontology core
+   (items 1–3). Start with the Evaluator + feedback loop (they anchor the rest) and
+   fold in the **multi-sample live RAGAs baseline** (also punch #3): the 2026-07-25
+   run (`ragas_20260725_011651.json`, avg 0.843) is one live sample; run 3+, average
+   out q6's ±0.15, and repoint `eval_guard` off the stale cached `ragas_20260531`.
 3. **Pre-existing, not Phase 4:** q6 (building height) + q1 (electrical)
    faithfulness; the `NLI inference failed ('type')` classifier warning (falls
    back to keyword rules, non-fatal); q6/Dallas 3-part-PDF retrieval weakness.
