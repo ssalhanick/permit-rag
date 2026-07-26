@@ -114,30 +114,41 @@ py scripts/persona_demo.py --local "how do I install a gfci outlet" --personas d
 # Deploy: apply 030 on prod RDS by hand, then merge feat/media-curator → deployment/sites (GHA backend+frontend)
 ```
 
+## Part 3 — revised Media Curator plan written (docs only)
+
+Owner asked for a status summary vs the original `docs/media-curator-plan.md`
+vision, then: write the revised plan.
+
+Wrote / updated:
+- **`docs/media-curator-plan.md`** — supersedes mixed-retrieval vision; locks
+  segregation north star; status board (B1+C1 prod, C2 built-not-deployed);
+  Half-2 order (C2 deploy → corpus → B2 → liveness → citation polish → legal);
+  deferred list; verification + migration map + decisions.
+- Pointers at top of `docs/plan_media_curator.md` + `docs/plan_media_transcripts.md`.
+- README Planned Media Curator bullet re-pointed at the revised plan (status
+  matched to STATE: B1+C1 deployed, C2 pending deploy).
+- STATE Next tasks + migration drift table reconciled (030/031 applied on B +
+  prod; 031 “NOT applied” note removed).
+
+### Commit message (docs)
+
+```
+docs(media-curator): revise canonical plan — segregation north star, B1/C1 done, C2 ship next, Half-2 ordered
+```
+
 ## Prompt for next session
 
 > Read STATE.md, the latest `journals/session_*.md`, AGENTS.md, and
-> docs/agent_architecture.md before touching anything. Restate the current task
+> `docs/media-curator-plan.md` before touching anything. Restate the current task
 > first — AGENTS.md pre-session protocol.
 >
-> **Media Curator #17 Slice B1 is BUILT on `feat/media-curator` (machine-A compile
-> + offline smoke + frontend build green) but NOT verified by pytest, NOT applied
-> to any DB, and NOT deployed — do not rebuild it.** Ship it: (1) machine-A
-> `py -m pytest tests/ -q` (prior 474 + the new media tests); (2) machine-B apply
-> `030_media_refs.sql`, replace the PLACEHOLDER urls in `scripts/media_refs_seed.json`
-> with vetted links, `seed_media_refs.py --local --apply --verified`, and run a diy
-> query end-to-end (videos render); (3) apply 030 on prod RDS by hand, merge
-> `feat/media-curator` → `deployment/sites` (GHA deploys backend+frontend). Plan +
-> full detail: `docs/plan_media_curator.md`.
+> **Media Curator B1 + C1 are DEPLOYED.** **C2 is BUILT but not deployed — do not
+> rebuild it.** Ship C2: merge/deploy so diy compliance-abstains become grounded
+> how-to answers (educational disclaimer UI). Then Half 2 per
+> `docs/media-curator-plan.md`: grow `media_refs` + transcripts → B2 `web_search`
+> (`run_agent` + `tools=`) → link liveness → citation `?t=` polish → legal review.
+> Slice detail: `docs/plan_media_curator.md`, `docs/plan_media_transcripts.md`.
 >
-> **Then Media Curator Slice B2** (deferred): the `web_search` youtube-only path.
-> Load the `claude-api` skill for the current web-search tool id + response shape;
-> extend `run_agent` to accept `tools=` (thread through `_dispatch`) + a
-> `web_search_tool_result` parser; diy-only, Budget-Governor-capped; same Guardrail
-> `check_media_sources` gate.
->
-> Carried, still open (all pre-existing, none Media): the query-UX interactive
-> click-through eyeball behind Cognito login; a multi-sample live RAGAs baseline +
-> repoint `eval_guard` off the stale `ragas_20260531` baseline (STATE punch 3);
-> `checksum_sha256` backfill; the `NLI inference failed ('type')` classifier warning;
-> q6/Dallas 3-part-PDF retrieval weakness.
+> Carried, still open (pre-existing): multi-sample live RAGAs baseline + repoint
+> `eval_guard` (STATE punch 3); `checksum_sha256` backfill; NLI classifier
+> warning; q6/Dallas 3-part-PDF retrieval weakness; Cognito eyeball of query-UX.

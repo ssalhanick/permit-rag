@@ -2,6 +2,10 @@
 
 _Drafted 2026-07-25. Branch: `feat/media-curator` off `deployment/sites`._
 
+> **Canonical overview:** [docs/media-curator-plan.md](media-curator-plan.md)
+> (revised 2026-07-25 — status board, Half-2 order, segregation north star).
+> This file is the B1/B2 implementation detail.
+
 ## Goal (from docs/agent_architecture.md)
 
 Agent #17. Sourced how-to video links for the **`diy`** answer path. **Never emits

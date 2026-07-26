@@ -1,6 +1,6 @@
 # permit_rag — State
 
-_Updated: 2026-07-25 (Phase 4 core + query-UX pass + **Media Curator B1 (links) + C1 (transcript ingest/segregation) DEPLOYED to prod** — 030+031 applied, media_refs seeded, transcripts ingested (local embed → prod RDS); C1 RAGAs clean (0.849, retrieval unchanged). **C2 (diy how-to answer from transcripts) BUILT** on `agents/phase-4` — pytest + frontend build green; NOT deployed. Phase 3 done + on prod.)_
+_Updated: 2026-07-25 (Phase 4 core + query-UX pass + **Media Curator B1 (links) + C1 (transcript ingest/segregation) DEPLOYED to prod** — 030+031 applied, media_refs seeded, transcripts ingested (local embed → prod RDS); C1 RAGAs clean (0.849, retrieval unchanged). **C2 (diy how-to answer from transcripts) BUILT** — pytest + frontend build green; NOT deployed. **Canonical Media plan revised:** `docs/media-curator-plan.md`. Phase 3 done + on prod.)_
 
 ## Phase
 
@@ -293,65 +293,28 @@ journal only." **Phase 3 is fully done.**_
 
 ## Next tasks
 
-1. **Media Curator (#17) — verify + ship Slice B1, then build B2.**
-   - **B1 BUILT** on `feat/media-curator` (curated `media_refs` table path, $0, no
-     runtime change): migration `030_media_refs.sql`, `db.client.fetch_media_refs`
-     /`insert_media_ref`, `rag/agents/media.py` (diy-only, keyword task-map),
+1. **Media Curator (#17) — deploy C2, then Half 2.**
+   Canonical plan: `docs/media-curator-plan.md` (revised 2026-07-25).
+   Slice detail: `docs/plan_media_curator.md` (B1/B2), `docs/plan_media_transcripts.md` (C1/C2).
+   - **B1 BUILT + DEPLOYED** (curated `media_refs`, $0, no runtime change): migration
+     `030_media_refs.sql`, `db.client.fetch_media_refs`/`insert_media_ref`,
+     `rag/agents/media.py` (diy-only, keyword task-map),
      `guardrail.check_media_sources` (zero-unsourced-URL gate), Manager wave-4
      wiring (`_curate_media` ∥ `_generate`), `AnswerResponse.media_refs`,
      `QueryPage.jsx` videos section, `scripts/seed_media_refs.py` + seed JSON,
-     tests. Plan: `docs/plan_media_curator.md`.
-     **To ship:** (a) ~~pytest~~ **GREEN on machine B (2026-07-25)**;
-     (b) machine-B apply `030`, replace the placeholder URLs in
-     `scripts/media_refs_seed.json` with vetted links, `seed_media_refs.py --local
-     --apply --verified`, run a diy query end-to-end; (c) merge to
-     `deployment/sites` + GHA-deploy (backend+frontend; migration 030 by hand on
-     prod RDS first).
-   - **Abstain quick-win (BUILT, in this branch):** a **diy** query that abstains
-     now still surfaces the curated how-to links (`_curate_media` no longer skips
-     on abstain; `_build_abstain_response` attaches `media_refs`). Non-diy abstains
-     stay empty. Tests updated (`test_diy_abstain_still_surfaces_media` +
-     `test_non_diy_abstain_has_no_media`).
-   - **Slice C — transcript ingest.** The real fix for "no confident answer" on
-     how-to queries. Owner decision: **separate tier, never grounds compliance**.
-     Plan: `docs/plan_media_transcripts.md`.
-     - **C1 BUILT (machine-A compile + transcript smoke green):** migration
-       `031_media_transcripts.sql` (enum `educational`/`how_to_video`,
-       `documents.content_class` column, `match_chunks` gains a
-       `filter_content_class` param **defaulting to `authority`** so compliance
-       retrieval is byte-for-byte unchanged); `db.client` (`match_chunks` +
-       `content_class`, `insert_document` + `content_class`, `list_media_refs`);
-       `ingestion/transcript.py` (YouTube transcript fetch, graceful on no
-       captions); `scripts/ingest_media_transcripts.py` (target-safe driver,
-       local→prod via `ingest_prod_corpus` pattern); `pyproject` dep
-       `youtube-transcript-api`; `tests/test_transcript.py`.
-       **To verify (machine B):** `pip install -e .` (new dep) → apply `031` →
-       `ingest_media_transcripts.py --local` (dry-run) then `--apply` →
-       **run RAGAs to confirm compliance retrieval is unchanged** (AGENTS.md:
-       never change retrieval without RAGAs after; default filter is authority-only).
-     - **C1 VERIFIED (machine B, 2026-07-25):** overload-fix applied (a pre-release
-       breaking 031 had left a stray 4-arg `match_chunks` on the local corpus DB —
-       dropped via `scripts/fix_match_chunks_overload.py`; prod was never affected).
-       RAGAs re-run: **avg faithfulness 0.849, top_sim 0.794 — identical retrieval,
-       no compliance regression** from the `match_chunks` change. Deployed to prod
-       (030+031 applied, media_refs seeded, transcripts ingested via local embed →
-       prod RDS).
-     - **C2 BUILT (machine-A: 35+ pytest green, frontend build green):** the diy
-       how-to answer. `rag/retriever.retrieve_how_to` (embed + `match_how_to_chunks`,
-       no compliance rerank/guardrails); `ManagerDeps.retrieve_how_to` +
-       `how_to_min_chunks/top_sim` (looser floor: 1 / 0.50) injected by the route;
-       `manager._how_to_fallback` (wave 4) — on a **diy compliance-abstain**,
-       retrieves transcripts, and if they clear the how-to floor generates a
-       grounded how-to answer that **replaces** the abstain (`abstained→False`,
-       `how_to→True`); reuses the routed diy prompt. `AnswerResponse.how_to` +
-       `educational_disclaimer`; `QueryPage.jsx` "🔧 How-To Guide" title + amber
-       educational banner. Compliance answers are never overridden; non-diy never
-       tries how-to. **Not deployed yet.**
-   - **B2 (deferred):** the `web_search` youtube-only path. Needs the `claude-api`
-     skill (tool id) + `run_agent` learning `tools=` + a `web_search_tool_result`
-     parser + Budget-Governor cap. Same Guardrail gate. See `docs/plan_media_curator.md`.
-   _(Query-UX pass done + deployed 2026-07-25. Still deferred: the full chat-thread
-   `QueryPage` redesign, owner chose quick-wins first.)_
+     tests. Abstain quick-win: diy abstain still surfaces links.
+   - **C1 BUILT + VERIFIED + DEPLOYED:** migration `031_media_transcripts.sql`,
+     transcript ingest, `content_class` segregation; RAGAs clean (0.849,
+     retrieval unchanged). Prod: 030+031 applied, media_refs seeded, transcripts
+     ingested (local embed → prod RDS).
+   - **C2 BUILT (not deployed):** `retrieve_how_to`, `manager._how_to_fallback`
+     (diy compliance-abstain → grounded how-to), `how_to` + educational
+     disclaimer UI. **Next: deploy C2**, then H2-1 corpus growth → H2-2 B2
+     `web_search` → H2-3 link liveness → H2-4 citation polish → H2-5 legal.
+   - **B2 (deferred):** `web_search` youtube-only; needs `claude-api` skill +
+     `run_agent` `tools=` + Budget cap. Same Guardrail gate.
+   _(Query-UX pass done + deployed 2026-07-25. Still deferred: full chat-thread
+   `QueryPage` redesign.)_
 2. **Multi-sample live RAGAs baseline** before RAGAs gates any phase (punch 3).
    The 2026-07-25 run (`ragas_20260725_011651.json`, avg 0.843) is the first clean
    *live* one — but one sample; q6 (0.50) alone drags the mean past 0.85. Run 3+
@@ -386,16 +349,16 @@ values (`authority_level += 'educational'`, `doc_type += 'how_to_video'`), the
 is **NON-BREAKING**: `CREATE OR REPLACE match_chunks` keeps its **3-arg signature**
 (body now filters `content_class='authority'`, enforced in SQL) + a **new**
 `match_how_to_chunks` for the diy path — so migration and app-deploy need **no
-ordering** (neither old-code+new-DB nor new-code+old-DB breaks). **NOT applied on
-any DB yet.** Requires PG12+ for `ALTER TYPE … ADD VALUE` in a txn (schema is PG15).
-⚠ **`match_chunks` body changed — run RAGAs after (corpus is all `authority`, so
-the result set is identical; the run confirms it).**
+ordering** (neither old-code+new-DB nor new-code+old-DB breaks). **Applied on
+machine B + prod (2026-07-25)** with RAGAs confirming no compliance regression.
+Requires PG12+ for `ALTER TYPE … ADD VALUE` in a txn (schema is PG15).
+⚠ **`match_chunks` body changed — run RAGAs after any future change to this SQL.**
 
 | Database | State (as last recorded) |
 |----------|--------------------------|
 | Local Docker (machine A, this repo) | 018–021, 023–026 applied; **022 missing**; 026 pre-fix so 027 required here. **028/029/030/031 not applied. Corpus empty.** |
-| Machine B local (campus corpus DB via `.env.local`) | Current through 027; **029 applied 2026-07-25** (Phase 4 demo); 19 docs. **030 applied 2026-07-25** (media_refs seeded — placeholder rows pruned/replaced). **031 pending** (Slice C1 transcript ingest; run RAGAs after). (028 only needed for a local `--apply`.) |
-| Prod RDS | **Current through 029 (028 applied 2026-07-24; 029 applied 2026-07-25 at the Phase 4 core deploy).** Backfill `--apply` run; good metadata proposals approved. Query-UX pass added **no** migration. **030 + 031 pending** (apply at the Media Curator deploy). Do NOT re-apply 027/028/029. |
+| Machine B local (campus corpus DB via `.env.local`) | Current through 027; **029 applied 2026-07-25** (Phase 4 demo); 19 docs. **030 + 031 applied 2026-07-25** (media_refs seeded; transcripts ingested; RAGAs non-regression). (028 only needed for a local `--apply`.) |
+| Prod RDS | **Current through 031** (028/029 Phase 3–4; **030 + 031 Media Curator applied 2026-07-25** — media_refs seeded, transcripts ingested). Query-UX pass added **no** migration. **C2 is code-only — deploy when ready.** Do NOT re-apply 027–031. |
 
 **Why target confusion keeps happening.** `bootstrap_env` loads `.env` last with
 `override=True`, and `ENVIRONMENT=production` selects `.env.production`; all three

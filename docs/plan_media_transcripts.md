@@ -2,6 +2,9 @@
 
 _Drafted 2026-07-25. Follows Media Curator B1 (curated links)._
 
+> **Canonical overview:** [docs/media-curator-plan.md](media-curator-plan.md)
+> (revised 2026-07-25). This file is the C1/C2 implementation detail.
+
 > **Status (2026-07-25): C1 BUILT** (machine-A compile + transcript smoke green) —
 > migration 031 (**non-breaking**: `match_chunks` keeps its 3-arg signature, body
 > scoped to `content_class='authority'` in SQL; new `match_how_to_chunks` for the
