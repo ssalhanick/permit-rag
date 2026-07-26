@@ -4,49 +4,54 @@ _Updated: 2026-07-26 (**Phase 4 CLOSED.** Media Curator on prod: B1 links, C1 tr
 
 ## Phase
 
-**Phase 5 STARTED (2026-07-26) — feedback loop slice code-complete on machine A.**
-The answer-level feedback loop (first Phase-5 increment; anchors Performance
-Review #24 + the Evaluator's correction signal) is built + green on machine A,
-**not deployed**:
-- `db/migrations/033_answer_feedback.sql` — `answer_feedback` (id, run_id FK→
-  agent_runs, user_id, rating `up|down` CHECK, comment, created/updated_at,
-  `UNIQUE(run_id,user_id)`). Additive/idempotent. **Not applied on any DB.**
-- `db/client.upsert_answer_feedback` (one vote per run+user, ON CONFLICT upsert)
-  + `answer_feedback_counts(since)` (scorecard reader).
-- `AnswerResponse.run_id` now surfaced (both success + abstain paths, via
-  `_current_run_id()` reading the `@traced_run` context); `FeedbackRequest` /
-  `FeedbackResponse` schemas; **`POST /query/feedback`** (auth'd, 404 on unknown
-  run, upsert).
-- `frontend`: `submitAnswerFeedback` (api.js) + QueryPage 👍/👎 bar with an
-  optional comment box on 👎 (only shown when the answer carries a `run_id`).
-- Tests: `tests/test_feedback_route.py` (5, mocked).
+**Phase 5 CODE-COMPLETE on machine A (2026-07-26) — all 8 components built + green,
+NOT deployed.** `py -m pytest tests/ -q` → **575 passed**; new files ruff-clean;
+`frontend/ npm run build` clean. The deploy/integration tail is below.
 
-**Performance Review #24 slice code-complete on machine A (2026-07-26).** The
-direct consumer of a 👎 — attributes a bad answer to an agent from the run trace.
-Deterministic-first (errored step / grounding abstain need no LLM), one top-tier
-(`Tier.TOP`) `run_agent` call otherwise. **Not deployed.**
-- `evaluation/perf_review.py` — `attribute(run, steps)` → `Attribution`
-  (attributed_agent ∈ known answer-path roster, failure_mode, evidence,
-  confidence, rationale; hallucinated agent names clamped to None). `review_run()`
-  writes an **unconfirmed** `agent_corrections` row (`source='answer'`); below
-  `CONFIDENCE_FLOOR=0.6` the row carries no `attributed_agent` (human assigns
-  blame — the arch's "never silent blame"). Import boundary respected
-  (evaluation/ → rag/, db/); every model call via `run_agent`.
-- `db/client.list_downvotes_without_review(since, limit)` — the review queue
-  (down-votes with no `source='answer'` correction yet).
-- `scripts/review_feedback.py` — batch driver (target-safe, dry-run default,
-  `--apply` / `--no-llm` / `--days` / `--limit`). **`api/` may not import
-  `evaluation/`, and the arch budgets Perf Review as batched/low-volume — so the
-  trigger is this script, never the query hot path.**
-- Tests: `tests/test_perf_review.py` (7, mocked). **Full suite 535 passed**;
-  new files ruff-clean (pre-existing db/client + ragas_eval hits untouched);
-  `frontend/ npm run build` clean.
+1. **Feedback loop.** `033_answer_feedback.sql` (`answer_feedback`: run_id FK,
+   user_id, rating `up|down`, comment, `UNIQUE(run_id,user_id)`); `db.upsert_answer_feedback`
+   + `answer_feedback_counts`; `AnswerResponse.run_id` (both paths, `_current_run_id()`
+   off the `@traced_run` ctx); `POST /query/feedback`; QueryPage 👍/👎 + comment.
+   `tests/test_feedback_route.py` (5).
+2. **Performance Review #24** — `evaluation/perf_review.py`: `(down-vote + trace)`
+   → attributed agent. Deterministic-first (errored step / abstain, $0), else one
+   `Tier.TOP` call; writes **unconfirmed** `agent_corrections`, no attribution
+   below `CONFIDENCE_FLOOR=0.6`. Batch driver `scripts/review_feedback.py` (api/
+   can't import evaluation/; arch budgets it batched). `db.list_downvotes_without_review`.
+   `tests/test_perf_review.py` (7).
+3. **Evaluator #23** — `evaluation/agent_eval.py`: per-agent metric contracts over
+   the scorecard + correction rate + latest RAGAs faithfulness; a breach files an
+   action item + auto-demotes one autonomy level (`--apply`). `scripts/run_agent_eval.py`.
+   `tests/test_agent_eval.py` (6).
+4. **Citation Verifier #9** — `rag/agents/citation_verifier.py`: deterministic
+   token-span match first, one batched entailment call on the leftovers; missing
+   cited chunk = unsupported; flags uncited claims. Registered. `tests/test_citation_verifier.py` (6).
+5. **Query Deconstructor #5** — `rag/agents/deconstructor.py`: compound → sub-questions
+   + per-sub filters, deterministic gate for simple queries (no LLM). Registered.
+   `tests/test_deconstructor.py` (6).
+6. **Permit Strategy #11** — `rag/agents/permit_strategy.py`: permit set (mirrors
+   `frontend/src/projectPermitRules.js` → F1=1.0) + pull-order sequencing + fee
+   estimate; only the note is a model call. Registered. `tests/test_permit_strategy.py` (6).
+7. **Field Ontology core (1-3)** — `forms/ontology.py` (new `forms/` package;
+   AGENTS.md boundary added): canonical vocabulary + per-field type/validation +
+   source binding. A git-tracked module (like fragments), no migration.
+   `tests/test_ontology.py` (8).
+8. **Dashboard v2** — `agents_admin.py` routes `/scorecard`, `/autonomy` (+set,
+   409 over ceiling), `/runs/{id}/trace`, `/feedback-summary`, `/corrections`
+   (+`/confirm`); `db.list_agent_corrections` + `confirm_agent_correction`;
+   frontend tabs `AgentScorecard` / `CorrectionQueue` / `AutonomyPanel` on
+   `AgentDashboardPage`. `tests/test_dashboard_v2_routes.py` (8).
 
-**Remaining Phase 5:** Evaluator #23 (`evaluation/agent_eval.py` per-agent metric
-contracts + multi-sample live RAGAs baseline, machine B) · answer agents
-#5/#9/#11 · dashboard v2 (scorecard/trace-explorer/autonomy + a feedback +
-correction-queue surface; `agent_scorecard` / `answer_feedback_counts` /
-`correction_rate_by_agent` readers already exist) · Field Ontology core.
+**Phase 5 deploy + integration tail (NOT done):**
+- **Deploy** (machine B/prod): apply `033_answer_feedback.sql` by hand, then
+  commit + GHA (code touches `api/`+`frontend/`). Migration 033 pending on ALL DBs.
+- **Answer-agent wiring:** #5/#9/#11 are built + registered + unit-tested but
+  **not yet wired into `manager.py`'s live query path** (retrieval fan-out per
+  sub-question; post-gen citation verify on the response; permit-strategy on a
+  project view). Deferred to avoid regressing the query path in the build pass.
+- **Evaluator/Perf Review are batch scripts**, not auto-triggered — run on
+  machine B once feedback/trace volume exists. Multi-sample RAGAs baseline
+  (punch #3) still to record on machine B; then repoint `eval_guard`.
 
 **Phase 4 CLOSED (2026-07-26).** Router + fragment library + query-UX pass +
 Media Curator (#17: B1/C1/C2 + semantic links + channel data) all deployed to
@@ -352,33 +357,26 @@ journal only." **Phase 3 is fully done.**_
 
 ## Next tasks
 
-1. **Phase 5 (course cut line) — the active phase.** Answer agents — Query
-   Deconstructor (#5), Citation Verifier (#9), Permit Strategy (#11) — +
-   **Evaluator (#23)** + Performance Review (#24) + feedback UI + dashboard v2 +
-   Field Ontology core (items 1–3). Roster/spec detail in `docs/agent_architecture.md`.
-   - **DONE this session (machine A, not deployed):** the answer-level **feedback
-     loop** — migration `033_answer_feedback`, `POST /query/feedback`,
-     `AnswerResponse.run_id`, QueryPage 👍/👎. Full suite 528 green. **To deploy:**
-     (a) machine B/prod — `py scripts/check_migration_details.py --local` first,
-     then `py scripts/apply_migration.py db/migrations/033_answer_feedback.sql`
-     (confirm the DB target — `.env` overrides `.env.local`); (b) commit + GHA
-     deploy (code touches `api/`+`frontend/` so both jobs run; no query-hot-path
-     change). Smoke: answer a query → 👍/👎 → row in `answer_feedback`.
-   - **DONE this session (machine A, not deployed):** **Performance Review #24** —
-     `evaluation/perf_review.py` (attribute a 👎 to an agent) + `scripts/review_feedback.py`
-     batch driver + `db.list_downvotes_without_review`. Deterministic-first, else
-     one opus call; writes unconfirmed `agent_corrections`. **To run** (machine B,
-     after 033 is applied + some down-votes exist): `py scripts/review_feedback.py
-     --local --dry-run` then `--apply` (`--no-llm` for the free classes only).
-   - **Next Phase-5 increment: Evaluator #23** (`evaluation/agent_eval.py`
-     per-agent metric contracts, reading the trace store — `agent_scorecard`,
-     `correction_rate_by_agent`, `answer_feedback_counts` readers exist) + the
-     **multi-sample live RAGAs baseline** (machine B, punch #3): the 2026-07-25 run
-     (`ragas_20260725_011651.json`, avg 0.843) is one sample; run 3+, average out
-     q6's ±0.15, repoint `eval_guard` off the stale cached `ragas_20260531`. Then
-     the **dashboard v2** surfaces (scorecard/trace-explorer/autonomy + feedback +
-     the correction-confirm queue that closes the Perf Review loop), answer agents
-     #5/#9/#11, and the Field Ontology core.
+1. **Phase 5 — CODE-COMPLETE on machine A (all 8 components, 575 tests green).**
+   Full detail in the Phase banner above. **What's left is the deploy + integration
+   tail:**
+   - **Deploy (machine B → prod):** confirm the DB target
+     (`py scripts/check_migration_details.py --local` — `.env` overrides `.env.local`),
+     apply `py scripts/apply_migration.py db/migrations/033_answer_feedback.sql`
+     (pending on **all** DBs), then commit + GHA (touches `api/`+`frontend/`; no
+     query-hot-path change). Smoke: answer a query → 👍/👎 → row in `answer_feedback`;
+     `/admin/agents` shows Scorecard / Corrections / Autonomy tabs.
+   - **Wire the answer agents into `manager.py`** (#5/#9/#11 are built + registered
+     + unit-tested but not in the live query path): Deconstructor → retrieval
+     fan-out per sub-question; Citation Verifier → post-generation on the response
+     (∥ conflict analyzer); Permit Strategy → a project-context surface. Do this
+     behind the Manager carefully + re-run `test_query_answer_route` + RAGAs (query
+     path is regression-sensitive).
+   - **Run the batch/eval loops on machine B** once volume exists:
+     `scripts/review_feedback.py` (Perf Review), `scripts/run_agent_eval.py`
+     (Evaluator), and the **multi-sample live RAGAs baseline** (punch #3): the
+     2026-07-25 run (`ragas_20260725_011651.json`, avg 0.843) is one sample; run 3+,
+     average out q6's ±0.15, repoint `eval_guard` off the stale `ragas_20260531`.
    - **Deferred Media Curator items, absorbed into Phase 5+ agents** (not lost —
      tracked in `docs/media-curator-plan.md`): B2 `web_search` (needs `claude-api`
      skill + `run_agent tools=`, shared runtime infra); link liveness →
@@ -421,7 +419,7 @@ Requires PG12+ for `ALTER TYPE … ADD VALUE` in a txn (schema is PG15).
 | Database | State (as last recorded) |
 |----------|--------------------------|
 | Local Docker (machine A, this repo) | 018–021, 023–026 applied; **022 missing**; 026 pre-fix so 027 required here. **028/029/030/031/032/033 not applied. Corpus empty.** |
-| Machine B local (campus corpus DB via `.env.local`) | Current through 027; **029 applied 2026-07-25** (Phase 4 demo); 19 docs. **030 + 031 applied 2026-07-25** (media_refs seeded; transcripts ingested; RAGAs non-regression). **032 applied 2026-07-25** (H2-6 channel crawl; the embed/crawl source for the prod `sync_how_to_to_prod`). **033 (answer_feedback) pending.** (028 only needed for a local `--apply`.) |
+| Machine B local (campus corpus DB via `.env.local`) | Current through 027; **029 applied 2026-07-25** (Phase 4 demo); 19 docs. **030 + 031 applied 2026-07-25** (media_refs seeded; transcripts ingested; RAGAs non-regression). **032 applied 2026-07-25** (H2-6 channel crawl; the embed/crawl source for the prod `sync_how_to_to_prod`). **028 applied + backfill `--apply` run 2026-07-26** (metadata validator filed `needs_review` items; approvals pending in `/admin/agents`). **033 (answer_feedback) pending.** |
 | Prod RDS | **Current through 032** (028/029 Phase 3–4; **030 + 031 + 032 Media Curator applied 2026-07-25** — media_refs seeded, transcripts ingested, media_channels + This Old House synced). Query-UX pass + C2 + semantic-links are code-only. **033 (answer_feedback, Phase 5) pending.** Do NOT re-apply 027–032. |
 
 **Why target confusion keeps happening.** `bootstrap_env` loads `.env` last with
@@ -451,7 +449,11 @@ already applied by name on multiple DBs). The dedupe correction is therefore
 | rag/retriever | **Media C2:** `retrieve_how_to` — lean transcript retrieval (embed + `match_how_to_chunks`, no compliance rerank/guardrails, no municipality filter) |
 | rag/agents/artifacts | **New (Phase 2).** `ArtifactRef` + `ArtifactStore`; bounds the Manager's context |
 | rag/agents/budget | **New (Phase 2).** Deterministic Budget Governor; uncapped default = no-op |
-| rag/agents/registry | Roster is 13 specs, all lazily bound (Media B1 added `media_curator`; Phase 4 added `prompt_router` + `guardrail`; Phase 3 added `metadata_validator` via api DI) |
+| rag/agents/registry | Roster lazily bound (Media B1 `media_curator`; Phase 4 `prompt_router` + `guardrail`; Phase 3 `metadata_validator` via api DI). **Phase 5 registered** `citation_verifier` (#9), `query_deconstructor` (#5), `permit_strategy` (#11) — built + unit-tested, **not yet wired into `manager.py`'s live query path** |
+| rag/agents/citation_verifier | **New (Phase 5, #9).** `verify_answer(answer, chunks)` — deterministic token-span match first, one batched entailment call on leftovers; missing cited chunk = unsupported; flags uncited claims. Never raises |
+| rag/agents/deconstructor | **New (Phase 5, #5).** `deconstruct(query)` — compound → sub-questions + per-sub filters; deterministic gate returns the single form for simple queries (no LLM) and on any failure |
+| rag/agents/permit_strategy | **New (Phase 5, #11).** `plan_permits(context)` — permit set (mirrors `projectPermitRules.js`), pull-order sequencing, fee estimate; deterministic except an optional sequencing note |
+| forms/ontology | **New (Phase 5).** Field Ontology core (items 1-3): canonical vocabulary + per-field type/validation + source binding. Git-tracked module (no migration); new `forms/` package (AGENTS.md boundary `forms/ → db/, stdlib`) |
 | rag/prompts | **New (Phase 4).** Versioned fragment library (files + loader). `Fragment.id = dimension:key@version`; `library_version()`, `bound_notes()` |
 | rag/agents/prompt_router | **New (Phase 4).** Agent #2. Lookup composition; `research` default; persona/intent `max_tokens`; missing-fragment signal. No LLM call |
 | rag/agents/guardrail | **New (Phase 4 slice).** `check_truncation` → `answer_truncated` action item on `stop_reason == 'max_tokens'`. **Media B1:** `check_media_sources` drops any URL not from youtube.com/media_refs (the zero-unsourced-URL gate) → `unsourced_media_url` action item on a drop. Never raises |
@@ -466,11 +468,13 @@ already applied by name on multiple DBs). The dedupe correction is therefore
 | api/routes/agents_admin | **New (Phase 3).** `/admin/agents` action queue + metadata review + read-only `documents`; superadmin-gated; approve → governance + correction row |
 | frontend/src/admin | **New (Phase 3).** `SuperadminRoute`, `AgentDashboardPage` (3 tabs), `ActionQueue`, `MetadataReviewPane` (inline-editable proposals), `DocumentMetadataTable` |
 | audit | `record_step` driven by the runtime; the Manager writes its own deterministic step |
-| db | 026/027 trace + autonomy helpers; Phase 3 added `update_document_metadata_fields`; **Media B1:** `fetch_media_refs` (reader) + `insert_media_ref` (seed writer). **Phase 5:** `upsert_answer_feedback` + `answer_feedback_counts` + `list_downvotes_without_review` (feedback loop + Perf Review queue) |
+| db | 026/027 trace + autonomy helpers; Phase 3 added `update_document_metadata_fields`; **Media B1:** `fetch_media_refs` (reader) + `insert_media_ref` (seed writer). **Phase 5:** `upsert_answer_feedback` + `answer_feedback_counts` + `list_downvotes_without_review` (feedback + Perf Review queue); `list_agent_corrections` + `confirm_agent_correction` (dashboard v2 confirm-queue) |
+| api/routes/agents_admin | **Phase 3:** action queue + metadata review + read-only documents. **Phase 5 dashboard v2:** `/scorecard`, `/autonomy` (+set, 409 over ceiling), `/runs/{id}/trace`, `/feedback-summary`, `/corrections` (+`/confirm`). All superadmin-gated |
+| frontend/src/admin | **Phase 3:** `SuperadminRoute`, `AgentDashboardPage`, `ActionQueue`, `MetadataReviewPane`, `DocumentMetadataTable`. **Phase 5:** `AgentScorecard`, `AutonomyPanel`, `CorrectionQueue` tabs |
 | api/routes/query | Reduced to HTTP concerns; injects retrieval + grounding thresholds into the Manager. **Query-UX:** `_build_abstain_response` returns a 200 on `plan.abstained`; `_nudge_for` sets `persona_nudge` on both paths. **Media B1:** `_media_ref_responses` maps `plan.media_refs` → `MediaRefResponse` (both paths). **Media C2:** injects `retrieve_how_to` + how-to floors; success builder sets `how_to` + `educational_disclaimer`. **Phase 5:** both response paths carry `run_id` (`_current_run_id()` from the `@traced_run` ctx); `POST /query/feedback` upserts a thumbs up/down (404 on unknown run) |
 | frontend/src/QueryPage | **Query-UX:** renders `persona_nudge` (💡 banner) + abstains as a calm info card (not a red error); `top_k` 5→8. **Media B1:** "📺 How-to videos" section. **Media C2:** "🔧 How-To Guide" title + amber educational-disclaimer banner when `how_to`. **Phase 5:** 👍/👎 feedback bar (per-run state, optional comment on 👎) shown when the answer carries a `run_id` |
-| evaluation | Phase 4: `langsmith_eval.run_pipeline` takes a `persona` (routes + records fragment ids); `evaluation/persona_checks.py` (deterministic appropriateness). **Phase 5:** `evaluation/perf_review.py` — Performance Review (#24): deterministic-first attribution of a 👎 to an agent, else one `Tier.TOP` `run_agent` call; writes unconfirmed `agent_corrections`; batch-driven by `scripts/review_feedback.py` |
-| tests | **535 passing** (machine A, 2026-07-26). Media Curator suites + query-UX; **Phase 5 adds** `test_feedback_route.py` (5) + `test_perf_review.py` (7) |
+| evaluation | Phase 4: `langsmith_eval.run_pipeline` persona routing; `persona_checks.py`. **Phase 5:** `perf_review.py` (#24, attribute a 👎, batch `scripts/review_feedback.py`) + `agent_eval.py` (#23, per-agent metric contracts → breach files item + auto-demotes, batch `scripts/run_agent_eval.py`) |
+| tests | **575 passing** (machine A, 2026-07-26). **Phase 5 adds** `test_feedback_route.py` (5), `test_perf_review.py` (7), `test_agent_eval.py` (6), `test_citation_verifier.py` (6), `test_deconstructor.py` (6), `test_permit_strategy.py` (6), `test_ontology.py` (8), `test_dashboard_v2_routes.py` (8) |
 
 ## Decisions log
 

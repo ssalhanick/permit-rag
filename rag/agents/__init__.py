@@ -88,6 +88,27 @@ _RAG_AGENTS: tuple[AgentSpec, ...] = (
         metrics=("detection_precision", "false_alarm_rate"),
     ),
     AgentSpec(
+        name="citation_verifier",
+        callable=lazy("rag.agents.citation_verifier", "verify_answer"),
+        tier=Tier.MID,  # deterministic span match first, entailment only on leftovers
+        parallel_safe=True,  # reads (answer + chunks); post-generation, ∥ conflict analyzer
+        metrics=("claim_precision", "claim_recall"),
+    ),
+    AgentSpec(
+        name="query_deconstructor",
+        callable=lazy("rag.agents.deconstructor", "deconstruct"),
+        tier=Tier.CHEAP,  # single-shot extraction, gated by a deterministic heuristic
+        parallel_safe=True,  # pre-retrieval; enables one retrieval per sub-question
+        metrics=("sub_question_coverage", "filter_precision"),
+    ),
+    AgentSpec(
+        name="permit_strategy",
+        callable=lazy("rag.agents.permit_strategy", "plan_permits"),
+        tier=Tier.CHEAP,  # permit set/order/fees deterministic; only the note is a call
+        parallel_safe=True,
+        metrics=("permit_set_f1",),
+    ),
+    AgentSpec(
         name="mini_rag_conflicts",
         callable=lazy("rag.mini_rag", "detect_corpus_upload_conflicts"),
         tier=Tier.CHEAP,

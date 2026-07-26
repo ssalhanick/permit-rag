@@ -2513,6 +2513,59 @@ def correction_rate_by_agent(*, since: datetime) -> list[dict[str, Any]]:
         return conn.execute(sql, (since,)).fetchall()
 
 
+def list_agent_corrections(
+    *, confirmed: bool | None = None, source: str | None = None, limit: int = 200
+) -> list[dict[str, Any]]:
+    """Corrections for the dashboard confirm-queue, newest first.
+
+    ``confirmed=False`` is the Performance Review triage queue — attributions a
+    human has not yet confirmed. ``None`` returns both.
+    """
+    clauses, params = [], []
+    if confirmed is not None:
+        clauses.append("confirmed = %s")
+        params.append(confirmed)
+    if source is not None:
+        clauses.append("source = %s")
+        params.append(source)
+    where = f"WHERE {' AND '.join(clauses)}" if clauses else ""
+    sql = f"""
+        SELECT * FROM agent_corrections
+        {where}
+        ORDER BY created_at DESC
+        LIMIT %s;
+    """
+    params.append(limit)
+    with get_conn() as conn:
+        return conn.execute(sql, tuple(params)).fetchall()
+
+
+def confirm_agent_correction(
+    correction_id: UUID,
+    *,
+    attributed_agent: str | None = None,
+    confirmed_by: UUID | None = None,
+) -> dict[str, Any] | None:
+    """Confirm a correction (the human sign-off), optionally re-attributing it.
+
+    This is what turns a Performance Review proposal into training data. When
+    ``attributed_agent`` is given it overwrites the model's guess (the human
+    assigns blame on a low-confidence row); otherwise the existing value stands.
+    """
+    sql = """
+        UPDATE agent_corrections
+        SET confirmed        = true,
+            attributed_agent = COALESCE(%s, attributed_agent),
+            created_by       = COALESCE(%s, created_by)
+        WHERE id = %s
+        RETURNING *;
+    """
+    with get_conn() as conn:
+        row = conn.execute(sql, (attributed_agent, confirmed_by, correction_id)).fetchone()
+        conn.commit()
+    return row
+
+
 # ── Answer feedback ──────────────────────────────────────────
 
 

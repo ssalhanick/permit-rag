@@ -1,12 +1,18 @@
 """
-api/routes/agents_admin.py — superadmin agent dashboard (v1)
-=============================================================
-Phase 3's first demo-able surface: the action queue and the metadata review
+api/routes/agents_admin.py — superadmin agent dashboard
+=======================================================
+Phase 3's first demo-able surface (v1): the action queue and the metadata review
 pane. The Corpus Metadata Validator (agent #13) produces proposals and nothing
 can act on them without a review UI, so the queue ships with the validator.
 
-Two slices this phase (the scorecard, trace explorer, autonomy, and prompts tabs
-are Phase 5's dashboard v2):
+**Dashboard v2 (Phase 5)** adds the read/measure + control surfaces over the
+trace store the Phase-0 telemetry fills: ``/scorecard`` (per-agent rollup),
+``/autonomy`` (list + set, clamped to ceiling), ``/runs/{id}/trace`` (the
+explorer), ``/feedback-summary`` (the answer feedback loop + correction rate),
+and ``/corrections`` + ``/corrections/{id}/confirm`` — the queue where a human
+confirms a Performance Review (#24) attribution, turning it into training data.
+
+v1 surfaces:
 
 * **Action queue** — every open ``agent_action_items`` row, most severe first;
   resolve or dismiss inline with a note.
@@ -25,7 +31,7 @@ Import boundary: api/ → rag/, commerce/, db/, audit/, ingestion/, stdlib.
 from __future__ import annotations
 
 import logging
-from datetime import date
+from datetime import UTC, date, datetime, timedelta
 from typing import Annotated, Any
 from uuid import UUID
 
@@ -204,6 +210,112 @@ def apply_metadata_correction(
             actual=_applied_summary(body),
         )
     return {"document": updated_doc, "item": item}
+
+
+# ── Dashboard v2 (Phase 5): scorecard · autonomy · trace · feedback · corrections ──
+
+
+class SetAutonomyRequest(BaseModel):
+    """Set an agent's autonomy level (clamped to its ceiling in SQL)."""
+
+    level: str = Field(pattern="^L[0-3]$")
+    scope: str = "default"
+
+
+class ConfirmCorrectionRequest(BaseModel):
+    """Confirm a Performance Review attribution, optionally re-assigning blame."""
+
+    attributed_agent: str | None = None
+
+
+@router.get("/scorecard")
+def agent_scorecard(
+    _user: Annotated[dict, Depends(require_superadmin)],
+    days: int = Query(7, ge=1, le=365),
+) -> dict[str, Any]:
+    """Per-agent rollup (calls, cost, latency, deterministic rate, error rate)."""
+    since = datetime.now(UTC) - timedelta(days=days)
+    return {"days": days, "agents": db_client.agent_scorecard(since=since)}
+
+
+@router.get("/autonomy")
+def list_autonomy(
+    _user: Annotated[dict, Depends(require_superadmin)],
+) -> dict[str, Any]:
+    """Every agent's autonomy row (current level + ceiling) for the control panel."""
+    return {"agents": db_client.list_agent_autonomy()}
+
+
+@router.post("/autonomy/{agent_name}")
+def set_autonomy(
+    agent_name: str,
+    body: SetAutonomyRequest,
+    user: Annotated[dict, Depends(require_superadmin)],
+) -> dict[str, Any]:
+    """Set an agent's autonomy level. 409 when the level exceeds its ceiling."""
+    row = db_client.set_agent_autonomy(
+        agent_name, body.scope, current_level=body.level, updated_by=user["user_id"]
+    )
+    if row is None:
+        raise HTTPException(
+            status_code=409,
+            detail=f"{body.level} exceeds {agent_name}'s ceiling (or it is unregistered).",
+        )
+    return {"agent": row}
+
+
+@router.get("/runs/{run_id}/trace")
+def get_run_trace(
+    run_id: UUID,
+    _user: Annotated[dict, Depends(require_superadmin)],
+) -> dict[str, Any]:
+    """A run's full trace — the row plus its ordered steps — for the explorer."""
+    run = db_client.get_agent_run(run_id)
+    if run is None:
+        raise HTTPException(status_code=404, detail="Run not found.")
+    return {"run": run, "steps": db_client.list_agent_steps(run_id)}
+
+
+@router.get("/feedback-summary")
+def feedback_summary(
+    _user: Annotated[dict, Depends(require_superadmin)],
+    days: int = Query(30, ge=1, le=365),
+) -> dict[str, Any]:
+    """Answer-feedback totals + per-agent correction rate for the window."""
+    since = datetime.now(UTC) - timedelta(days=days)
+    return {
+        "days": days,
+        "feedback": db_client.answer_feedback_counts(since=since),
+        "corrections_by_agent": db_client.correction_rate_by_agent(since=since),
+    }
+
+
+@router.get("/corrections")
+def list_corrections(
+    _user: Annotated[dict, Depends(require_superadmin)],
+    confirmed: bool | None = Query(None),
+    limit: int = Query(200, ge=1, le=500),
+) -> dict[str, Any]:
+    """Corrections queue; ``confirmed=false`` is the Performance Review triage list."""
+    items = db_client.list_agent_corrections(confirmed=confirmed, limit=limit)
+    return {"corrections": items, "count": len(items)}
+
+
+@router.post("/corrections/{correction_id}/confirm")
+def confirm_correction(
+    correction_id: UUID,
+    body: ConfirmCorrectionRequest,
+    user: Annotated[dict, Depends(require_superadmin)],
+) -> dict[str, Any]:
+    """Confirm a Performance Review attribution — the human sign-off (training data)."""
+    row = db_client.confirm_agent_correction(
+        correction_id,
+        attributed_agent=body.attributed_agent,
+        confirmed_by=user["user_id"],
+    )
+    if row is None:
+        raise HTTPException(status_code=404, detail="Correction not found.")
+    return {"correction": row}
 
 
 # ── Helpers ──────────────────────────────────────────────────

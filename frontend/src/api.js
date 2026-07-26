@@ -498,4 +498,38 @@ export async function listCorpusDocuments({ status = null, municipality = null }
   return await requestJson(`/admin/agents/documents${qs ? `?${qs}` : ""}`);
 }
 
+// ── Dashboard v2 (Phase 5) ──────────────────────────────────
+export async function getAgentScorecard({ days = 7 } = {}) {
+  return await requestJson(`/admin/agents/scorecard?days=${days}`);
+}
+
+export async function listAgentAutonomy() {
+  return await requestJson("/admin/agents/autonomy");
+}
+
+export async function setAgentAutonomy(agentName, level, scope = "default") {
+  return await requestJson(`/admin/agents/autonomy/${encodeURIComponent(agentName)}`, {
+    method: "POST",
+    body: { level, scope },
+  });
+}
+
+export async function getFeedbackSummary({ days = 30 } = {}) {
+  return await requestJson(`/admin/agents/feedback-summary?days=${days}`);
+}
+
+export async function listAgentCorrections({ confirmed = null } = {}) {
+  const params = new URLSearchParams();
+  if (confirmed !== null) params.set("confirmed", String(confirmed));
+  const qs = params.toString();
+  return await requestJson(`/admin/agents/corrections${qs ? `?${qs}` : ""}`);
+}
+
+export async function confirmAgentCorrection(correctionId, attributedAgent = null) {
+  return await requestJson(`/admin/agents/corrections/${encodeURIComponent(correctionId)}/confirm`, {
+    method: "POST",
+    body: { attributed_agent: attributedAgent },
+  });
+}
+
 export { API_BASE_URL, DEFAULT_BASE_URL };
