@@ -438,3 +438,21 @@ def test_purge_project_upload_allows_non_project_tier_with_elevated_role(monkeyp
 
     assert response.status_code == 200
     assert response.json()["action"] == "purge_project_upload"
+
+
+def test_document_summary_serializes_how_to_transcript_metadata() -> None:
+    """Regression: a how-to transcript doc (migration 031: authority_level=
+    'educational', doc_type='how_to_video') must serialize without a
+    ValidationError — the /api/documents crash found verifying C2."""
+    from api.schemas import DocumentSummaryResponse
+
+    resp = DocumentSummaryResponse(
+        id=uuid4(), doc_id="how-to-abc123",
+        source_url="https://www.youtube.com/watch?v=abc123",
+        municipality="national", authority_level="educational",
+        doc_type="how_to_video", subject_tags=["install_gfci_outlet"],
+        document_status="active", is_current=True, effective_date=None,
+        review_due=None, retrieval_weight=1.0, updated_at=datetime.now(timezone.utc),
+    )
+    assert resp.authority_level == "educational"
+    assert resp.doc_type == "how_to_video"

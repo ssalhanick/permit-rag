@@ -36,9 +36,11 @@ backfill + superadmin dashboard v1, live on prod; migration 028 applied; backfil
 `journals/session_20260724_phase3.md`. Phases 0–2 on prod
 (`journals/session_20260724_phase2.md`).
 
-> **Migration numbering.** Phase 3 → **028** (applied on prod). Phase 4 → **029**
-> (`029_prompt_fragments.sql`, applied on prod RDS + machine B). Phase 6 → 030. 027
-> is `027_agent_action_item_dedupe`; the duplicate 026 is recorded, not renamed.
+> **Migration numbering.** Phase 3 → **028** (prod). Phase 4 → **029**
+> (`029_prompt_fragments.sql`, prod + machine B). Media Curator → **030**
+> (`media_refs`, B1) + **031** (`content_class`/transcripts, C1), both applied prod
+> + machine B. **Phase 6 (ontology/bids) cascades to 032.** 027 is
+> `027_agent_action_item_dedupe`; the duplicate 026 is recorded, not renamed.
 
 ## Phase 4 core deliverables — DEPLOYED (2026-07-25)
 

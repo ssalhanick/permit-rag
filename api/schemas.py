@@ -333,8 +333,12 @@ class DocumentSummaryResponse(BaseModel):
     doc_id: str = Field(description="Human-readable document identifier.")
     source_url: str = Field(description="Canonical source URL.")
     municipality: str = Field(description="Source municipality.")
-    authority_level: AuthorityLevelType = Field(description="Authority level.")
-    doc_type: DocTypeType = Field(description="Document type.")
+    # Plain str (not the Literal) so a how-to transcript doc (migration 031:
+    # authority_level='educational', doc_type='how_to_video') serializes without a
+    # ValidationError. The compliance corpus lists filter to content_class=authority,
+    # but this keeps every serialization path crash-safe.
+    authority_level: str = Field(description="Authority level.")
+    doc_type: str = Field(description="Document type.")
     subject_tags: list[str] = Field(description="Subject tags from registry metadata.")
     document_status: DocumentStatusType = Field(description="Lifecycle status.")
     is_current: bool = Field(description="Whether this row is the current active revision.")

@@ -216,11 +216,14 @@ def list_documents(
     status: str | None = None,
     authority_level: str | None = None,
     doc_type: str | None = None,
+    content_class: str | None = "authority",
 ) -> list[dict[str, Any]]:
     """
     List documents with optional municipality/status/authority/doc_type filters.
 
-    Returns all columns, ordered by municipality then doc_id.
+    ``content_class`` defaults to ``"authority"`` so the compliance corpus views
+    exclude how-to video transcripts (migration 031). Pass ``None`` to list every
+    class. Returns all columns, ordered by municipality then doc_id.
     """
     clauses: list[str] = []
     params: dict[str, Any] = {}
@@ -237,6 +240,9 @@ def list_documents(
     if doc_type:
         clauses.append("doc_type = %(doc_type)s::doc_type")
         params["doc_type"] = doc_type
+    if content_class:
+        clauses.append("content_class = %(content_class)s")
+        params["content_class"] = content_class
 
     where = "WHERE " + " AND ".join(clauses) if clauses else ""
     sql = f"SELECT * FROM documents {where} ORDER BY municipality, doc_id;"

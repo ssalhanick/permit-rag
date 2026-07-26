@@ -99,6 +99,25 @@ answer. Compliance faithfulness stays on the authority-only path.
   `effective_date` by design)
 - Multi-sample live RAGAs baseline before any faithfulness *gate* (STATE punch 3)
 
+### Absorption into other agents (build the general capability once)
+
+Roughly half of Half-2 is a media-scoped instance of a general agent the
+architecture already plans. Absorb these rather than building media one-offs — the
+tradeoff is the media benefit waits until that agent lands (all post-Phase-4).
+
+| H2 item | Absorbed into | Stays Media/Phase-4 |
+|---------|---------------|---------------------|
+| H2-1 corpus growth | — (media content/ops) | all of it |
+| H2-2 B2 web_search | the `run_agent tools=` runtime extension is **shared infra** (Web Form Navigator #19 needs it too) | youtube-scoped wiring + guardrail gate |
+| **H2-3 link liveness** | **Freshness Watcher (#15)** — it *is* freshness monitoring (probe → liveness diff → action queue, never silent-delete) | — (fully absorbed) |
+| H2-4 citation polish | disclaimer-presence → **Guardrail (#4)**; "cite the video, never AHJ authority" → **Citation Verifier (#9, Phase 5)** | timestamp deep-links (`?t=`, media UI) |
+| H2-5 ops/legal | multi-sample RAGAs baseline → **Evaluator (#23, Phase 5)** (already STATE punch #2) | legal review = business gate (no phase) |
+
+**Net:** Media Curator's own remaining Phase-4 scope is **C2 deploy → H2-1 corpus →
+H2-2 media wiring → timestamp links**. H2-3, most of H2-4, and H2-5's eval piece
+move onto Freshness Watcher / Citation Verifier / Evaluator / runtime as those land
+(hooks noted in `docs/agent_architecture.md` at #15/#9/#23).
+
 ### Explicitly deferred (original vision, not current half)
 
 - Reddit harvest + engagement quality composite scores

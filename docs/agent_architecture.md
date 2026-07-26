@@ -51,7 +51,7 @@ Six defects block the rest:
 | 6 | **Jurisdiction** | Wraps `rag/jurisdiction_resolver.py`. LLM only on ETJ/county overlap. | wrap existing |
 | 7 | **Retrieval Strategist** | top_k / hybrid / filters; re-retrieve on guard failure. | `rag/agents/retrieval.py` |
 | 8 | **Answer Generator** | Exists — `rag/generator.py::generate_answer`. | existing |
-| 9 | **Citation Verifier** | Deterministic span-match first; LLM entailment on leftovers. | `rag/agents/citation_verifier.py` |
+| 9 | **Citation Verifier** | Deterministic span-match first; LLM entailment on leftovers. _Media hook (H2-4): ensure how-to answers cite the video (title+url), never framed as AHJ authority._ | `rag/agents/citation_verifier.py` |
 | 10 | **Conflict Analyzer** | Semantic tier C atop `rag/conflict_detector.py`. | extend existing |
 | 11 | **Permit Strategy** | Project context → permit set, sequencing, fees. | `rag/agents/permit_strategy.py` |
 | 12 | **Instructions** | README TODO — design intent → step-by-step. Persona-aware. | `rag/agents/instructions.py` |
@@ -61,7 +61,7 @@ Six defects block the rest:
 |---|-------|------|--------|
 | 13 | **Corpus Metadata Validator** | Verifies uploaded/pulled doc metadata is *true*, not just present. | `ingestion/metadata_agent.py` |
 | 14 | **Document Intake** | Wraps `harvester.py`, `page_crawler.py`, `governance.py`. Proposes supersede. | `rag/agents/intake.py` |
-| 15 | **Corpus Freshness Watcher** | Scheduled re-pull + checksum diff + flag. | `rag/agents/freshness.py` |
+| 15 | **Corpus Freshness Watcher** | Scheduled re-pull + checksum diff + flag. _Media hook (H2-3, absorbs Media Curator link-liveness): probe `media_refs.url` → dead-link diff → action queue; deactivate/flag, never silent-delete._ | `rag/agents/freshness.py` |
 | 16 | **Bid Evaluator** | Parse + score an uploaded contractor bid. | `bids/evaluator.py` |
 | 17 | **Media Curator** | Sourced how-to video links. Never emits a URL from model memory. | `rag/agents/media.py` |
 | 18 | **PDF Form** | AcroForm/OCR permit PDFs → schema → fill → flag unknowns. | `forms/pdf_agent.py` |
@@ -73,7 +73,7 @@ Six defects block the rest:
 ### Tier 3 — meta
 | # | Agent | Owns | Module |
 |---|-------|------|--------|
-| 23 | **Evaluator** | Per-agent metric contracts. | `evaluation/agent_eval.py` |
+| 23 | **Evaluator** | Per-agent metric contracts. _Media hook (H2-5): the multi-sample live RAGAs baseline + repoint `eval_guard` off the stale cached run belongs here (STATE punch #2)._ | `evaluation/agent_eval.py` |
 | 24 | **Performance Review** | Attributes feedback to the responsible agent + step, with evidence. | `evaluation/perf_review.py` |
 | 25 | **Optimizer** | Offline. Traces + corrections → proposed fixes → eval → PR on win. | `evaluation/optimizer.py` |
 | 26 | **Crystallizer** | Offline. Stable trace clusters → deterministic artifact + tests → PR. | `evaluation/crystallizer.py` |
