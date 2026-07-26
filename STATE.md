@@ -1,8 +1,16 @@
 # permit_rag — State
 
-_Updated: 2026-07-26 (**Phase 4 near-closed.** Media Curator on prod: B1 links, C1 transcripts, C2 how-to answers, semantic links (H2-6.1), + This Old House channel data (18 videos synced via `sync_how_to_to_prod`). Persona/jurisdiction/settings fixes + `/api/documents` fix deployed. **Deploy-pending (ops tooling, not on query hot path):** channel crawl (H2-6.2, migration 032 — 032 already applied on prod), throttle + sync scripts — ff-merge `agents/phase-4`→`deployment/sites` to close. **Deferred (not Phase 4):** B2 web_search, link liveness→Freshness#15, proxy, multi-sample RAGAs→Evaluator#23. Canonical plan: `docs/media-curator-plan.md`. **Next: close Phase 4 → Phase 5.**)_
+_Updated: 2026-07-26 (**Phase 4 CLOSED.** Media Curator on prod: B1 links, C1 transcripts, C2 how-to answers, semantic links (H2-6.1), + This Old House channel data (18 videos synced via `sync_how_to_to_prod`). Persona/jurisdiction/settings fixes + `/api/documents` fix deployed. **Ops tooling ff-merged to `deployment/sites`:** channel crawl (H2-6.2, migration 032 — applied on prod), throttle + block-aware ingest, sync script — all committed + pushed (branches `agents/phase-4` = `agents/phase-5` = `deployment/sites` = origin at `203ce7d`). README: Media Curator → Completed. **Deferred (not Phase 4):** B2 web_search, link liveness→Freshness#15, proxy, multi-sample RAGAs→Evaluator#23. Canonical plan: `docs/media-curator-plan.md`. **Next: Phase 5** — Evaluator #23 + feedback loop first, then answer agents (#5/#9/#11) + Performance Review #24 + dashboard v2 + Field Ontology core; fold in the multi-sample live RAGAs baseline (punch #3).)_
 
 ## Phase
+
+**Phase 4 CLOSED (2026-07-26).** Router + fragment library + query-UX pass +
+Media Curator (#17: B1/C1/C2 + semantic links + channel data) all deployed to
+prod; ops tooling (channel crawl / throttle / sync) committed + ff-merged to
+`deployment/sites` and pushed (all branches + origin at `203ce7d`); README moved
+Media Curator → Completed. No code changed this session — doc/parity close only,
+so the 2026-07-25 machine-A **474 pytest** result stands. **Active phase: Phase 5**
+(Evaluator + feedback loop first). Details below are the historical Phase 4 record.
 
 **Agent architecture Phase 4 core — DEPLOYED to prod (2026-07-25).** GHA green;
 migration 029 applied on prod RDS; `/api/documents` = 19 (corpus intact →
@@ -40,7 +48,7 @@ backfill + superadmin dashboard v1, live on prod; migration 028 applied; backfil
 > (`029_prompt_fragments.sql`, prod + machine B). Media Curator → **030**
 > (`media_refs`, B1) + **031** (`content_class`/transcripts, C1), both applied prod
 > + machine B; + **032** (`media_channels`/`media_refs.channel_id`, H2-6 channel
-> crawl — **not applied yet**). **Phase 6 (ontology/bids) cascades to 033.** 027 is
+> crawl — **applied on prod** 2026-07-25). **Phase 6 (ontology/bids) cascades to 033.** 027 is
 > `027_agent_action_item_dedupe`; the duplicate 026 is recorded, not renamed.
 
 ## Phase 4 core deliverables — DEPLOYED (2026-07-25)
@@ -296,29 +304,21 @@ journal only." **Phase 3 is fully done.**_
 
 ## Next tasks
 
-1. **Close Phase 4 (Router + fragments + Media Curator).** All user-facing Media
-   Curator work is on prod (B1 links, C1 transcripts, C2 how-to answers, semantic
-   links, This Old House channel data). Canonical plan: `docs/media-curator-plan.md`.
-   To close:
-   - Commit the throttle (`ingestion/transcript.py`, `ingest_media_transcripts.py`)
-     + `sync_how_to_to_prod.py`, then **ff-merge `agents/phase-4` → `deployment/sites`**
-     (brings channel crawl `63a2bd2`/`912bce5` + throttle + sync to the deployed
-     branch). Migration `032` already on prod; all ops tooling, not on the query hot
-     path, so prod already works — this is repo parity.
-   - `py -m pytest tests/ -q` green; move **Media Curator / Phase 4 → Completed** in
-     README.
-   - **Deferred, NOT Phase 4 blockers** (in the plan): B2 `web_search` (needs
-     `claude-api` skill + `run_agent tools=`); link liveness → **Freshness Watcher
-     #15**; proxy (`YOUTUBE_PROXY_*`) for at-scale ingest; multi-sample RAGAs →
-     **Evaluator #23**.
-2. **Phase 5 (course cut line).** Answer agents — Query Deconstructor (#5),
-   Citation Verifier (#9), Permit Strategy (#11) — + **Evaluator (#23)** +
-   Performance Review (#24) + feedback UI + dashboard v2 + Field Ontology core
-   (items 1–3). Start with the Evaluator + feedback loop (they anchor the rest) and
-   fold in the **multi-sample live RAGAs baseline** (also punch #3): the 2026-07-25
-   run (`ragas_20260725_011651.json`, avg 0.843) is one live sample; run 3+, average
-   out q6's ±0.15, and repoint `eval_guard` off the stale cached `ragas_20260531`.
-3. **Pre-existing, not Phase 4:** q6 (building height) + q1 (electrical)
+1. **Phase 5 (course cut line) — the active phase.** Answer agents — Query
+   Deconstructor (#5), Citation Verifier (#9), Permit Strategy (#11) — +
+   **Evaluator (#23)** + Performance Review (#24) + feedback UI + dashboard v2 +
+   Field Ontology core (items 1–3). **Start with the Evaluator + feedback loop**
+   (they anchor everything else) and fold in the **multi-sample live RAGAs
+   baseline** (also punch #3): the 2026-07-25 run (`ragas_20260725_011651.json`,
+   avg 0.843) is one live sample; run 3+, average out q6's ±0.15, and repoint
+   `eval_guard` off the stale cached `ragas_20260531`. Roster/spec detail in
+   `docs/agent_architecture.md`.
+   - **Deferred Media Curator items, absorbed into Phase 5+ agents** (not lost —
+     tracked in `docs/media-curator-plan.md`): B2 `web_search` (needs `claude-api`
+     skill + `run_agent tools=`, shared runtime infra); link liveness →
+     **Freshness Watcher #15**; proxy (`YOUTUBE_PROXY_*`) for at-scale ingest;
+     multi-sample RAGAs → **Evaluator #23** (fold into the item above).
+2. **Pre-existing, not Phase 4:** q6 (building height) + q1 (electrical)
    faithfulness; the `NLI inference failed ('type')` classifier warning (falls
    back to keyword rules, non-fatal); q6/Dallas 3-part-PDF retrieval weakness.
 
@@ -355,8 +355,8 @@ Requires PG12+ for `ALTER TYPE … ADD VALUE` in a txn (schema is PG15).
 | Database | State (as last recorded) |
 |----------|--------------------------|
 | Local Docker (machine A, this repo) | 018–021, 023–026 applied; **022 missing**; 026 pre-fix so 027 required here. **028/029/030/031/032 not applied. Corpus empty.** |
-| Machine B local (campus corpus DB via `.env.local`) | Current through 027; **029 applied 2026-07-25** (Phase 4 demo); 19 docs. **030 + 031 applied 2026-07-25** (media_refs seeded; transcripts ingested; RAGAs non-regression). **032 pending** (H2-6 channel crawl). (028 only needed for a local `--apply`.) |
-| Prod RDS | **Current through 031** (028/029 Phase 3–4; **030 + 031 Media Curator applied 2026-07-25** — media_refs seeded, transcripts ingested). Query-UX pass added **no** migration. **032 (channel crawl) pending. C2 + semantic-links are code-only.** Do NOT re-apply 027–031. |
+| Machine B local (campus corpus DB via `.env.local`) | Current through 027; **029 applied 2026-07-25** (Phase 4 demo); 19 docs. **030 + 031 applied 2026-07-25** (media_refs seeded; transcripts ingested; RAGAs non-regression). **032 applied 2026-07-25** (H2-6 channel crawl; the embed/crawl source for the prod `sync_how_to_to_prod`). (028 only needed for a local `--apply`.) |
+| Prod RDS | **Current through 032** (028/029 Phase 3–4; **030 + 031 + 032 Media Curator applied 2026-07-25** — media_refs seeded, transcripts ingested, media_channels + This Old House synced). Query-UX pass + C2 + semantic-links are code-only. Do NOT re-apply 027–032. |
 
 **Why target confusion keeps happening.** `bootstrap_env` loads `.env` last with
 `override=True`, and `ENVIRONMENT=production` selects `.env.production`; all three
