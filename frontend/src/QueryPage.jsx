@@ -303,7 +303,11 @@ export default function QueryPage() {
             <Card className="p-4">
               <CardHeader>
                 <CardTitle className="text-xl">
-                  {activeAnswer.abstained ? "No confident answer found" : "Generated Compliance Answer"}
+                  {activeAnswer.how_to
+                    ? "🔧 How-To Guide"
+                    : activeAnswer.abstained
+                      ? "No confident answer found"
+                      : "Generated Compliance Answer"}
                 </CardTitle>
                 {activeAnswer.resolved_municipality && (
                   <CardDescription className="text-blue-600 font-medium">
@@ -317,6 +321,14 @@ export default function QueryPage() {
                   <div className="flex gap-3 p-3 bg-blue-50 border border-blue-200 text-blue-800 rounded-lg text-sm">
                     <span className="text-base">💡</span>
                     <span>{activeAnswer.persona_nudge}</span>
+                  </div>
+                )}
+
+                {/* Educational disclaimer (Media C2): how-to answer from a video, not code */}
+                {activeAnswer.how_to && activeAnswer.educational_disclaimer && (
+                  <div className="flex gap-3 p-3 bg-amber-50 border border-amber-200 text-amber-800 rounded-lg text-sm">
+                    <span className="text-base">📎</span>
+                    <span>{activeAnswer.educational_disclaimer}</span>
                   </div>
                 )}
 

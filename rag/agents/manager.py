@@ -143,6 +143,14 @@ class ManagerDeps:
     min_top_sim: float = 0.74
     observer: StepObserver | None = None
     governor: BudgetGovernor | None = None
+    # Media Curator Slice C2 — the DIY how-to fallback. When a diy query abstains
+    # on compliance, retrieve over how-to transcripts instead. Injected like
+    # ``retrieve``; None disables the fallback (the query stays a plain abstain).
+    # The how-to grounding floor is deliberately looser than compliance — transcript
+    # prose sits lower on cosine similarity than statute text.
+    retrieve_how_to: Callable[..., Any] | None = None
+    how_to_min_chunks: int = 1
+    how_to_min_top_sim: float = 0.50
 
 
 @dataclass
@@ -173,6 +181,10 @@ class ManagerResult:
     # Phase 4 second pass: sourced how-to videos for the diy path. Empty for every
     # other persona, on an abstain, and when the query names no curated task.
     media_refs: list[Any] = field(default_factory=list)
+    # Media C2: True when this answer was generated from how-to transcripts (a diy
+    # compliance-abstain grounded on video content). The route attaches the
+    # educational disclaimer and the frontend labels it accordingly.
+    how_to: bool = False
 
     @property
     def retrieval(self) -> Any:
@@ -209,7 +221,11 @@ class _PlanState:
     # Set by _route_prompt so the media curator can read the resolved persona
     # (unknown/absent → research → no videos) without re-routing.
     resolved_persona: str | None = None
+    routed: Any = None  # the RoutedPrompt (or None on router failure); reused by C2
     media_refs: list[Any] = field(default_factory=list)
+    # Media C2: True when a diy compliance-abstain was answered from how-to
+    # transcripts instead. The answer is grounded in video content, not code.
+    how_to: bool = False
 
 
 def _agent(name: str) -> Callable[..., Any]:
@@ -458,6 +474,7 @@ def _route_prompt(state: _PlanState) -> Any:
         return None
     state.persona_defaulted = routed.persona_defaulted
     state.resolved_persona = routed.persona
+    state.routed = routed
     # A deterministic step of its own, so fragment ids are attributable at
     # router grain too — not only on the generator step.
     record_step(
@@ -569,6 +586,57 @@ def _curate_media(state: _PlanState) -> None:
         log.warning("media curator failed (%s) — no videos attached", exc)
 
 
+def _how_to_fallback(state: _PlanState) -> None:
+    """Answer a diy compliance-abstain from how-to transcripts (Media C2).
+
+    When a diy query falls below the compliance grounding floor, retrieve over the
+    segregated how-to class (video transcripts). If that clears the looser how-to
+    floor, generate a grounded how-to answer with the diy prompt — replacing the
+    abstain. The answer is grounded in **video content, never permit code**; the
+    route attaches an educational (not AHJ-compliance) disclaimer. Best-effort:
+    any miss or failure leaves the plain abstain (with its curated links) intact.
+    """
+    deps = state.deps
+    if not (state.abstained and state.resolved_persona == "diy" and deps.retrieve_how_to):
+        return
+    try:
+        result = deps.retrieve_how_to(state.request.query, top_k=state.request.top_k or 5)
+    except Exception as exc:  # a fallback must never break the answer path
+        log.warning("how-to retrieval failed (%s) — staying abstained", exc)
+        return
+
+    if result.num_results < deps.how_to_min_chunks or result.top_similarity < deps.how_to_min_top_sim:
+        log.info(
+            "how-to fallback below floor (chunks=%d, top_sim=%.3f) — staying abstained",
+            result.num_results, result.top_similarity,
+        )
+        return
+
+    chunks = list(result.passing_chunks)
+    try:
+        gen = _agent("answer_generator")(
+            state.request.query, chunks,
+            project_context=state.store.get_or_none(state.project_context_ref),
+            routed=state.routed,
+        )
+    except Exception as exc:  # generation failure here is non-fatal: keep the abstain
+        log.warning("how-to generation failed (%s) — staying abstained", exc)
+        return
+
+    _guard_truncation(state, gen)
+    state.generation_ref = state.store.put("answer", gen, summary=_summarise_generation(gen))
+    state.governor.charge(
+        int(getattr(gen, "input_tokens", 0) or 0), int(getattr(gen, "output_tokens", 0) or 0)
+    )
+    # A grounded how-to answer replaces the abstain.
+    state.abstained = False
+    state.abstain_message = None
+    state.how_to = True
+    _notify(deps, "finished", "how_to_generation", {
+        "model": gen.model, "num_chunks": len(chunks), "top_sim": result.top_similarity,
+    })
+
+
 # ── Summaries — what the Manager sees instead of the payload ─
 
 
@@ -620,7 +688,7 @@ _PLAN: tuple[tuple[Callable[[_PlanState], None], ...], ...] = (
     (_classify_permit_types, _resolve_municipality),
     (_run_retrieval, _check_grounding),
     (_detect_conflicts, _detect_upload_conflicts, _load_project_context),
-    (_generate, _curate_media),
+    (_generate, _curate_media, _how_to_fallback),
 )
 
 
@@ -689,4 +757,5 @@ def _assemble(state: _PlanState, iterations: int) -> ManagerResult:
         abstained=state.abstained,
         abstain_message=state.abstain_message,
         media_refs=state.media_refs,
+        how_to=state.how_to,
     )

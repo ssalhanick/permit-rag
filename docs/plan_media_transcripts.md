@@ -9,8 +9,16 @@ _Drafted 2026-07-25. Follows Media Curator B1 (curated links)._
 > (`match_chunks` unchanged sig + `match_how_to_chunks` + `insert_document`
 > content_class + `list_media_refs`), `ingestion/transcript.py`,
 > `scripts/ingest_media_transcripts.py`, `pyproject` dep, `tests/test_transcript.py`.
-> **Verify on machine B** (install dep → apply 031 → ingest → **RAGAs**) before
-> **C2** (the how-to answer wiring below) is built.
+> **C1 VERIFIED + DEPLOYED (2026-07-25):** RAGAs clean (0.849, retrieval identical);
+> 030+031 on prod, transcripts ingested via local embed → prod RDS.
+>
+> **C2 BUILT (2026-07-25, machine-A pytest + frontend build green; not deployed):**
+> `retrieve_how_to`, `ManagerDeps.retrieve_how_to` + looser how-to floor (1 / 0.50),
+> `manager._how_to_fallback` (diy compliance-abstain → grounded how-to answer that
+> replaces the abstain), `AnswerResponse.how_to` + `educational_disclaimer`,
+> `QueryPage` "🔧 How-To Guide" + amber banner. Decisions realized: how-to triggers
+> **only on a compliance abstain**; **one video ≈ one document**; compliance answers
+> are never overridden; non-diy never tries how-to.
 
 ## Goal
 

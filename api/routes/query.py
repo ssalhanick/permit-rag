@@ -47,13 +47,17 @@ from audit.logger import annotate_run, traced_run
 from db.client import get_jurisdiction
 from rag.agents.manager import ManagerDeps, ManagerError, ManagerRequest, run_query_plan
 from rag.generator import PROMPT_VERSION
-from rag.retriever import retrieve, retrieve_with_project
+from rag.retriever import retrieve, retrieve_how_to, retrieve_with_project
 
 log = logging.getLogger(__name__)
 
 router = APIRouter(tags=["query"])
 MIN_GROUNDED_CHUNKS = int(os.environ.get("RAG_GUARD_MIN_CHUNKS", "3"))
 MIN_GROUNDED_TOP_SIM = float(os.environ.get("RAG_GUARD_MIN_TOP_SIM", "0.74"))
+# Media C2 — the diy how-to fallback floor. Looser than compliance: transcript
+# prose sits lower on cosine similarity than statute text.
+HOW_TO_MIN_CHUNKS = int(os.environ.get("RAG_HOWTO_MIN_CHUNKS", "1"))
+HOW_TO_MIN_TOP_SIM = float(os.environ.get("RAG_HOWTO_MIN_TOP_SIM", "0.50"))
 
 _AHJ_DISCLAIMER_TEXT = (
     "Results are based on published ordinance text and may not reflect current "
@@ -62,6 +66,15 @@ _AHJ_DISCLAIMER_TEXT = (
     "— has final authority over all permit decisions. Always verify requirements "
     "with the relevant department before proceeding. This tool is a research aid, "
     "not a substitute for professional review."
+)
+
+# Media C2: attached to a how-to answer (grounded in instructional video content,
+# not permit code). Educational, and explicit about what should not be DIY.
+_EDUCATIONAL_DISCLAIMER_TEXT = (
+    "This is general how-to guidance drawn from an instructional video, not permit "
+    "or code-compliance advice. Confirm whether your project needs a permit and what "
+    "the rules are with your local authority (AHJ). Use a licensed professional for "
+    "gas, electrical service-panel, structural, or other licensed-trade work."
 )
 
 # Clarification nudge (Phase 4): shown when no persona was set and the answer used
@@ -238,6 +251,9 @@ def _build_manager_deps(observer: Any) -> ManagerDeps:
         min_chunks=MIN_GROUNDED_CHUNKS,
         min_top_sim=MIN_GROUNDED_TOP_SIM,
         observer=observer,
+        retrieve_how_to=retrieve_how_to,
+        how_to_min_chunks=HOW_TO_MIN_CHUNKS,
+        how_to_min_top_sim=HOW_TO_MIN_TOP_SIM,
     )
 
 
@@ -614,6 +630,10 @@ def query_answer(
         conflict_warnings=conflict_warnings,
         persona_nudge=_nudge_for(plan),
         media_refs=_media_ref_responses(plan),
+        how_to=getattr(plan, "how_to", False),
+        educational_disclaimer=(
+            _EDUCATIONAL_DISCLAIMER_TEXT if getattr(plan, "how_to", False) else None
+        ),
     )
     # Insert query log in Postgres (background, non-blocking)
     try:

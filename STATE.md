@@ -1,6 +1,6 @@
 # permit_rag — State
 
-_Updated: 2026-07-25 (Phase 4 core + query-UX pass DEPLOYED to prod. **Media Curator #17 Slice B1 BUILT + pytest GREEN (machine B)** on `feat/media-curator` — migration 030_media_refs + deterministic diy-only curator + Guardrail source gate + Manager wave-4 wiring + AnswerResponse.media_refs + QueryPage videos section + seed script + tests. Remaining to ship: apply 030 + seed vetted links + diy demo on machine B, then deploy. Phase 3 done + on prod.)_
+_Updated: 2026-07-25 (Phase 4 core + query-UX pass + **Media Curator B1 (links) + C1 (transcript ingest/segregation) DEPLOYED to prod** — 030+031 applied, media_refs seeded, transcripts ingested (local embed → prod RDS); C1 RAGAs clean (0.849, retrieval unchanged). **C2 (diy how-to answer from transcripts) BUILT** on `agents/phase-4` — pytest + frontend build green; NOT deployed. Phase 3 done + on prod.)_
 
 ## Phase
 
@@ -329,10 +329,24 @@ journal only." **Phase 3 is fully done.**_
        `ingest_media_transcripts.py --local` (dry-run) then `--apply` →
        **run RAGAs to confirm compliance retrieval is unchanged** (AGENTS.md:
        never change retrieval without RAGAs after; default filter is authority-only).
-     - **C2 NOT built:** wire the how-to retrieval (`match_chunks(content_class=
-       'how_to')`) into the diy path so a compliance-abstain becomes a grounded
-       how-to answer + the video, with an **educational disclaimer** (not the AHJ
-       one). Depends on C1 being verified on machine B first.
+     - **C1 VERIFIED (machine B, 2026-07-25):** overload-fix applied (a pre-release
+       breaking 031 had left a stray 4-arg `match_chunks` on the local corpus DB —
+       dropped via `scripts/fix_match_chunks_overload.py`; prod was never affected).
+       RAGAs re-run: **avg faithfulness 0.849, top_sim 0.794 — identical retrieval,
+       no compliance regression** from the `match_chunks` change. Deployed to prod
+       (030+031 applied, media_refs seeded, transcripts ingested via local embed →
+       prod RDS).
+     - **C2 BUILT (machine-A: 35+ pytest green, frontend build green):** the diy
+       how-to answer. `rag/retriever.retrieve_how_to` (embed + `match_how_to_chunks`,
+       no compliance rerank/guardrails); `ManagerDeps.retrieve_how_to` +
+       `how_to_min_chunks/top_sim` (looser floor: 1 / 0.50) injected by the route;
+       `manager._how_to_fallback` (wave 4) — on a **diy compliance-abstain**,
+       retrieves transcripts, and if they clear the how-to floor generates a
+       grounded how-to answer that **replaces** the abstain (`abstained→False`,
+       `how_to→True`); reuses the routed diy prompt. `AnswerResponse.how_to` +
+       `educational_disclaimer`; `QueryPage.jsx` "🔧 How-To Guide" title + amber
+       educational banner. Compliance answers are never overridden; non-diy never
+       tries how-to. **Not deployed yet.**
    - **B2 (deferred):** the `web_search` youtube-only path. Needs the `claude-api`
      skill (tool id) + `run_agent` learning `tools=` + a `web_search_tool_result`
      parser + Budget-Governor cap. Same Guardrail gate. See `docs/plan_media_curator.md`.
@@ -406,7 +420,8 @@ already applied by name on multiple DBs). The dedupe correction is therefore
 
 | Module | Current state |
 |--------|---------------|
-| rag/agents/manager | Phase 2 orchestrator; **Phase 4:** `_generate` routes the prompt (deterministic `prompt_router` step + fragment ids), derives intent, passes `routed=`, runs the Guardrail truncation trip, threads `persona_defaulted` to the nudge. **Query-UX:** a grounding-floor miss sets `abstained` + `abstain_message` (soft abstain) instead of raising; `_generate` short-circuits (routes for the nudge, skips generation). **Media (B1):** `_route_prompt` persists `resolved_persona`; wave 4 adds `_curate_media` (∥ `_generate`, diy-only) → Guardrail source gate → `media_refs` threaded through `ManagerResult`. **Abstain quick-win:** `_curate_media` runs on a diy abstain too (links show even with no answer); the abstain response carries `media_refs` |
+| rag/agents/manager | Phase 2 orchestrator; **Phase 4:** `_generate` routes the prompt (deterministic `prompt_router` step + fragment ids), derives intent, passes `routed=`, runs the Guardrail truncation trip, threads `persona_defaulted` to the nudge. **Query-UX:** a grounding-floor miss sets `abstained` + `abstain_message` (soft abstain) instead of raising; `_generate` short-circuits (routes for the nudge, skips generation). **Media (B1):** `_route_prompt` persists `resolved_persona`; wave 4 adds `_curate_media` (∥ `_generate`, diy-only) → Guardrail source gate → `media_refs` threaded through `ManagerResult`. **Abstain quick-win:** `_curate_media` runs on a diy abstain too (links show even with no answer); the abstain response carries `media_refs`. **Media C2:** `_how_to_fallback` (wave 4) — a diy compliance-abstain retrieves transcripts (`deps.retrieve_how_to`) and, if they clear the looser how-to floor, generates a grounded how-to answer that replaces the abstain (`how_to=True`); `state.routed` reused |
+| rag/retriever | **Media C2:** `retrieve_how_to` — lean transcript retrieval (embed + `match_how_to_chunks`, no compliance rerank/guardrails, no municipality filter) |
 | rag/agents/artifacts | **New (Phase 2).** `ArtifactRef` + `ArtifactStore`; bounds the Manager's context |
 | rag/agents/budget | **New (Phase 2).** Deterministic Budget Governor; uncapped default = no-op |
 | rag/agents/registry | Roster is 13 specs, all lazily bound (Media B1 added `media_curator`; Phase 4 added `prompt_router` + `guardrail`; Phase 3 added `metadata_validator` via api DI) |
@@ -425,8 +440,8 @@ already applied by name on multiple DBs). The dedupe correction is therefore
 | frontend/src/admin | **New (Phase 3).** `SuperadminRoute`, `AgentDashboardPage` (3 tabs), `ActionQueue`, `MetadataReviewPane` (inline-editable proposals), `DocumentMetadataTable` |
 | audit | `record_step` driven by the runtime; the Manager writes its own deterministic step |
 | db | 026/027 trace + autonomy helpers; Phase 3 added `update_document_metadata_fields`; **Media B1:** `fetch_media_refs` (reader) + `insert_media_ref` (seed writer) |
-| api/routes/query | Reduced to HTTP concerns; injects retrieval + grounding thresholds into the Manager. **Query-UX:** `_build_abstain_response` returns a 200 on `plan.abstained`; `_nudge_for` sets `persona_nudge` on both paths. **Media B1:** `_media_ref_responses` maps `plan.media_refs` → `MediaRefResponse` on the success path |
-| frontend/src/QueryPage | **Query-UX:** renders `persona_nudge` (💡 banner) + abstains as a calm info card (not a red error); `top_k` 5→8. **Media B1:** "📺 How-to videos" section (renders only when `media_refs` non-empty) |
+| api/routes/query | Reduced to HTTP concerns; injects retrieval + grounding thresholds into the Manager. **Query-UX:** `_build_abstain_response` returns a 200 on `plan.abstained`; `_nudge_for` sets `persona_nudge` on both paths. **Media B1:** `_media_ref_responses` maps `plan.media_refs` → `MediaRefResponse` (both paths). **Media C2:** injects `retrieve_how_to` + how-to floors; success builder sets `how_to` + `educational_disclaimer` |
+| frontend/src/QueryPage | **Query-UX:** renders `persona_nudge` (💡 banner) + abstains as a calm info card (not a red error); `top_k` 5→8. **Media B1:** "📺 How-to videos" section. **Media C2:** "🔧 How-To Guide" title + amber educational-disclaimer banner when `how_to` |
 | evaluation | Phase 4: `langsmith_eval.run_pipeline` takes a `persona` (routes + records fragment ids); `evaluation/persona_checks.py` (deterministic appropriateness) |
 | tests | **474 passing** through the query-UX pass. **Media B1 adds** `test_media_curator.py` + `check_media_sources` tests in `test_guardrail.py` + manager media tests in `test_agent_manager.py` + `_media_ref_responses` tests in `test_query_answer_route.py` (machine-A pytest count pending an owner run) |
 

@@ -342,6 +342,42 @@ def retrieve(
     return result
 
 
+def retrieve_how_to(
+    query: str,
+    *,
+    top_k: int = 5,
+    min_similarity: float = 0.0,
+) -> RetrievalResult:
+    """Retrieve how-to video-transcript chunks (``content_class = 'how_to'``).
+
+    The lean, compliance-free retrieval behind the DIY how-to answer path (Media
+    Curator Slice C2): embed the query and match against transcript chunks only,
+    via ``match_how_to_chunks``. No BM25 fusion, no municipal-authority guardrails,
+    no reranker — those are compliance concerns; how-to content is a single,
+    non-authoritative class. Never filters by municipality (national how-tos apply
+    everywhere). Returns the same :class:`RetrievalResult` shape as
+    :func:`retrieve`, so the grounding check and generator reuse it unchanged.
+    """
+    from db.client import match_how_to_chunks
+    from ingestion.embedder import embed_query
+
+    t0 = time.perf_counter()
+    query_vec = embed_query(query)
+    chunks = match_how_to_chunks(
+        query_vec, top_k=top_k, municipality=None, min_similarity=min_similarity
+    )
+    latency_ms = int((time.perf_counter() - t0) * 1000)
+    result = RetrievalResult(
+        query=query, chunks=chunks, top_k=top_k, municipality=None,
+        latency_ms=latency_ms,
+    )
+    log.info(
+        "retrieve_how_to: %d chunks in %dms (top_sim=%.4f)",
+        result.num_results, result.latency_ms, result.top_similarity,
+    )
+    return result
+
+
 def retrieve_with_project(
     query: str,
     *,

@@ -346,6 +346,94 @@ def test_non_diy_abstain_has_no_media(
     assert result.media_refs == []
 
 
+# ── How-to fallback (Media Curator Slice C2) ─────────────────
+
+
+def _how_to_deps(*, compliance: Any, how_to: Any, **overrides: Any) -> ManagerDeps:
+    """Deps whose compliance + how-to retrievals return the given results."""
+    return ManagerDeps(
+        retrieve=lambda *_a, **_k: compliance,
+        min_chunks=1, min_top_sim=0.0,
+        retrieve_how_to=lambda *_a, **_k: how_to,
+        **overrides,
+    )
+
+
+def test_diy_abstain_answered_from_how_to(
+    stubs: _Calls, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A diy compliance-abstain becomes a grounded how-to answer when transcripts hit."""
+    import db.client as db_client
+    monkeypatch.setattr(db_client, "fetch_media_refs", lambda *_a, **_k: [_MEDIA_ROW])
+    # compliance empty → abstain; how-to retrieval grounds (top_sim 0.88 > 0.50 floor)
+    deps = _how_to_deps(compliance=_retrieval([]), how_to=_retrieval())
+    result = run_query_plan(
+        ManagerRequest(query="how do I install a gfci outlet", project_id=str(uuid4())),
+        deps,
+    )
+    assert result.abstained is False          # the how-to answer replaced the abstain
+    assert result.how_to is True
+    assert result.generation.model == "claude-test"
+    assert [m.url for m in result.media_refs] == ["https://www.youtube.com/watch?v=abc"]
+
+
+def test_how_to_below_floor_stays_abstained(stubs: _Calls) -> None:
+    """No how-to chunk clears the floor → the plain abstain stands."""
+    deps = _how_to_deps(compliance=_retrieval([]), how_to=_retrieval([]))
+    result = run_query_plan(
+        ManagerRequest(query="how do I install a gfci outlet", project_id=str(uuid4())),
+        deps,
+    )
+    assert result.abstained is True
+    assert result.how_to is False
+
+
+def test_non_diy_abstain_never_tries_how_to(stubs: _Calls) -> None:
+    """The how-to fallback is diy-only, even when transcripts would ground."""
+    registry.register(
+        AgentSpec(name="project_context", callable=lambda p: {"persona": "research"}),
+        replace=True,
+    )
+    called = {"how_to": False}
+
+    def _how_to_retrieve(*_a: Any, **_k: Any) -> Any:
+        called["how_to"] = True
+        return _retrieval()
+
+    deps = ManagerDeps(
+        retrieve=lambda *_a, **_k: _retrieval([]), min_chunks=1, min_top_sim=0.0,
+        retrieve_how_to=_how_to_retrieve,
+    )
+    result = run_query_plan(
+        ManagerRequest(query="how do I install a gfci outlet", project_id=str(uuid4())),
+        deps,
+    )
+    assert result.abstained is True
+    assert result.how_to is False
+    assert called["how_to"] is False          # never even attempted for non-diy
+
+
+def test_diy_compliance_answer_is_not_overridden(stubs: _Calls) -> None:
+    """A diy query that DOES get a compliance answer is not replaced by how-to."""
+    called = {"how_to": False}
+
+    def _how_to_retrieve(*_a: Any, **_k: Any) -> Any:
+        called["how_to"] = True
+        return _retrieval()
+
+    deps = ManagerDeps(
+        retrieve=lambda *_a, **_k: _retrieval(), min_chunks=1, min_top_sim=0.0,
+        retrieve_how_to=_how_to_retrieve,
+    )
+    result = run_query_plan(
+        ManagerRequest(query="how do I install a gfci outlet", project_id=str(uuid4())),
+        deps,
+    )
+    assert result.abstained is False
+    assert result.how_to is False
+    assert called["how_to"] is False          # compliance answered → no fallback
+
+
 def test_explicit_municipality_is_never_overridden(stubs: _Calls) -> None:
     """The user's choice wins; the geocoder is not even consulted."""
     result = run_query_plan(

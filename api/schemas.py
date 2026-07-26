@@ -300,6 +300,24 @@ class AnswerResponse(BaseModel):
             "Empty otherwise. Every URL is from a vetted source (zero unsourced URLs)."
         ),
     )
+    # Media C2: a diy compliance-abstain answered from how-to video transcripts.
+    # The answer is grounded in instructional video content, NOT permit code, and
+    # carries `educational_disclaimer` instead of a compliance claim.
+    how_to: bool = Field(
+        default=False,
+        description=(
+            "True when this answer was generated from how-to video transcripts "
+            "(a diy query with no confident compliance answer). Educational, not "
+            "compliance guidance."
+        ),
+    )
+    educational_disclaimer: str | None = Field(
+        default=None,
+        description=(
+            "Present only on a how-to answer. Warns that the content is general "
+            "instructional guidance, not permit/code compliance advice."
+        ),
+    )
 
 
 class ErrorResponse(BaseModel):
