@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
-import { fetchAnswer, fetchProjects, fetchQueryHistory } from "./api.js";
+import { fetchAnswer, fetchProjects, fetchQueryHistory, submitAnswerFeedback } from "./api.js";
 import { useAuth } from "./context/AuthContext.jsx";
 import RoomScansHomePromo from "./components/RoomScansHomePromo.jsx";
 
@@ -169,6 +169,30 @@ export default function QueryPage() {
     if (!activeAnswerId) return history[0];
     return history.find((item) => item.id === activeAnswerId) || history[0];
   }, [history, activeAnswerId]);
+
+  // Phase 5 feedback loop: per-run vote state, keyed by run_id.
+  // { [run_id]: { rating, showComment, comment, sending, error } }
+  const [feedbackByRun, setFeedbackByRun] = useState({});
+
+  const patchFeedback = (runId, patch) =>
+    setFeedbackByRun((prev) => ({ ...prev, [runId]: { ...prev[runId], ...patch } }));
+
+  const sendFeedback = async (runId, rating, comment) => {
+    if (!runId) return;
+    patchFeedback(runId, { sending: true, error: "" });
+    try {
+      await submitAnswerFeedback({ run_id: runId, rating, comment: comment || null });
+      // A down-vote invites detail; an up-vote is complete on click.
+      patchFeedback(runId, {
+        rating,
+        sending: false,
+        showComment: rating === "down" && !comment,
+        comment: comment || "",
+      });
+    } catch (err) {
+      patchFeedback(runId, { sending: false, error: err.message || "Could not send feedback." });
+    }
+  };
 
   return (
     <div className="query-page-layout px-4 max-w-7xl mx-auto py-8">
@@ -429,6 +453,82 @@ export default function QueryPage() {
                   </ul>
                 </div>
                 )}
+
+                {/* Feedback loop (Phase 5): thumbs up/down on this answer. Only
+                    shown when the answer carries a run_id to attach to. */}
+                {activeAnswer.run_id && (() => {
+                  const fb = feedbackByRun[activeAnswer.run_id] || {};
+                  return (
+                    <div className="pt-4 border-t border-slate-100">
+                      <div className="flex items-center gap-3 flex-wrap">
+                        <span className="text-sm text-slate-600">Was this helpful?</span>
+                        <div className="flex gap-2">
+                          <Button
+                            type="button"
+                            variant={fb.rating === "up" ? "default" : "secondary"}
+                            size="sm"
+                            disabled={fb.sending}
+                            aria-pressed={fb.rating === "up"}
+                            aria-label="Helpful"
+                            className="text-sm"
+                            onClick={() => sendFeedback(activeAnswer.run_id, "up", fb.comment)}
+                          >
+                            👍 Helpful
+                          </Button>
+                          <Button
+                            type="button"
+                            variant={fb.rating === "down" ? "default" : "secondary"}
+                            size="sm"
+                            disabled={fb.sending}
+                            aria-pressed={fb.rating === "down"}
+                            aria-label="Not helpful"
+                            className="text-sm"
+                            onClick={() => sendFeedback(activeAnswer.run_id, "down", fb.comment)}
+                          >
+                            👎 Not helpful
+                          </Button>
+                        </div>
+                        {fb.rating && !fb.showComment && (
+                          <span className="text-sm text-green-700">Thanks for the feedback.</span>
+                        )}
+                      </div>
+
+                      {fb.showComment && (
+                        <div className="mt-3 space-y-2">
+                          <Textarea
+                            value={fb.comment || ""}
+                            onChange={(e) => patchFeedback(activeAnswer.run_id, { comment: e.target.value })}
+                            placeholder="What was wrong or missing? (optional)"
+                            rows={2}
+                            className="text-sm"
+                          />
+                          <div className="flex gap-2">
+                            <Button
+                              type="button"
+                              size="sm"
+                              disabled={fb.sending}
+                              onClick={() => sendFeedback(activeAnswer.run_id, "down", fb.comment)}
+                            >
+                              {fb.sending ? "Sending…" : "Send comment"}
+                            </Button>
+                            <Button
+                              type="button"
+                              variant="secondary"
+                              size="sm"
+                              onClick={() => patchFeedback(activeAnswer.run_id, { showComment: false })}
+                            >
+                              Skip
+                            </Button>
+                          </div>
+                        </div>
+                      )}
+
+                      {fb.error && (
+                        <p className="mt-2 text-sm text-red-600">{fb.error}</p>
+                      )}
+                    </div>
+                  );
+                })()}
               </CardContent>
             </Card>
           )}

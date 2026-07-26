@@ -147,6 +147,17 @@ export async function fetchAnswer(payload, headers = {}) {
   return result;
 }
 
+// Phase 5 feedback loop: rate an answer (thumbs up/down + optional comment).
+// `payload` = { run_id, rating: "up" | "down", comment? }.
+export async function submitAnswerFeedback(payload, headers = {}) {
+  const result = await requestJson("/query/feedback", {
+    method: "POST",
+    body: payload,
+    headers,
+  });
+  return result;
+}
+
 export async function fetchCorpusSync(municipality) {
   const query = municipality ? `?municipality=${encodeURIComponent(municipality)}` : "";
   return await requestJson(`/corpus/sync${query}`);

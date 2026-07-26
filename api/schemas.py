@@ -318,6 +318,36 @@ class AnswerResponse(BaseModel):
             "instructional guidance, not permit/code compliance advice."
         ),
     )
+    # Phase 5 feedback loop: the audit run this answer came from. The client
+    # sends it back with a thumbs up/down to POST /query/feedback. Null when
+    # tracing was disabled (no run row to attach feedback to).
+    run_id: str | None = Field(
+        default=None,
+        description=(
+            "Audit run id (agent_runs.id) for this answer. Pass it to "
+            "POST /query/feedback to rate the answer. Null if tracing was off."
+        ),
+    )
+
+
+class FeedbackRequest(BaseModel):
+    """Body for POST /query/feedback — a thumbs up/down on an answer."""
+
+    run_id: UUID = Field(description="The answer's run id, from AnswerResponse.run_id.")
+    rating: Literal["up", "down"] = Field(description="Thumbs up or thumbs down.")
+    comment: str | None = Field(
+        default=None,
+        max_length=2000,
+        description="Optional free-text comment (most useful on a thumbs-down).",
+    )
+
+
+class FeedbackResponse(BaseModel):
+    """Acknowledgement for a recorded answer rating."""
+
+    id: UUID = Field(description="The stored feedback row id.")
+    run_id: UUID = Field(description="Run the feedback is attached to.")
+    rating: Literal["up", "down"] = Field(description="The rating stored.")
 
 
 class ErrorResponse(BaseModel):

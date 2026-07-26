@@ -39,11 +39,13 @@ from api.schemas import (
     ConflictWarning,
     DiagnosticsResponse,
     ErrorResponse,
+    FeedbackRequest,
+    FeedbackResponse,
     MediaRefResponse,
     QueryRequest,
     QueryResponse,
 )
-from audit.logger import annotate_run, traced_run
+from audit.logger import annotate_run, current_run, traced_run
 from db.client import get_jurisdiction
 from rag.agents.manager import ManagerDeps, ManagerError, ManagerRequest, run_query_plan
 from rag.generator import PROMPT_VERSION
@@ -257,6 +259,17 @@ def _build_manager_deps(observer: Any) -> ManagerDeps:
     )
 
 
+def _current_run_id() -> str | None:
+    """Return the active audit run id as a string, or None when untraced.
+
+    Both answer paths run inside the ``@traced_run("query_answer")`` scope, so
+    the run is in context here. Surfacing it lets the client POST feedback
+    against the exact generation (Phase 5 feedback loop).
+    """
+    ctx = current_run()
+    return str(ctx.run_id) if ctx and ctx.run_id else None
+
+
 def _chunk_responses(chunks: list[dict[str, Any]]) -> list[ChunkResponse]:
     """Map retrieval chunk rows to the response model (shared by both paths)."""
     return [
@@ -325,6 +338,7 @@ def _build_abstain_response(
         persona_nudge=_nudge_for(plan),
         abstained=True,
         media_refs=_media_ref_responses(plan),
+        run_id=_current_run_id(),
     )
     try:
         from db import client as db_client
@@ -634,6 +648,7 @@ def query_answer(
         educational_disclaimer=(
             _EDUCATIONAL_DISCLAIMER_TEXT if getattr(plan, "how_to", False) else None
         ),
+        run_id=_current_run_id(),
     )
     # Insert query log in Postgres (background, non-blocking)
     try:
@@ -688,3 +703,35 @@ def delete_query_history(query_id: UUID, current_user: Annotated[dict, Depends(g
     if not db_client.delete_user_query(current_user["user_id"], query_id):
         raise HTTPException(status_code=404, detail="Query log entry not found or unauthorized.")
     return {"detail": "Query log entry deleted successfully."}
+
+
+@router.post("/query/feedback", response_model=FeedbackResponse)
+def submit_answer_feedback(
+    body: FeedbackRequest,
+    current_user: Annotated[dict, Depends(get_current_user)],
+) -> FeedbackResponse:
+    """Record a thumbs up/down (+ optional comment) on an answer's run.
+
+    Phase 5 feedback loop, the answer-level granularity: high volume, weak
+    signal, all users. Re-rating the same run upserts. A down-vote is what the
+    Performance Review agent (#24) later reads with the run trace to attribute
+    blame. The run must exist (its id came from AnswerResponse.run_id).
+    """
+    from db import client as db_client
+
+    if db_client.get_agent_run(body.run_id) is None:
+        raise HTTPException(status_code=404, detail="Unknown run_id — nothing to rate.")
+
+    user_id = current_user["user_id"] if isinstance(current_user, dict) else None
+    try:
+        row = db_client.upsert_answer_feedback(
+            run_id=body.run_id,
+            rating=body.rating,
+            user_id=user_id,
+            comment=body.comment,
+        )
+    except Exception as exc:
+        log.warning("could not record answer feedback for run %s: %s", body.run_id, exc)
+        raise HTTPException(status_code=500, detail="Could not record feedback.") from exc
+
+    return FeedbackResponse(id=row["id"], run_id=row["run_id"], rating=row["rating"])

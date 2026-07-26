@@ -4,6 +4,50 @@ _Updated: 2026-07-26 (**Phase 4 CLOSED.** Media Curator on prod: B1 links, C1 tr
 
 ## Phase
 
+**Phase 5 STARTED (2026-07-26) — feedback loop slice code-complete on machine A.**
+The answer-level feedback loop (first Phase-5 increment; anchors Performance
+Review #24 + the Evaluator's correction signal) is built + green on machine A,
+**not deployed**:
+- `db/migrations/033_answer_feedback.sql` — `answer_feedback` (id, run_id FK→
+  agent_runs, user_id, rating `up|down` CHECK, comment, created/updated_at,
+  `UNIQUE(run_id,user_id)`). Additive/idempotent. **Not applied on any DB.**
+- `db/client.upsert_answer_feedback` (one vote per run+user, ON CONFLICT upsert)
+  + `answer_feedback_counts(since)` (scorecard reader).
+- `AnswerResponse.run_id` now surfaced (both success + abstain paths, via
+  `_current_run_id()` reading the `@traced_run` context); `FeedbackRequest` /
+  `FeedbackResponse` schemas; **`POST /query/feedback`** (auth'd, 404 on unknown
+  run, upsert).
+- `frontend`: `submitAnswerFeedback` (api.js) + QueryPage 👍/👎 bar with an
+  optional comment box on 👎 (only shown when the answer carries a `run_id`).
+- Tests: `tests/test_feedback_route.py` (5, mocked).
+
+**Performance Review #24 slice code-complete on machine A (2026-07-26).** The
+direct consumer of a 👎 — attributes a bad answer to an agent from the run trace.
+Deterministic-first (errored step / grounding abstain need no LLM), one top-tier
+(`Tier.TOP`) `run_agent` call otherwise. **Not deployed.**
+- `evaluation/perf_review.py` — `attribute(run, steps)` → `Attribution`
+  (attributed_agent ∈ known answer-path roster, failure_mode, evidence,
+  confidence, rationale; hallucinated agent names clamped to None). `review_run()`
+  writes an **unconfirmed** `agent_corrections` row (`source='answer'`); below
+  `CONFIDENCE_FLOOR=0.6` the row carries no `attributed_agent` (human assigns
+  blame — the arch's "never silent blame"). Import boundary respected
+  (evaluation/ → rag/, db/); every model call via `run_agent`.
+- `db/client.list_downvotes_without_review(since, limit)` — the review queue
+  (down-votes with no `source='answer'` correction yet).
+- `scripts/review_feedback.py` — batch driver (target-safe, dry-run default,
+  `--apply` / `--no-llm` / `--days` / `--limit`). **`api/` may not import
+  `evaluation/`, and the arch budgets Perf Review as batched/low-volume — so the
+  trigger is this script, never the query hot path.**
+- Tests: `tests/test_perf_review.py` (7, mocked). **Full suite 535 passed**;
+  new files ruff-clean (pre-existing db/client + ragas_eval hits untouched);
+  `frontend/ npm run build` clean.
+
+**Remaining Phase 5:** Evaluator #23 (`evaluation/agent_eval.py` per-agent metric
+contracts + multi-sample live RAGAs baseline, machine B) · answer agents
+#5/#9/#11 · dashboard v2 (scorecard/trace-explorer/autonomy + a feedback +
+correction-queue surface; `agent_scorecard` / `answer_feedback_counts` /
+`correction_rate_by_agent` readers already exist) · Field Ontology core.
+
 **Phase 4 CLOSED (2026-07-26).** Router + fragment library + query-UX pass +
 Media Curator (#17: B1/C1/C2 + semantic links + channel data) all deployed to
 prod; ops tooling (channel crawl / throttle / sync) committed + ff-merged to
@@ -48,8 +92,12 @@ backfill + superadmin dashboard v1, live on prod; migration 028 applied; backfil
 > (`029_prompt_fragments.sql`, prod + machine B). Media Curator → **030**
 > (`media_refs`, B1) + **031** (`content_class`/transcripts, C1), both applied prod
 > + machine B; + **032** (`media_channels`/`media_refs.channel_id`, H2-6 channel
-> crawl — **applied on prod** 2026-07-25). **Phase 6 (ontology/bids) cascades to 033.** 027 is
-> `027_agent_action_item_dedupe`; the duplicate 026 is recorded, not renamed.
+> crawl — **applied on prod** 2026-07-25). Phase 5 → **033**
+> (`033_answer_feedback.sql`, `answer_feedback` table — **built machine A, NOT
+> applied on any DB yet**). **Phase 6 (ontology/bids) now cascades to 034** (the
+> 032 file's comment still says 033; can't edit a deployed migration — this note
+> is authoritative). 027 is `027_agent_action_item_dedupe`; the duplicate 026 is
+> recorded, not renamed.
 
 ## Phase 4 core deliverables — DEPLOYED (2026-07-25)
 
@@ -307,12 +355,30 @@ journal only." **Phase 3 is fully done.**_
 1. **Phase 5 (course cut line) — the active phase.** Answer agents — Query
    Deconstructor (#5), Citation Verifier (#9), Permit Strategy (#11) — +
    **Evaluator (#23)** + Performance Review (#24) + feedback UI + dashboard v2 +
-   Field Ontology core (items 1–3). **Start with the Evaluator + feedback loop**
-   (they anchor everything else) and fold in the **multi-sample live RAGAs
-   baseline** (also punch #3): the 2026-07-25 run (`ragas_20260725_011651.json`,
-   avg 0.843) is one live sample; run 3+, average out q6's ±0.15, and repoint
-   `eval_guard` off the stale cached `ragas_20260531`. Roster/spec detail in
-   `docs/agent_architecture.md`.
+   Field Ontology core (items 1–3). Roster/spec detail in `docs/agent_architecture.md`.
+   - **DONE this session (machine A, not deployed):** the answer-level **feedback
+     loop** — migration `033_answer_feedback`, `POST /query/feedback`,
+     `AnswerResponse.run_id`, QueryPage 👍/👎. Full suite 528 green. **To deploy:**
+     (a) machine B/prod — `py scripts/check_migration_details.py --local` first,
+     then `py scripts/apply_migration.py db/migrations/033_answer_feedback.sql`
+     (confirm the DB target — `.env` overrides `.env.local`); (b) commit + GHA
+     deploy (code touches `api/`+`frontend/` so both jobs run; no query-hot-path
+     change). Smoke: answer a query → 👍/👎 → row in `answer_feedback`.
+   - **DONE this session (machine A, not deployed):** **Performance Review #24** —
+     `evaluation/perf_review.py` (attribute a 👎 to an agent) + `scripts/review_feedback.py`
+     batch driver + `db.list_downvotes_without_review`. Deterministic-first, else
+     one opus call; writes unconfirmed `agent_corrections`. **To run** (machine B,
+     after 033 is applied + some down-votes exist): `py scripts/review_feedback.py
+     --local --dry-run` then `--apply` (`--no-llm` for the free classes only).
+   - **Next Phase-5 increment: Evaluator #23** (`evaluation/agent_eval.py`
+     per-agent metric contracts, reading the trace store — `agent_scorecard`,
+     `correction_rate_by_agent`, `answer_feedback_counts` readers exist) + the
+     **multi-sample live RAGAs baseline** (machine B, punch #3): the 2026-07-25 run
+     (`ragas_20260725_011651.json`, avg 0.843) is one sample; run 3+, average out
+     q6's ±0.15, repoint `eval_guard` off the stale cached `ragas_20260531`. Then
+     the **dashboard v2** surfaces (scorecard/trace-explorer/autonomy + feedback +
+     the correction-confirm queue that closes the Perf Review loop), answer agents
+     #5/#9/#11, and the Field Ontology core.
    - **Deferred Media Curator items, absorbed into Phase 5+ agents** (not lost —
      tracked in `docs/media-curator-plan.md`): B2 `web_search` (needs `claude-api`
      skill + `run_agent tools=`, shared runtime infra); link liveness →
@@ -354,9 +420,9 @@ Requires PG12+ for `ALTER TYPE … ADD VALUE` in a txn (schema is PG15).
 
 | Database | State (as last recorded) |
 |----------|--------------------------|
-| Local Docker (machine A, this repo) | 018–021, 023–026 applied; **022 missing**; 026 pre-fix so 027 required here. **028/029/030/031/032 not applied. Corpus empty.** |
-| Machine B local (campus corpus DB via `.env.local`) | Current through 027; **029 applied 2026-07-25** (Phase 4 demo); 19 docs. **030 + 031 applied 2026-07-25** (media_refs seeded; transcripts ingested; RAGAs non-regression). **032 applied 2026-07-25** (H2-6 channel crawl; the embed/crawl source for the prod `sync_how_to_to_prod`). (028 only needed for a local `--apply`.) |
-| Prod RDS | **Current through 032** (028/029 Phase 3–4; **030 + 031 + 032 Media Curator applied 2026-07-25** — media_refs seeded, transcripts ingested, media_channels + This Old House synced). Query-UX pass + C2 + semantic-links are code-only. Do NOT re-apply 027–032. |
+| Local Docker (machine A, this repo) | 018–021, 023–026 applied; **022 missing**; 026 pre-fix so 027 required here. **028/029/030/031/032/033 not applied. Corpus empty.** |
+| Machine B local (campus corpus DB via `.env.local`) | Current through 027; **029 applied 2026-07-25** (Phase 4 demo); 19 docs. **030 + 031 applied 2026-07-25** (media_refs seeded; transcripts ingested; RAGAs non-regression). **032 applied 2026-07-25** (H2-6 channel crawl; the embed/crawl source for the prod `sync_how_to_to_prod`). **033 (answer_feedback) pending.** (028 only needed for a local `--apply`.) |
+| Prod RDS | **Current through 032** (028/029 Phase 3–4; **030 + 031 + 032 Media Curator applied 2026-07-25** — media_refs seeded, transcripts ingested, media_channels + This Old House synced). Query-UX pass + C2 + semantic-links are code-only. **033 (answer_feedback, Phase 5) pending.** Do NOT re-apply 027–032. |
 
 **Why target confusion keeps happening.** `bootstrap_env` loads `.env` last with
 `override=True`, and `ENVIRONMENT=production` selects `.env.production`; all three
@@ -400,11 +466,11 @@ already applied by name on multiple DBs). The dedupe correction is therefore
 | api/routes/agents_admin | **New (Phase 3).** `/admin/agents` action queue + metadata review + read-only `documents`; superadmin-gated; approve → governance + correction row |
 | frontend/src/admin | **New (Phase 3).** `SuperadminRoute`, `AgentDashboardPage` (3 tabs), `ActionQueue`, `MetadataReviewPane` (inline-editable proposals), `DocumentMetadataTable` |
 | audit | `record_step` driven by the runtime; the Manager writes its own deterministic step |
-| db | 026/027 trace + autonomy helpers; Phase 3 added `update_document_metadata_fields`; **Media B1:** `fetch_media_refs` (reader) + `insert_media_ref` (seed writer) |
-| api/routes/query | Reduced to HTTP concerns; injects retrieval + grounding thresholds into the Manager. **Query-UX:** `_build_abstain_response` returns a 200 on `plan.abstained`; `_nudge_for` sets `persona_nudge` on both paths. **Media B1:** `_media_ref_responses` maps `plan.media_refs` → `MediaRefResponse` (both paths). **Media C2:** injects `retrieve_how_to` + how-to floors; success builder sets `how_to` + `educational_disclaimer` |
-| frontend/src/QueryPage | **Query-UX:** renders `persona_nudge` (💡 banner) + abstains as a calm info card (not a red error); `top_k` 5→8. **Media B1:** "📺 How-to videos" section. **Media C2:** "🔧 How-To Guide" title + amber educational-disclaimer banner when `how_to` |
-| evaluation | Phase 4: `langsmith_eval.run_pipeline` takes a `persona` (routes + records fragment ids); `evaluation/persona_checks.py` (deterministic appropriateness) |
-| tests | **474 passing** through the query-UX pass. **Media B1 adds** `test_media_curator.py` + `check_media_sources` tests in `test_guardrail.py` + manager media tests in `test_agent_manager.py` + `_media_ref_responses` tests in `test_query_answer_route.py` (machine-A pytest count pending an owner run) |
+| db | 026/027 trace + autonomy helpers; Phase 3 added `update_document_metadata_fields`; **Media B1:** `fetch_media_refs` (reader) + `insert_media_ref` (seed writer). **Phase 5:** `upsert_answer_feedback` + `answer_feedback_counts` + `list_downvotes_without_review` (feedback loop + Perf Review queue) |
+| api/routes/query | Reduced to HTTP concerns; injects retrieval + grounding thresholds into the Manager. **Query-UX:** `_build_abstain_response` returns a 200 on `plan.abstained`; `_nudge_for` sets `persona_nudge` on both paths. **Media B1:** `_media_ref_responses` maps `plan.media_refs` → `MediaRefResponse` (both paths). **Media C2:** injects `retrieve_how_to` + how-to floors; success builder sets `how_to` + `educational_disclaimer`. **Phase 5:** both response paths carry `run_id` (`_current_run_id()` from the `@traced_run` ctx); `POST /query/feedback` upserts a thumbs up/down (404 on unknown run) |
+| frontend/src/QueryPage | **Query-UX:** renders `persona_nudge` (💡 banner) + abstains as a calm info card (not a red error); `top_k` 5→8. **Media B1:** "📺 How-to videos" section. **Media C2:** "🔧 How-To Guide" title + amber educational-disclaimer banner when `how_to`. **Phase 5:** 👍/👎 feedback bar (per-run state, optional comment on 👎) shown when the answer carries a `run_id` |
+| evaluation | Phase 4: `langsmith_eval.run_pipeline` takes a `persona` (routes + records fragment ids); `evaluation/persona_checks.py` (deterministic appropriateness). **Phase 5:** `evaluation/perf_review.py` — Performance Review (#24): deterministic-first attribution of a 👎 to an agent, else one `Tier.TOP` `run_agent` call; writes unconfirmed `agent_corrections`; batch-driven by `scripts/review_feedback.py` |
+| tests | **535 passing** (machine A, 2026-07-26). Media Curator suites + query-UX; **Phase 5 adds** `test_feedback_route.py` (5) + `test_perf_review.py` (7) |
 
 ## Decisions log
 
@@ -445,6 +511,10 @@ already applied by name on multiple DBs). The dedupe correction is therefore
 | **Media Curator staged B1/B2 (Media)** | `run_agent` has **no `tools=`** today, so the `web_search` path needs a runtime extension. B1 ships the **curated `media_refs` table only** — a deterministic DB lookup, $0, no runtime change — which satisfies the "zero unsourced URLs" gate by construction (every row is vetted). B2 (web_search, youtube-only) is deferred: it needs the `claude-api` skill for the tool id, `run_agent` learning `tools=`, a `web_search_tool_result` parser, and a Budget cap. Deterministic-first, same as the rest of the system |
 | **Media source gate ships with the curator (Media)** | `guardrail.check_media_sources` drops any URL not on youtube.com and not carrying a curated-table `sourced=True` marker, filing an `unsourced_media_url` action item on a drop. On the B1 DB path nothing is ever dropped; the gate ships now (like the truncation trip shipped with the Router) so B2's model-emitted URLs have their backstop from day one |
 | **Media migration takes 030 (Media)** | `030_media_refs.sql` claims the `030` slot; the planned Phase-6 `ontology_and_bids` cascades to `031` (unshipped, nothing existed at 030). `text + CHECK` (no enum ALTERs), `UNIQUE (task_key, url)` for idempotent seeding. The fragment-vs-DB call is the opposite of Phase 4's: media links are *data* that changes without a code deploy, so a table (not files) is right |
+| **Answer feedback is its own table, not `agent_corrections` (Phase 5)** | The three feedback granularities (arch "Feedback capture") are distinct: answer-level thumbs are high-volume/weak-signal from all users; `agent_corrections` is an *attributed correction* with expected/actual. A thumbs-**up** is not a correction, so it does not belong in a corrections table. `033_answer_feedback` captures the raw vote (one per `run_id`+`user_id`, upsert); a thumbs-**down** is what Performance Review #24 later reads *with the run trace* to write the attributed `agent_corrections` row. `run_id` is surfaced on `AnswerResponse` (read from the `@traced_run` context) so the client can attach feedback to the exact generation |
+| **Phase 5 feedback migration takes 033; Phase 6 → 034** | Nothing shipped at 033; Phase 5 ships before Phase 6, so `033_answer_feedback` takes it and Phase-6 ontology/bids cascades to 034. The already-deployed `032` file's comment still reads "cascades to 033" — a deployed migration is never edited (AGENTS.md), so the STATE migration-numbering note is authoritative over that stale comment |
+| **Performance Review #24 is batch-triggered, not on the query path (Phase 5)** | Two forces point the same way: (1) the import boundary — `api/` may not import `evaluation/`, and Perf Review lives at `evaluation/perf_review.py`; (2) the arch budgets it as "batched, low volume by nature" (~$0.03/thumbs-down on opus). So the trigger is `scripts/review_feedback.py` (scripts/ may import anything) over the un-reviewed-down-vote queue, never a synchronous cost on the user's request. Deterministic-first keeps the common failure classes (errored step, grounding abstain) at $0 |
+| **Perf Review never silent-blames (Phase 5)** | Every review writes an *unconfirmed* `agent_corrections` row; a superadmin confirms attribution in the dashboard (which is what turns it into training data). Below `CONFIDENCE_FLOOR=0.6` the row carries **no** `attributed_agent` — a human assigns blame. Mirrors the autonomy split (high-confidence L2, low-confidence L0) without a second mechanism. The model may only blame agents in a fixed known-roster set; a hallucinated name clamps to None so the attribution metric stays measurable |
 
 ## Canonical validation
 

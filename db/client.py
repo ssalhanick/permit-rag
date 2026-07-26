@@ -2513,6 +2513,79 @@ def correction_rate_by_agent(*, since: datetime) -> list[dict[str, Any]]:
         return conn.execute(sql, (since,)).fetchall()
 
 
+# ── Answer feedback ──────────────────────────────────────────
+
+
+def upsert_answer_feedback(
+    *,
+    run_id: UUID,
+    rating: str,
+    user_id: UUID | None = None,
+    comment: str | None = None,
+) -> dict[str, Any]:
+    """Record (or update) a user's thumbs up/down on an answer's run.
+
+    One vote per (run_id, user_id): re-voting flips the rating or edits the
+    comment in place rather than stacking rows. Raises on a foreign-key
+    violation when ``run_id`` has no matching agent_runs row — the caller
+    validates the run exists first.
+    """
+    sql = """
+        INSERT INTO answer_feedback (run_id, user_id, rating, comment)
+        VALUES (%s, %s, %s, %s)
+        ON CONFLICT (run_id, user_id)
+        DO UPDATE SET rating     = EXCLUDED.rating,
+                      comment    = EXCLUDED.comment,
+                      updated_at = now()
+        RETURNING *;
+    """
+    with get_conn() as conn:
+        row = conn.execute(sql, (run_id, user_id, rating, comment)).fetchone()
+        conn.commit()
+    return row
+
+
+def answer_feedback_counts(*, since: datetime) -> dict[str, int]:
+    """Return {'up': n, 'down': m} answer-feedback totals since a timestamp."""
+    sql = """
+        SELECT rating, COUNT(*) AS n
+        FROM answer_feedback
+        WHERE created_at >= %s
+        GROUP BY rating;
+    """
+    with get_conn() as conn:
+        rows = conn.execute(sql, (since,)).fetchall()
+    counts = {"up": 0, "down": 0}
+    for row in rows:
+        counts[row["rating"]] = int(row["n"])
+    return counts
+
+
+def list_downvotes_without_review(
+    *, since: datetime, limit: int = 100
+) -> list[dict[str, Any]]:
+    """Down-votes whose run has no answer-level correction yet.
+
+    The work queue for the Performance Review batch driver: a down-vote is
+    'reviewed' once an ``agent_corrections`` row with ``source='answer'`` exists
+    for its run. Newest first.
+    """
+    sql = """
+        SELECT af.*
+        FROM answer_feedback af
+        WHERE af.rating = 'down'
+          AND af.created_at >= %s
+          AND NOT EXISTS (
+              SELECT 1 FROM agent_corrections ac
+              WHERE ac.run_id = af.run_id AND ac.source = 'answer'
+          )
+        ORDER BY af.created_at DESC
+        LIMIT %s;
+    """
+    with get_conn() as conn:
+        return conn.execute(sql, (since, limit)).fetchall()
+
+
 # ── Action items ─────────────────────────────────────────────
 
 
