@@ -61,3 +61,50 @@ def test_channel_videos_network_error_returns_empty(monkeypatch: pytest.MonkeyPa
 
     monkeypatch.setattr(requests, "get", _boom)
     assert youtube_channel.channel_videos("UCtestchannel") == []
+
+
+# ── Channel-id resolution (--add-channel) ────────────────────
+
+_UC = "UC1234567890abcdefghABCD"  # UC + 22 chars
+
+
+def test_resolve_bare_channel_id_no_fetch() -> None:
+    assert youtube_channel.resolve_channel_id(_UC) == _UC
+
+
+def test_resolve_channel_url_no_fetch() -> None:
+    assert youtube_channel.resolve_channel_id(
+        f"https://www.youtube.com/channel/{_UC}"
+    ) == _UC
+
+
+def test_resolve_handle_via_canonical_link(monkeypatch: pytest.MonkeyPatch) -> None:
+    html = (
+        '<html><head><link rel="canonical" '
+        f'href="https://www.youtube.com/channel/{_UC}"></head></html>'
+    )
+
+    class _R:
+        text = html
+        def raise_for_status(self) -> None: return None
+
+    import requests
+    captured = {}
+
+    def _get(url: str, **_k: Any) -> Any:
+        captured["url"] = url
+        return _R()
+
+    monkeypatch.setattr(requests, "get", _get)
+    assert youtube_channel.resolve_channel_id("@ThisOldHouse") == _UC
+    assert captured["url"] == "https://www.youtube.com/@ThisOldHouse"
+
+
+def test_resolve_returns_none_on_fetch_failure(monkeypatch: pytest.MonkeyPatch) -> None:
+    import requests
+
+    def _boom(*_a: Any, **_k: Any) -> Any:
+        raise RuntimeError("consent block")
+
+    monkeypatch.setattr(requests, "get", _boom)
+    assert youtube_channel.resolve_channel_id("@nope") is None

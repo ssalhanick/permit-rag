@@ -38,7 +38,11 @@ def _parse_args(argv: list[str]) -> argparse.Namespace:
     p.add_argument("--local", action="store_true", help="Force .env.local target.")
     p.add_argument("--database-url", help="Explicit DATABASE_URL (bypasses dotenv).")
     p.add_argument("--apply", action="store_true", help="Write rows (default: dry-run).")
-    p.add_argument("--add-channel", help="Add a vetted channel by YouTube channel id (UC…), then exit.")
+    p.add_argument(
+        "--add-channel",
+        help="Add a vetted channel, then exit. Accepts a UC… id, a @handle, or a "
+             "channel URL (resolved to the UC… id automatically).",
+    )
     p.add_argument("--name", help="Channel display name (with --add-channel).")
     p.add_argument("--jurisdiction", help="Channel jurisdiction (default: national / NULL).")
     p.add_argument("--vetted-by", help="Who approved this channel.")
@@ -76,11 +80,19 @@ def main(argv: list[str] | None = None) -> int:
         if not args.name:
             print("--add-channel requires --name")
             return 1
+        from ingestion.youtube_channel import resolve_channel_id
+
+        channel_id = resolve_channel_id(args.add_channel)
+        if not channel_id:
+            print(f"Could not resolve a channel id from {args.add_channel!r} — "
+                  "pass a UC… id, an @handle, or a channel URL.")
+            return 1
         row = insert_media_channel(
-            channel_id=args.add_channel, name=args.name,
+            channel_id=channel_id, name=args.name,
             jurisdiction=args.jurisdiction, vetted_by=args.vetted_by,
         )
-        print(f"Channel upserted: {row['name']} ({row['channel_id']})")
+        note = "" if channel_id == args.add_channel else f" [resolved from {args.add_channel!r}]"
+        print(f"Channel upserted: {row['name']} ({row['channel_id']}){note}")
         return 0
 
     from ingestion.youtube_channel import channel_videos
