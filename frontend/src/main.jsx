@@ -24,6 +24,7 @@ import ProjectScansPage from "./projects/pages/ProjectScansPage.jsx";
 import ProjectQueriesPage from "./projects/pages/ProjectQueriesPage.jsx";
 import ProjectDocumentsPage from "./projects/pages/ProjectDocumentsPage.jsx";
 import ProjectMembersPage from "./projects/pages/ProjectMembersPage.jsx";
+import ProjectSettingsPage from "./projects/pages/ProjectSettingsPage.jsx";
 import ProjectTrashPage from "./projects/pages/ProjectTrashPage.jsx";
 import ProtectedRoute from "./components/ProtectedRoute.jsx";
 import SuperadminRoute from "./admin/SuperadminRoute.jsx";
@@ -110,6 +111,7 @@ ReactDOM.createRoot(document.getElementById("root")).render(
             <Route path="queries" element={<ProjectQueriesPage />} />
             <Route path="documents" element={<ProjectDocumentsPage />} />
             <Route path="members" element={<ProjectMembersPage />} />
+            <Route path="settings" element={<ProjectSettingsPage />} />
           </Route>
           <Route
             path="/projects"

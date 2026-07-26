@@ -801,7 +801,7 @@ export default function ProjectKickoffPage() {
               >
                 <option value="" disabled>Select your role...</option>
                 <option value="diy">DIY (Doing it myself)</option>
-                <option value="hiring-contractor">Hiring a contractor</option>
+                <option value="hiring_contractor">Hiring a contractor</option>
                 <option value="contractor">Contractor myself</option>
                 <option value="research">Just doing research</option>
               </select>

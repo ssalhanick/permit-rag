@@ -125,14 +125,15 @@ def _deps(result: Any = None, **overrides: Any) -> ManagerDeps:
 # ── Plan shape ───────────────────────────────────────────────
 
 
-def test_plan_runs_every_step_in_the_routes_original_order(stubs: _Calls) -> None:
-    """The port preserves ordering; a reorder is a behaviour change."""
+def test_plan_runs_every_step_in_order(stubs: _Calls) -> None:
+    """Project context loads first (wave 1) so retrieval + jurisdiction + routing
+    are project-aware from a project_id alone; the rest of the order is preserved."""
     run_query_plan(
         ManagerRequest(query="q", address="1 Main St", project_id=str(uuid4())), _deps()
     )
     assert stubs.order == [
-        "permit_classifier", "jurisdiction_resolver", "conflict_detector",
-        "mini_rag_conflicts", "project_context", "answer_generator",
+        "project_context", "permit_classifier", "jurisdiction_resolver",
+        "conflict_detector", "mini_rag_conflicts", "answer_generator",
     ]
 
 
@@ -272,6 +273,21 @@ def test_address_geocoding_fills_the_effective_municipality(stubs: _Calls) -> No
     result = run_query_plan(ManagerRequest(query="q", address="1 Main St"), _deps())
     assert result.resolved_municipality == "plano"
     assert result.effective_municipality == "plano"
+
+
+def test_project_municipality_used_when_request_omits_it(stubs: _Calls) -> None:
+    """A project's stored municipality scopes the query from a project_id alone."""
+    registry.register(
+        AgentSpec(
+            name="project_context",
+            callable=lambda p: {"persona": "diy", "municipality": "frisco"},
+        ),
+        replace=True,
+    )
+    result = run_query_plan(
+        ManagerRequest(query="q", project_id=str(uuid4())), _deps()
+    )
+    assert result.effective_municipality == "frisco"
 
 
 # ── Media Curator (agent #17) — diy path only ────────────────

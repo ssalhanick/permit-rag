@@ -14,6 +14,8 @@ package, so the loader reads real content.
 
 from __future__ import annotations
 
+import pytest
+
 from rag import prompts
 from rag.agents.prompt_router import (
     DEFAULT_PERSONA,
@@ -43,6 +45,22 @@ def test_unknown_persona_resolves_to_research() -> None:
 def test_known_persona_is_used_and_not_flagged_as_default() -> None:
     routed = route(persona="diy")
     assert routed.persona == "diy"
+    assert routed.persona_defaulted is False
+
+
+@pytest.mark.parametrize(
+    "stored, expected",
+    [
+        ("DIY", "diy"),
+        (" diy ", "diy"),
+        ("hiring-contractor", "hiring_contractor"),  # the kickoff hyphen bug
+        ("Hiring-Contractor", "hiring_contractor"),
+    ],
+)
+def test_persona_variants_normalize_and_route(stored: str, expected: str) -> None:
+    """UI/legacy persona variants resolve to a known persona, not the research default."""
+    routed = route(persona=stored)
+    assert routed.persona == expected
     assert routed.persona_defaulted is False
 
 

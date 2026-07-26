@@ -14,6 +14,7 @@ export function getProjectNavItems(projectId) {
     { label: "Query History", path: `${base}/queries` },
     { label: "Documents", path: `${base}/documents` },
     { label: "Members", path: `${base}/members` },
+    { label: "Settings", path: `${base}/settings` },
   ];
 }
 
@@ -24,6 +25,7 @@ export const PROJECT_PAGE_TITLES = {
   queries: "Query History",
   documents: "Documents",
   members: "Members",
+  settings: "Project Settings",
 };
 
 /**

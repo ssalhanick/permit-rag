@@ -126,11 +126,24 @@ def _normalise_jurisdiction(value: str | None) -> str | None:
     return slug.replace(" ", "_").replace("-", "_")
 
 
+def _normalize_persona(persona: str | None) -> str | None:
+    """Canonicalize a stored persona so UI/legacy variants still route.
+
+    Trims, lowercases, and maps hyphens to underscores — so ``'DIY'``,
+    ``' diy '``, and (the kickoff bug) ``'hiring-contractor'`` all resolve to a
+    known persona instead of silently defaulting to research.
+    """
+    if not persona:
+        return None
+    return str(persona).strip().lower().replace("-", "_") or None
+
+
 def _resolve_persona(persona: str | None) -> tuple[str, bool]:
     """Return ``(persona, defaulted)`` — unknown/absent resolves to research."""
-    if persona and persona in PERSONAS:
-        return persona, False
-    if persona:
+    normalized = _normalize_persona(persona)
+    if normalized and normalized in PERSONAS:
+        return normalized, False
+    if normalized:
         log.info("prompt_router: unknown persona %r → default %r", persona, DEFAULT_PERSONA)
     return DEFAULT_PERSONA, True
 

@@ -253,22 +253,35 @@ def _classify_permit_types(state: _PlanState) -> None:
 
 
 def _resolve_municipality(state: _PlanState) -> None:
-    """Geocode an address to a municipality when none was given. Non-blocking."""
+    """Resolve the effective municipality for retrieval + routing. Non-blocking.
+
+    Precedence: an explicit request municipality → the project's stored
+    municipality (kickoff) → geocoding an address (request or project). Project
+    context is loaded earlier in the plan (wave 1) so a project-scoped query is
+    jurisdiction-aware even when the client sends only a project_id.
+    """
     request = state.request
     state.effective_municipality = request.municipality
-    if request.municipality or not request.address:
+    if request.municipality:
+        return
+
+    ctx = state.store.get_or_none(state.project_context_ref) or {}
+    # A project can carry an explicit municipality (set at kickoff) — use it as-is.
+    if ctx.get("municipality"):
+        state.effective_municipality = ctx["municipality"]
+        return
+
+    address = request.address or ctx.get("address")
+    if not address:
         return
     try:
-        resolved = _agent("jurisdiction_resolver")(request.address)
+        resolved = _agent("jurisdiction_resolver")(address)
         if resolved:
             state.resolved_municipality = resolved
             state.effective_municipality = resolved
-            log.info(
-                "address geocoded to municipality='%s' for address=%r",
-                resolved, request.address,
-            )
+            log.info("address geocoded to municipality='%s' for address=%r", resolved, address)
         else:
-            log.info("address geocoding returned no match for %r", request.address)
+            log.info("address geocoding returned no match for %r", address)
     except Exception as exc:
         log.warning("jurisdiction_resolver failed (%s) — skipping auto-municipality", exc)
 
@@ -461,6 +474,11 @@ def _route_prompt(state: _PlanState) -> Any:
     failing the query — composition must never be the reason an answer 500s.
     """
     ctx = state.store.get_or_none(state.project_context_ref) or {}
+    log.info(
+        "route: project_id=%s context_loaded=%s persona=%r municipality=%r",
+        state.request.project_id, state.project_context_ref is not None,
+        ctx.get("persona"), state.effective_municipality,
+    )
     try:
         routed = _agent("prompt_router")(
             persona=ctx.get("persona"),
@@ -685,9 +703,11 @@ def _notify(deps: ManagerDeps, event: str, stage: str, payload: Any) -> None:
 # Ordered waves. Steps inside a wave are independent of one another; waves are
 # strictly sequential. Four waves today, against MAX_ITERATIONS=6.
 _PLAN: tuple[tuple[Callable[[_PlanState], None], ...], ...] = (
-    (_classify_permit_types, _resolve_municipality),
+    # Project context loads first so retrieval + municipality resolution + routing
+    # are all project-aware (jurisdiction, persona) from a project_id alone.
+    (_load_project_context, _classify_permit_types, _resolve_municipality),
     (_run_retrieval, _check_grounding),
-    (_detect_conflicts, _detect_upload_conflicts, _load_project_context),
+    (_detect_conflicts, _detect_upload_conflicts),
     (_generate, _curate_media, _how_to_fallback),
 )
 
