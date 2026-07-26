@@ -132,6 +132,11 @@ def curate(
     return [_row_to_ref(row) for row in rows]
 
 
+def refs_from_rows(rows: list[dict]) -> list[MediaRef]:
+    """Map ``media_refs`` row dicts to :class:`MediaRef` objects (all sourced)."""
+    return [_row_to_ref(row) for row in rows]
+
+
 def _row_to_ref(row: dict) -> MediaRef:
     """Map a ``media_refs`` row dict to a :class:`MediaRef`."""
     return MediaRef(

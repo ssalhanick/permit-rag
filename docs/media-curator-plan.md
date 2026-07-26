@@ -99,6 +99,47 @@ answer. Compliance faithfulness stays on the authority-only path.
   `effective_date` by design)
 - Multi-sample live RAGAs baseline before any faithfulness *gate* (STATE punch 3)
 
+#### H2-6. Media Intake — channel ingest (scale beyond per-video vetting)
+
+Vet a **channel** (the trust unit), not each video. A cousin of Document Intake
+(#14): enumerate a vetted channel's uploads → one `media_refs` row per video →
+existing `ingest_media_transcripts.py` handles transcript → chunk → embed → store.
+
+**Key insight — the semantic path already scales.** C2 (`match_how_to_chunks`) is
+**semantic over transcript embeddings — no `task_key` needed**, so more transcripts
+= better how-to answers for free. Only the **B1 links** path (`fetch_media_refs`
+exact `task_key`) is the bottleneck at channel scale.
+
+Ordered sub-steps (do the cheap high-leverage one first):
+1. **Semantic links — BUILT (2026-07-25, machine-A pytest green; not deployed).**
+   `_curate_media` now merges curated `task_key` links with **semantic** links —
+   videos behind the retrieved how-to transcripts (`fetch_media_refs_for_how_to_docs`
+   joins chunk `doc_id` → `media_refs` via `source_url`), deduped by URL, gated. The
+   how-to retrieval is cached on `_PlanState` and shared with `_how_to_fallback` (one
+   embed+query per diy query). Any ingested/crawled video now surfaces as a link with
+   **no hand-assigned task_key**; the curated map stays as a fast-path/boost that also
+   covers videos whose transcript wasn't ingested. Code + a new DB query, **no migration**.
+2. **Channel allowlist + RSS crawl.** `media_channels` table (channel_id, name,
+   vetted_by, jurisdiction, active, last_crawled_at); crawl uploads via the free
+   RSS feed (`youtube.com/feeds/videos.xml?channel_id=…`, latest ~15, no key/quota)
+   → auto-source `media_refs` rows (marked "from vetted channel") → ingest.
+3. **Deferred until volume:** YouTube Data API v3 (all uploads, needs key+quota) or
+   yt-dlp for full backfill; **and the batch-harvest machinery** (see below).
+
+**Governance:** trust unit becomes the channel; the Guardrail still enforces
+youtube-only but not relevance/quality. Keep a per-video flag/deactivate path
+(**H2-3 → Freshness Watcher #15**); never auto-delete.
+
+**Ops trigger (important):** channel-scale transcript fetching from one IP **gets
+rate-limited/blocked** (we already hit this). Hundreds of fetches is exactly the
+threshold that flips the deferred **"AWS Batch / EventBridge harvest"** item from
+*deferred* to *required* (throttled, batched, possibly proxied). A few channels via
+RSS stays local→RDS; dozens does not.
+
+**Acceptance:** a vetted channel's recent uploads ingest as `content_class='how_to'`;
+a diy query semantically hits a crawled video's transcript (answer + link) with no
+hand-assigned `task_key`; dead/removed channel videos flag to the action queue.
+
 ### Absorption into other agents (build the general capability once)
 
 Roughly half of Half-2 is a media-scoped instance of a general agent the

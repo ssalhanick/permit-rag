@@ -222,6 +222,7 @@ class _PlanState:
     # (unknown/absent → research → no videos) without re-routing.
     resolved_persona: str | None = None
     routed: Any = None  # the RoutedPrompt (or None on router failure); reused by C2
+    how_to_result: Any = None  # cached how-to retrieval, shared by links + answer
     media_refs: list[Any] = field(default_factory=list)
     # Media C2: True when a diy compliance-abstain was answered from how-to
     # transcripts instead. The answer is grounded in video content, not code.
@@ -576,32 +577,97 @@ def _generate(state: _PlanState) -> None:
     })
 
 
+def _ensure_how_to_retrieval(state: _PlanState) -> Any:
+    """Retrieve over the how-to transcript class once per diy query, cached.
+
+    Shared by the semantic-links path (:func:`_curate_media`) and the how-to
+    answer (:func:`_how_to_fallback`) so a diy query embeds + queries transcripts
+    at most once. Returns the RetrievalResult, or None when unavailable/not diy.
+    Best-effort: a failure caches None and never raises.
+    """
+    if state.resolved_persona != "diy" or not state.deps.retrieve_how_to:
+        return None
+    if state.how_to_result is None:
+        try:
+            state.how_to_result = state.deps.retrieve_how_to(
+                state.request.query, top_k=state.request.top_k or 5
+            )
+        except Exception as exc:  # a media lookup must never break the answer path
+            log.warning("how-to retrieval failed (%s)", exc)
+            state.how_to_result = None
+    return state.how_to_result
+
+
+def _semantic_media_refs(state: _PlanState) -> list[Any]:
+    """Videos behind the semantically-retrieved how-to transcripts.
+
+    Any ingested/crawled video surfaces as a link from a semantic transcript hit,
+    with **no hand-assigned task_key** — the scaling unlock for channel ingest.
+    Distinct videos in similarity order.
+    """
+    result = _ensure_how_to_retrieval(state)
+    if result is None or not getattr(result, "chunks", None):
+        return []
+    seen: set[str] = set()
+    ordered: list[str] = []
+    for c in result.chunks:
+        did = c.get("doc_id")
+        if did and did not in seen:
+            seen.add(did)
+            ordered.append(did)
+    try:
+        from db.client import fetch_media_refs_for_how_to_docs
+
+        from rag.agents.media import refs_from_rows
+        by_doc = {r["doc_id"]: r for r in fetch_media_refs_for_how_to_docs(ordered)}
+    except Exception as exc:
+        log.warning("semantic media lookup failed (%s)", exc)
+        return []
+    return refs_from_rows([by_doc[d] for d in ordered if d in by_doc])
+
+
+def _dedupe_media(refs: list[Any]) -> list[Any]:
+    """Distinct media refs by URL, preserving order (task_key first, then semantic)."""
+    seen: set[str] = set()
+    out: list[Any] = []
+    for r in refs:
+        url = getattr(r, "url", None)
+        if url and url not in seen:
+            seen.add(url)
+            out.append(r)
+    return out
+
+
 def _curate_media(state: _PlanState) -> None:
     """Attach sourced how-to videos on the diy path (Media Curator, agent #17).
 
-    Runs in the generation wave, conceptually ∥ the Answer Generator — it needs
-    the resolved persona and jurisdiction, not the prose. Only ``diy`` produces
-    videos; every other persona and a query naming no curated task yield an empty
-    list. **Runs on an abstain too**: when retrieval falls below the grounding
-    floor there is no answer, but the curated how-to links are still worth showing
-    (they come from the vetted table, not the missing corpus). Results pass the
-    Guardrail source gate (zero unsourced URLs). Best-effort throughout: a media
-    failure never breaks the answer path.
+    Two merged sources: the curated ``task_key`` map (fast, and works even when a
+    video's transcript was never ingested — e.g. captions unavailable), and
+    **semantic** links (videos behind the retrieved how-to transcripts, so any
+    ingested/crawled video surfaces with no hand-assigned task_key). diy-only;
+    runs on an abstain too (links are worth showing even with no answer). Deduped
+    by URL, then passed through the Guardrail source gate. Best-effort, never fatal.
     """
     if state.resolved_persona != "diy":
         return
-    try:
-        refs = _agent("media_curator")(
+    refs: list[Any] = []
+    try:  # curated task_key links (a boost / transcript-independent fallback)
+        refs.extend(_agent("media_curator")(
             state.request.query,
             persona=state.resolved_persona,
             jurisdiction=state.effective_municipality,
             permit_types=state.permit_types,
-        )
-        state.media_refs = check_media_sources(
-            list(refs), entity_id=state.request.project_id or None
-        )
-    except Exception as exc:  # enrichment is optional; never fatal
-        log.warning("media curator failed (%s) — no videos attached", exc)
+        ))
+    except Exception as exc:
+        log.warning("media curator (task_key) failed (%s)", exc)
+    try:  # semantic links from the retrieved transcripts
+        refs.extend(_semantic_media_refs(state))
+    except Exception as exc:
+        log.warning("media curator (semantic) failed (%s)", exc)
+
+    state.media_refs = check_media_sources(
+        _dedupe_media(refs), entity_id=state.request.project_id or None
+    )
 
 
 def _how_to_fallback(state: _PlanState) -> None:
@@ -617,10 +683,8 @@ def _how_to_fallback(state: _PlanState) -> None:
     deps = state.deps
     if not (state.abstained and state.resolved_persona == "diy" and deps.retrieve_how_to):
         return
-    try:
-        result = deps.retrieve_how_to(state.request.query, top_k=state.request.top_k or 5)
-    except Exception as exc:  # a fallback must never break the answer path
-        log.warning("how-to retrieval failed (%s) — staying abstained", exc)
+    result = _ensure_how_to_retrieval(state)  # cached; shared with the links path
+    if result is None:
         return
 
     if result.num_results < deps.how_to_min_chunks or result.top_similarity < deps.how_to_min_top_sim:

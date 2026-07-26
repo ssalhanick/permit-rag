@@ -430,24 +430,47 @@ def test_non_diy_abstain_never_tries_how_to(stubs: _Calls) -> None:
 
 
 def test_diy_compliance_answer_is_not_overridden(stubs: _Calls) -> None:
-    """A diy query that DOES get a compliance answer is not replaced by how-to."""
-    called = {"how_to": False}
+    """A diy query that DOES get a compliance answer is not replaced by how-to.
 
-    def _how_to_retrieve(*_a: Any, **_k: Any) -> Any:
-        called["how_to"] = True
-        return _retrieval()
-
+    (The how-to retrieval may still run for semantic *links* — what must not
+    happen is a how-to *answer* replacing the grounded compliance one.)"""
     deps = ManagerDeps(
         retrieve=lambda *_a, **_k: _retrieval(), min_chunks=1, min_top_sim=0.0,
-        retrieve_how_to=_how_to_retrieve,
+        retrieve_how_to=lambda *_a, **_k: _retrieval([]),  # no how-to chunks
     )
     result = run_query_plan(
         ManagerRequest(query="how do I install a gfci outlet", project_id=str(uuid4())),
         deps,
     )
     assert result.abstained is False
-    assert result.how_to is False
-    assert called["how_to"] is False          # compliance answered → no fallback
+    assert result.how_to is False             # compliance answer stands, not overridden
+
+
+def test_semantic_links_surface_video_without_task_key(
+    stubs: _Calls, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A video with no curated task_key surfaces as a link via a semantic
+    transcript hit (the scaling unlock for channel ingest)."""
+    import db.client as db_client
+    monkeypatch.setattr(db_client, "fetch_media_refs", lambda *_a, **_k: [])  # no task_key match
+    row = {
+        "doc_id": "how-to-abc", "task_key": "", "title": "GFCI how-to",
+        "url": "https://www.youtube.com/watch?v=abc", "provider": "youtube",
+        "jurisdiction": None, "relevance_note": None, "last_verified_at": None,
+    }
+    monkeypatch.setattr(
+        db_client, "fetch_media_refs_for_how_to_docs",
+        lambda ids: [row] if "how-to-abc" in ids else [],
+    )
+    deps = ManagerDeps(
+        retrieve=lambda *_a, **_k: _retrieval(), min_chunks=1, min_top_sim=0.0,
+        retrieve_how_to=lambda *_a, **_k: _retrieval([_chunk("how-to-abc", 0)]),
+    )
+    result = run_query_plan(
+        ManagerRequest(query="how do I frobnicate a widget", project_id=str(uuid4())),
+        deps,
+    )
+    assert [m.url for m in result.media_refs] == ["https://www.youtube.com/watch?v=abc"]
 
 
 def test_explicit_municipality_is_never_overridden(stubs: _Calls) -> None:

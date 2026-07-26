@@ -2739,6 +2739,29 @@ def list_media_refs(*, active_only: bool = True) -> list[dict[str, Any]]:
         return conn.execute(sql).fetchall()
 
 
+def fetch_media_refs_for_how_to_docs(doc_ids: list[str]) -> list[dict[str, Any]]:
+    """Map how-to transcript doc_ids back to their media_refs display rows.
+
+    A transcript document's ``source_url`` equals its ``media_refs.url`` (the
+    ingest uses the same URL), so this joins retrieved how-to chunks
+    (``content_class='how_to'``) to the curated link metadata (title, relevance
+    note). Powers *semantic* links: any ingested video surfaces as a link from a
+    semantic transcript hit, with **no hand-assigned task_key** — the scaling
+    unlock for channel ingest. Each row carries its ``doc_id`` so the caller can
+    preserve retrieval (similarity) order.
+    """
+    if not doc_ids:
+        return []
+    sql = """
+        SELECT d.doc_id AS doc_id, m.*
+        FROM media_refs m
+        JOIN documents d ON d.source_url = m.url
+        WHERE d.doc_id = ANY(%s) AND m.active;
+    """
+    with get_conn() as conn:
+        return conn.execute(sql, (doc_ids,)).fetchall()
+
+
 def insert_media_ref(
     *,
     task_key: str,
