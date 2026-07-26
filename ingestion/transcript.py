@@ -20,9 +20,37 @@ from __future__ import annotations
 
 import logging
 import re
+import time
 from urllib.parse import parse_qs, urlparse
 
 log = logging.getLogger(__name__)
+
+
+class TranscriptBlocked(Exception):
+    """YouTube is rate-limiting / IP-blocking transcript requests.
+
+    Distinct from "no captions": a block is not fixable by retrying the same
+    video from the same IP, so the caller should back off / stop the run rather
+    than hammer a blocked IP (see the Media Curator H2-6 ops note — run from a
+    residential IP or a proxy at channel scale).
+    """
+
+
+_BLOCK_MARKERS = (
+    "requestblocked", "ipblocked", "blocking requests from your ip",
+    "too many requests", "ip has been blocked",
+)
+_NO_TRANSCRIPT_MARKERS = ("notranscript", "transcriptsdisabled", "nofound", "no transcript")
+
+
+def _classify(exc: Exception) -> str:
+    """'blocked' | 'no_transcript' | 'transient' for a fetch exception."""
+    s = (type(exc).__name__ + " " + str(exc)).lower()
+    if "block" in type(exc).__name__.lower() or any(m in s for m in _BLOCK_MARKERS):
+        return "blocked"
+    if any(m in s for m in _NO_TRANSCRIPT_MARKERS):
+        return "no_transcript"
+    return "transient"
 
 # youtube.com/watch?v=ID · youtu.be/ID · youtube.com/shorts/ID · /embed/ID
 _ID_RE = re.compile(r"^[A-Za-z0-9_-]{11}$")
@@ -55,30 +83,43 @@ def video_id_from_url(url: str) -> str | None:
     return candidate if _ID_RE.match(candidate) else None
 
 
-def fetch_transcript(url: str, *, languages: tuple[str, ...] = ("en",)) -> str | None:
+def fetch_transcript(
+    url: str,
+    *,
+    languages: tuple[str, ...] = ("en",),
+    retries: int = 1,
+    backoff: float = 2.0,
+) -> str | None:
     """Return the joined transcript text for a video URL, or None.
 
     None is a normal outcome — captions may be disabled, absent, or only in a
-    language we did not ask for. The caller skips those videos rather than
-    ingesting an empty document. Never raises for the expected "no transcript"
-    cases; unexpected errors are logged and swallowed (ingest is best-effort).
+    language we did not ask for. A *block* (rate-limit / IP ban) raises
+    :class:`TranscriptBlocked` instead, so the caller can back off or stop rather
+    than retry a blocked IP. A transient error is retried up to ``retries`` times
+    with linear ``backoff``.
     """
     vid = video_id_from_url(url)
     if vid is None:
         log.warning("transcript: not a recognizable YouTube URL: %s", url)
         return None
 
-    try:
-        from youtube_transcript_api import YouTubeTranscriptApi
+    segments = None
+    for attempt in range(retries + 1):
+        try:
+            from youtube_transcript_api import YouTubeTranscriptApi
 
-        # youtube-transcript-api 1.x: instance .fetch() returns a FetchedTranscript;
-        # .to_raw_data() gives [{'text','start','duration'}, ...]. (The 0.x
-        # YouTubeTranscriptApi.get_transcript classmethod was removed in 1.0.)
-        fetched = YouTubeTranscriptApi().fetch(vid, languages=list(languages))
-        segments = fetched.to_raw_data()
-    except Exception as exc:  # NoTranscriptFound / TranscriptsDisabled / RequestBlocked
-        log.warning("transcript: no transcript for %s (%s): %s", vid, url, exc)
-        return None
+            # 1.x: instance .fetch() → FetchedTranscript; .to_raw_data() gives
+            # [{'text','start','duration'}, ...]. (0.x get_transcript was removed.)
+            segments = YouTubeTranscriptApi().fetch(vid, languages=list(languages)).to_raw_data()
+            break
+        except Exception as exc:
+            kind = _classify(exc)
+            if kind == "blocked":
+                raise TranscriptBlocked(str(exc)) from exc
+            if kind == "no_transcript" or attempt >= retries:
+                log.warning("transcript: no transcript for %s (%s): %s", vid, url, exc)
+                return None
+            time.sleep(backoff * (attempt + 1))  # transient — back off and retry
 
     text = " ".join(seg["text"].strip() for seg in segments if seg.get("text"))
     text = re.sub(r"\s+", " ", text).strip()

@@ -29,7 +29,9 @@ from __future__ import annotations
 
 import argparse
 import hashlib
+import os
 import sys
+import time
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
@@ -46,6 +48,16 @@ def _parse_args(argv: list[str]) -> argparse.Namespace:
     parser.add_argument("--database-url", help="Explicit DATABASE_URL (bypasses dotenv).")
     parser.add_argument("--apply", action="store_true", help="Write (default: dry-run).")
     parser.add_argument("--force", action="store_true", help="Re-embed even if chunks exist.")
+    parser.add_argument(
+        "--delay", type=float,
+        default=float(os.environ.get("MEDIA_INGEST_DELAY_SEC", "2.0")),
+        help="Seconds to wait between transcript fetches (throttle to avoid IP blocks).",
+    )
+    parser.add_argument(
+        "--max-blocks", type=int,
+        default=int(os.environ.get("MEDIA_INGEST_MAX_BLOCKS", "3")),
+        help="Stop the run after this many consecutive IP blocks.",
+    )
     return parser.parse_args(argv)
 
 
@@ -108,19 +120,43 @@ def main(argv: list[str] | None = None) -> int:
 
     from db.client import list_media_refs
 
+    from ingestion.transcript import TranscriptBlocked
+
     refs = list_media_refs(active_only=True)
-    print(f"\n{len(refs)} active media_refs to process (apply={args.apply}):\n")
-    counts: dict[str, int] = {"ingested": 0, "skipped": 0}
-    for ref in refs:
-        status = _ingest_one(ref, apply=args.apply, force=args.force)
+    print(f"\n{len(refs)} active media_refs to process "
+          f"(apply={args.apply}, delay={args.delay}s):\n")
+    counts: dict[str, int] = {"ingested": 0, "skipped": 0, "blocked": 0}
+    consecutive_blocks = 0
+    stopped = False
+    for i, ref in enumerate(refs):
+        try:
+            status = _ingest_one(ref, apply=args.apply, force=args.force)
+        except TranscriptBlocked:
+            consecutive_blocks += 1
+            counts["blocked"] += 1
+            print(f"  [blocked] {ref['task_key']:28} {ref['url']}")
+            if consecutive_blocks >= args.max_blocks:
+                print(f"\n⚠ IP-blocked {consecutive_blocks}x in a row — stopping to avoid "
+                      "worsening the ban. Re-run from a residential IP or with a proxy "
+                      "(Media Curator H2-6). Ingest is idempotent — a re-run fills the rest.")
+                stopped = True
+                break
+            time.sleep(args.delay * 2)  # back off harder after a block
+            continue
+        consecutive_blocks = 0
         bucket = "skipped" if status.startswith("skipped") else "ingested"
         counts[bucket] += 1
         print(f"  [{bucket}] {ref['task_key']:28} {ref['url']}\n           {status}")
+        if i < len(refs) - 1:
+            time.sleep(args.delay)  # throttle between fetches
 
-    print(f"\nDone. {counts['ingested']} processed, {counts['skipped']} skipped.")
+    print(f"\nDone. {counts['ingested']} ingested, {counts['skipped']} skipped, "
+          f"{counts['blocked']} blocked.")
+    if stopped:
+        print("Stopped early on repeated IP blocks — re-run (idempotent) once unblocked.")
     if not args.apply:
         print("Dry run — nothing written. Re-run with --apply to ingest.")
-    else:
+    elif counts["ingested"]:
         print("⚠ match_chunks changed by migration 031 — run RAGAs to confirm compliance "
               "retrieval is unchanged (default filter is authority-only).")
     return 0

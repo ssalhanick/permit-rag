@@ -69,6 +69,21 @@ def test_fetch_transcript_none_on_no_captions(monkeypatch: pytest.MonkeyPatch) -
     assert transcript.fetch_transcript("https://youtu.be/TqTNJUT_lKg") is None
 
 
+def test_fetch_transcript_raises_on_ip_block(monkeypatch: pytest.MonkeyPatch) -> None:
+    _install_fake_api(
+        monkeypatch,
+        raises=RuntimeError("YouTube is blocking requests from your IP"),
+    )
+    with pytest.raises(transcript.TranscriptBlocked):
+        transcript.fetch_transcript("https://youtu.be/TqTNJUT_lKg")
+
+
+def test_fetch_transcript_transient_returns_none(monkeypatch: pytest.MonkeyPatch) -> None:
+    _install_fake_api(monkeypatch, raises=RuntimeError("some network glitch"))
+    # retries=0 → no backoff sleep; a transient failure degrades to None.
+    assert transcript.fetch_transcript("https://youtu.be/TqTNJUT_lKg", retries=0) is None
+
+
 def test_fetch_transcript_none_on_non_youtube_url(monkeypatch: pytest.MonkeyPatch) -> None:
     # Not a youtube URL → returns before any API import.
     assert transcript.fetch_transcript("https://vimeo.com/123") is None
