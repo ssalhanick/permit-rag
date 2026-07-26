@@ -39,7 +39,8 @@ backfill + superadmin dashboard v1, live on prod; migration 028 applied; backfil
 > **Migration numbering.** Phase 3 → **028** (prod). Phase 4 → **029**
 > (`029_prompt_fragments.sql`, prod + machine B). Media Curator → **030**
 > (`media_refs`, B1) + **031** (`content_class`/transcripts, C1), both applied prod
-> + machine B. **Phase 6 (ontology/bids) cascades to 032.** 027 is
+> + machine B; + **032** (`media_channels`/`media_refs.channel_id`, H2-6 channel
+> crawl — **not applied yet**). **Phase 6 (ontology/bids) cascades to 033.** 027 is
 > `027_agent_action_item_dedupe`; the duplicate 026 is recorded, not renamed.
 
 ## Phase 4 core deliverables — DEPLOYED (2026-07-25)
@@ -358,9 +359,9 @@ Requires PG12+ for `ALTER TYPE … ADD VALUE` in a txn (schema is PG15).
 
 | Database | State (as last recorded) |
 |----------|--------------------------|
-| Local Docker (machine A, this repo) | 018–021, 023–026 applied; **022 missing**; 026 pre-fix so 027 required here. **028/029/030/031 not applied. Corpus empty.** |
-| Machine B local (campus corpus DB via `.env.local`) | Current through 027; **029 applied 2026-07-25** (Phase 4 demo); 19 docs. **030 + 031 applied 2026-07-25** (media_refs seeded; transcripts ingested; RAGAs non-regression). (028 only needed for a local `--apply`.) |
-| Prod RDS | **Current through 031** (028/029 Phase 3–4; **030 + 031 Media Curator applied 2026-07-25** — media_refs seeded, transcripts ingested). Query-UX pass added **no** migration. **C2 is code-only — deploy when ready.** Do NOT re-apply 027–031. |
+| Local Docker (machine A, this repo) | 018–021, 023–026 applied; **022 missing**; 026 pre-fix so 027 required here. **028/029/030/031/032 not applied. Corpus empty.** |
+| Machine B local (campus corpus DB via `.env.local`) | Current through 027; **029 applied 2026-07-25** (Phase 4 demo); 19 docs. **030 + 031 applied 2026-07-25** (media_refs seeded; transcripts ingested; RAGAs non-regression). **032 pending** (H2-6 channel crawl). (028 only needed for a local `--apply`.) |
+| Prod RDS | **Current through 031** (028/029 Phase 3–4; **030 + 031 Media Curator applied 2026-07-25** — media_refs seeded, transcripts ingested). Query-UX pass added **no** migration. **032 (channel crawl) pending. C2 + semantic-links are code-only.** Do NOT re-apply 027–031. |
 
 **Why target confusion keeps happening.** `bootstrap_env` loads `.env` last with
 `override=True`, and `ENVIRONMENT=production` selects `.env.production`; all three

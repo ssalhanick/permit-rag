@@ -2772,30 +2772,81 @@ def insert_media_ref(
     relevance_note: str | None = None,
     last_verified_at: datetime | None = None,
     active: bool = True,
+    channel_id: str | None = None,
 ) -> dict[str, Any] | None:
     """
-    Insert one curated video link. Used by the seed script only.
+    Insert one curated video link (seed script + channel crawler).
 
     Deduped on (task_key, url): re-inserting the same link is a no-op that returns
-    None (the row already exists). All curated links enter the corpus here; the
+    None (the row already exists). ``channel_id`` marks a crawled row's source
+    channel (NULL = hand-added). All curated links enter the corpus here; the
     Media Curator never writes.
     """
     sql = """
         INSERT INTO media_refs
             (task_key, title, url, provider, jurisdiction, relevance_note,
-             last_verified_at, active)
-        VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
+             last_verified_at, active, channel_id)
+        VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
         ON CONFLICT DO NOTHING
         RETURNING *;
     """
     params = (
         task_key, title, url, provider, jurisdiction, relevance_note,
-        last_verified_at, active,
+        last_verified_at, active, channel_id,
     )
     with get_conn() as conn:
         row = conn.execute(sql, params).fetchone()
         conn.commit()
     return row
+
+
+# ════════════════════════════════════════════════
+#  MEDIA CHANNELS  (H2-6 channel crawl)
+# ════════════════════════════════════════════════
+
+def insert_media_channel(
+    *,
+    channel_id: str,
+    name: str,
+    jurisdiction: str | None = None,
+    vetted_by: str | None = None,
+    active: bool = True,
+) -> dict[str, Any] | None:
+    """Add (or update) a vetted YouTube channel. Deduped on channel_id."""
+    sql = """
+        INSERT INTO media_channels (channel_id, name, jurisdiction, vetted_by, active)
+        VALUES (%s, %s, %s, %s, %s)
+        ON CONFLICT (channel_id) DO UPDATE SET
+            name = EXCLUDED.name,
+            jurisdiction = EXCLUDED.jurisdiction,
+            vetted_by = EXCLUDED.vetted_by,
+            active = EXCLUDED.active
+        RETURNING *;
+    """
+    with get_conn() as conn:
+        row = conn.execute(
+            sql, (channel_id, name, jurisdiction, vetted_by, active)
+        ).fetchone()
+        conn.commit()
+    return row
+
+
+def list_media_channels(*, active_only: bool = True) -> list[dict[str, Any]]:
+    """List vetted channels, newest first."""
+    where = "WHERE active" if active_only else ""
+    sql = f"SELECT * FROM media_channels {where} ORDER BY created_at DESC;"
+    with get_conn() as conn:
+        return conn.execute(sql).fetchall()
+
+
+def touch_media_channel_crawled(channel_id: str) -> None:
+    """Stamp ``last_crawled_at = now()`` for a channel after a successful crawl."""
+    with get_conn() as conn:
+        conn.execute(
+            "UPDATE media_channels SET last_crawled_at = now() WHERE channel_id = %s;",
+            (channel_id,),
+        )
+        conn.commit()
 
 
 def delete_placeholder_media_refs() -> int:

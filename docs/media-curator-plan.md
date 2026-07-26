@@ -119,10 +119,16 @@ Ordered sub-steps (do the cheap high-leverage one first):
    embed+query per diy query). Any ingested/crawled video now surfaces as a link with
    **no hand-assigned task_key**; the curated map stays as a fast-path/boost that also
    covers videos whose transcript wasn't ingested. Code + a new DB query, **no migration**.
-2. **Channel allowlist + RSS crawl.** `media_channels` table (channel_id, name,
-   vetted_by, jurisdiction, active, last_crawled_at); crawl uploads via the free
-   RSS feed (`youtube.com/feeds/videos.xml?channel_id=…`, latest ~15, no key/quota)
-   → auto-source `media_refs` rows (marked "from vetted channel") → ingest.
+2. **Channel allowlist + RSS crawl — BUILT (2026-07-25, machine-A pytest green;
+   not deployed).** Migration `032_media_channels.sql` (`media_channels` table +
+   `media_refs.channel_id`); `ingestion/youtube_channel.py` (free RSS enumeration,
+   ~latest 15, graceful on error); `scripts/crawl_media_channels.py` (target-safe;
+   `--add-channel` to vet a channel, then crawl all active → upsert `media_refs`
+   with task_key derived from the title (curated map → slug fallback) +
+   `channel_id` marker → stamp `last_crawled_at`); `db.client` channel helpers +
+   `insert_media_ref(channel_id=)`. **Then run `ingest_media_transcripts.py`** to
+   fetch transcripts + embed. Machine-B/prod: apply `032`, `--add-channel`, crawl,
+   ingest.
 3. **Deferred until volume:** YouTube Data API v3 (all uploads, needs key+quota) or
    yt-dlp for full backfill; **and the batch-harvest machinery** (see below).
 
@@ -197,7 +203,8 @@ cd frontend; npm run build
 |---|----------|------|
 | 030 | `media_refs` | Curated links (B1) |
 | 031 | transcripts / `content_class` / `match_how_to_chunks` | Segregation (C1) |
-| 032+ | Phase 6 ontology/bids (cascaded) | Unrelated |
+| 032 | `media_channels` + `media_refs.channel_id` | Channel crawl (H2-6) |
+| 033+ | Phase 6 ontology/bids (cascaded) | Unrelated |
 
 ## Decisions log (media-specific)
 
