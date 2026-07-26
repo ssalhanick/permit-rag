@@ -226,6 +226,9 @@ class _PlanState:
     resolved_persona: str | None = None
     routed: Any = None  # the RoutedPrompt (or None on router failure); reused by C2
     how_to_result: Any = None  # cached how-to retrieval, shared by links + answer
+    # Query Deconstructor (#5): sub-questions for retrieval fan-out. A single
+    # entry (or empty) means a simple query — retrieval takes the unchanged path.
+    sub_questions: list[Any] = field(default_factory=list)
     # The chunks the answer was generated over (compliance or how-to), so the
     # Citation Verifier resolves citations against the exact set the model saw.
     answer_chunks: list[dict[str, Any]] = field(default_factory=list)
@@ -314,6 +317,77 @@ def _retrieve_by_ids(state: _PlanState) -> Any:
     )
 
 
+def _deconstruct(state: _PlanState) -> None:
+    """Split a compound query into sub-questions (Query Deconstructor #5).
+
+    Runs pre-retrieval. The deconstructor gates itself: a simple query returns a
+    single sub-question with no model call, so retrieval stays on the unchanged
+    path. Explicit chunk-id requests skip deconstruction entirely. Never fatal —
+    a failure leaves ``sub_questions`` empty (the single-question path).
+    """
+    if state.request.chunk_ids:
+        return
+    try:
+        result = _agent("query_deconstructor")(state.request.query)
+        state.sub_questions = list(result.sub_questions)
+    except Exception as exc:  # deconstruction is an optimisation, never a blocker
+        log.warning("deconstruction failed (%s) — single-question retrieval", exc)
+        state.sub_questions = []
+
+
+def _single_retrieval(state: _PlanState) -> Any:
+    """Today's retrieval: one search on the original query. Behaviour-unchanged."""
+    r = state.request
+    return state.deps.retrieve(
+        r.query,
+        project_id=r.project_id,
+        top_k=r.top_k,
+        municipality=state.effective_municipality,
+        min_similarity=r.min_similarity,
+    )
+
+
+def _fanout_retrieval(state: _PlanState) -> Any:
+    """One retrieval per sub-question, merged into a single RetrievalResult.
+
+    Each sub-question retrieves under its own filters (its named municipality, or
+    the project's); the union is deduped by chunk id and re-ranked, so the final
+    top-k is drawn from a better pool than a single averaged-embedding search of
+    the compound question. Capped at ``top_k`` so generation context and grounding
+    behave exactly as today. Returns None to fall back to single retrieval when no
+    sub-question returned anything.
+    """
+    from rag.retriever import RetrievalResult
+
+    r = state.request
+    merged: list[dict[str, Any]] = []
+    seen: set[Any] = set()
+    latency = 0
+    for sub in state.sub_questions:
+        muni = getattr(sub, "municipality", None) or state.effective_municipality
+        try:
+            res = state.deps.retrieve(
+                sub.text, project_id=r.project_id, top_k=r.top_k,
+                municipality=muni, min_similarity=r.min_similarity,
+            )
+        except Exception as exc:  # one weak sub-question must not fail the whole query
+            log.warning("sub-question retrieval failed (%s)", exc)
+            continue
+        latency += int(getattr(res, "latency_ms", 0) or 0)
+        for c in res.chunks:
+            cid = c.get("id")
+            if cid not in seen:
+                seen.add(cid)
+                merged.append(c)
+    if not merged:
+        return None
+    merged.sort(key=lambda c: c.get("reranked_score") or c.get("similarity") or 0.0, reverse=True)
+    return RetrievalResult(
+        query=r.query, chunks=merged[: r.top_k], top_k=r.top_k,
+        municipality=state.effective_municipality, latency_ms=latency,
+    )
+
+
 def _run_retrieval(state: _PlanState) -> None:
     """Retrieve, store the result as an artifact, and span it for the observer."""
     request, deps = state.request, state.deps
@@ -325,14 +399,11 @@ def _run_retrieval(state: _PlanState) -> None:
     try:
         if request.chunk_ids:
             result = _retrieve_by_ids(state)
+        elif len(state.sub_questions) > 1:
+            # Compound query: fan out, falling back to the single path on an empty union.
+            result = _fanout_retrieval(state) or _single_retrieval(state)
         else:
-            result = deps.retrieve(
-                request.query,
-                project_id=request.project_id,
-                top_k=request.top_k,
-                municipality=state.effective_municipality,
-                min_similarity=request.min_similarity,
-            )
+            result = _single_retrieval(state)
     except Exception as exc:
         log.exception("Retrieval failed for query: %s", request.query)
         _notify(deps, "failed", "retrieval", f"Retrieval error: {exc}")
@@ -819,7 +890,7 @@ def _notify(deps: ManagerDeps, event: str, stage: str, payload: Any) -> None:
 _PLAN: tuple[tuple[Callable[[_PlanState], None], ...], ...] = (
     # Project context loads first so retrieval + municipality resolution + routing
     # are all project-aware (jurisdiction, persona) from a project_id alone.
-    (_load_project_context, _classify_permit_types, _resolve_municipality),
+    (_load_project_context, _classify_permit_types, _resolve_municipality, _deconstruct),
     (_run_retrieval, _check_grounding),
     (_detect_conflicts, _detect_upload_conflicts),
     (_generate, _curate_media, _how_to_fallback),

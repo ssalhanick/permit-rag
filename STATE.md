@@ -1,11 +1,11 @@
 # permit_rag — State
 
-_Updated: 2026-07-26 (**Phase 5 largely done — feedback loop + Performance Review #24 + Evaluator #23 + Citation Verifier #9 + Permit Strategy #11 + Field Ontology core + dashboard v2 all built (581 pytest green).** Feedback loop + dashboard v2 **DEPLOYED to prod** (migration `033` on the real RDS, `ead0fe4` on `deployment/sites`, GHA green); loop verified end-to-end (👎 → `review_feedback.py --apply` → attributed correction → confirmed in dashboard). **#9 + #11 wired into the live path** (Citation Verifier = Manager wave 5; Permit Strategy = `GET /projects/{id}/permit-strategy` + dashboard panel) — machine A, ready to deploy (code-only). **Deferred:** #5 Query Deconstructor (retrieval-fan-out rewrite — validate on machine B first); Evaluator/Perf Review batch runs + multi-sample RAGAs baseline (punch #3) on machine B. **Phase 4 CLOSED** (details below). RDS-from-laptop lesson recorded in the decisions log.)_
+_Updated: 2026-07-26 (**Phase 5 largely done — feedback loop + Performance Review #24 + Evaluator #23 + Citation Verifier #9 + Permit Strategy #11 + Field Ontology core + dashboard v2 all built (587 pytest green).** Feedback loop + dashboard v2 **DEPLOYED to prod** (migration `033` on the real RDS, `ead0fe4` on `deployment/sites`, GHA green); loop verified end-to-end (👎 → `review_feedback.py --apply` → attributed correction → confirmed in dashboard). **#9 + #11 wired into the live path** (Citation Verifier = Manager wave 5; Permit Strategy = `GET /projects/{id}/permit-strategy` + dashboard panel) — machine A, ready to deploy (code-only). **Deferred:** #5 Query Deconstructor (retrieval-fan-out rewrite — validate on machine B first); Evaluator/Perf Review batch runs + multi-sample RAGAs baseline (punch #3) on machine B. **Phase 4 CLOSED** (details below). RDS-from-laptop lesson recorded in the decisions log.)_
 
 ## Phase
 
 **Phase 5 — all 8 components built + green; feedback loop + dashboard v2 DEPLOYED
-to prod (2026-07-26).** `py -m pytest tests/ -q` → **581 passed**; new files
+to prod (2026-07-26).** `py -m pytest tests/ -q` → **587 passed**; new files
 ruff-clean; `frontend/ npm run build` clean. Answer agents **#9 + #11 wired** into
 the live path; **#5 deferred**. Deploy/integration status after the component list.
 
@@ -54,9 +54,9 @@ the live path; **#5 deferred**. Deploy/integration status after the component li
   **not** `ENVIRONMENT=production` (that machine's `.env.production` host is the
   in-VPC `permit-rag-postgres`, a different DB).
 - **Answer-agent wiring:** **#9 Citation Verifier + #11 Permit Strategy — WIRED**
-  (machine A, 581 pytest green; ready to deploy, code-only). **#5 Query
-  Deconstructor — DEFERRED** (a live-retrieval-flow rewrite; validate on machine B
-  before wiring — see Next tasks).
+  (machine A, 587 pytest green; ready to deploy, code-only). **#5 Query
+  Deconstructor — BUILT (gated fan-out; machine A green), NOT deployed** — needs
+  machine-B RAGAs + compound-query validation before merging (see Next tasks).
 - **Evaluator/Perf Review are batch scripts**, not auto-triggered — run on
   machine B once feedback/trace volume exists. Multi-sample RAGAs baseline
   (punch #3) still to record on machine B; then repoint `eval_guard`.
@@ -365,7 +365,7 @@ journal only." **Phase 3 is fully done.**_
 
 ## Next tasks
 
-1. **Phase 5 — feedback loop + dashboard v2 DEPLOYED; #9/#11 wired (581 tests).**
+1. **Phase 5 — feedback loop + dashboard v2 DEPLOYED; #9/#11 wired (587 tests).**
    Full detail in the Phase banner above. **What's left:**
    - **Deploy the #9/#11 wire (code-only, no migration):** commit the Citation
      Verifier + Permit Strategy wiring, `git checkout deployment/sites && git merge
@@ -373,12 +373,15 @@ journal only." **Phase 3 is fully done.**_
      a compound/odd query → any fabricated-citation banner renders; a project with
      work types shows the "Permit strategy" panel + `GET /projects/{id}/permit-strategy`
      200s.
-   - **#5 Query Deconstructor (deferred) — the one remaining answer-agent wire.**
-     Build behind a conservative gate (single-question path byte-identical to today;
-     only compound queries fan out one retrieval per sub-question, then merge/dedup/
-     re-rank/ground). **Validate on machine B before deploy:** `test_query_answer_route`
-     green + RAGAs (`--no-answer-cache`) unchanged + hand-check a few compound
-     queries. Do NOT merge to `deployment/sites` until that passes.
+   - **#5 Query Deconstructor — BUILT (machine A green), NOT deployed.** Manager
+     wave-1 `_deconstruct` + gated fan-out in `_run_retrieval` (`_fanout_retrieval`
+     merges one retrieval per sub-question, dedup by chunk id, re-rank, cap at top_k;
+     falls back to single on an empty union). Single-question path unchanged
+     (`test_query_answer_route` green). `tests/test_deconstructor_wire.py` (6).
+     **Before merging to `deployment/sites`: validate on machine B** — RAGAs
+     (`--no-answer-cache`) unchanged + hand-check a few genuinely compound queries
+     (e.g. "setback and height for a garage in Plano, and do I need an electrical
+     permit?") retrieve better than the single path.
    - **Run the batch/eval loops on machine B** once volume exists:
      `scripts/review_feedback.py` (Perf Review), `scripts/run_agent_eval.py`
      (Evaluator), and the **multi-sample live RAGAs baseline** (punch #3): the
@@ -485,7 +488,7 @@ already applied by name on multiple DBs). The dedupe correction is therefore
 | api/routes/query | Reduced to HTTP concerns; injects retrieval + grounding thresholds into the Manager. **Query-UX:** `_build_abstain_response` returns a 200 on `plan.abstained`; `_nudge_for` sets `persona_nudge` on both paths. **Media B1:** `_media_ref_responses` maps `plan.media_refs` → `MediaRefResponse` (both paths). **Media C2:** injects `retrieve_how_to` + how-to floors; success builder sets `how_to` + `educational_disclaimer`. **Phase 5:** both response paths carry `run_id` (`_current_run_id()` from the `@traced_run` ctx); `POST /query/feedback` upserts a thumbs up/down (404 on unknown run) |
 | frontend/src/QueryPage | **Query-UX:** renders `persona_nudge` (💡 banner) + abstains as a calm info card (not a red error); `top_k` 5→8. **Media B1:** "📺 How-to videos" section. **Media C2:** "🔧 How-To Guide" title + amber educational-disclaimer banner when `how_to`. **Phase 5:** 👍/👎 feedback bar (per-run state, optional comment on 👎) shown when the answer carries a `run_id` |
 | evaluation | Phase 4: `langsmith_eval.run_pipeline` persona routing; `persona_checks.py`. **Phase 5:** `perf_review.py` (#24, attribute a 👎, batch `scripts/review_feedback.py`) + `agent_eval.py` (#23, per-agent metric contracts → breach files item + auto-demotes, batch `scripts/run_agent_eval.py`) |
-| tests | **581 passing** (machine A, 2026-07-26). **Phase 5 adds** `test_feedback_route.py` (5), `test_perf_review.py` (7), `test_agent_eval.py` (6), `test_citation_verifier.py` (6), `test_deconstructor.py` (6), `test_permit_strategy.py` (6), `test_ontology.py` (8), `test_dashboard_v2_routes.py` (8), `test_citation_wire.py` (2), `test_permit_strategy_route.py` (4) |
+| tests | **587 passing** (machine A, 2026-07-26). **Phase 5 adds** `test_feedback_route.py` (5), `test_perf_review.py` (7), `test_agent_eval.py` (6), `test_citation_verifier.py` (6), `test_deconstructor.py` (6), `test_permit_strategy.py` (6), `test_ontology.py` (8), `test_dashboard_v2_routes.py` (8), `test_citation_wire.py` (2), `test_permit_strategy_route.py` (4), `test_deconstructor_wire.py` (6) |
 
 ## Decisions log
 
