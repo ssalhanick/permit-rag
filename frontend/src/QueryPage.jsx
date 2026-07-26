@@ -408,6 +408,24 @@ export default function QueryPage() {
                   </div>
                 )}
 
+                {/* Citation Verifier (#9): flag statements whose citation didn't
+                    resolve to a retrieved source. Advisory, not blocking. */}
+                {(activeAnswer.unsupported_citations || []).length > 0 && (
+                  <div className="p-4 bg-red-50 border-l-4 border-red-500 rounded-r-lg text-sm text-red-800 space-y-2">
+                    <strong className="font-semibold text-red-900 block">
+                      ⚠️ {activeAnswer.unsupported_citations.length} statement(s) cite a source that wasn't retrieved
+                    </strong>
+                    <p className="text-xs text-red-700">
+                      These citations couldn't be matched to a retrieved document — verify them independently before relying on them.
+                    </p>
+                    <ul className="space-y-1 pt-1 list-disc list-inside">
+                      {activeAnswer.unsupported_citations.map((s, i) => (
+                        <li key={i} className="text-red-900">{s}</li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
+
                 {/* Citations List — hidden on an abstain (no citations) */}
                 {(activeAnswer.citations || []).length > 0 && (
                 <div className="pt-4 border-t border-slate-100">

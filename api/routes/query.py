@@ -648,6 +648,7 @@ def query_answer(
         educational_disclaimer=(
             _EDUCATIONAL_DISCLAIMER_TEXT if getattr(plan, "how_to", False) else None
         ),
+        unsupported_citations=list(getattr(plan, "unsupported_citations", []) or []),
         run_id=_current_run_id(),
     )
     # Insert query log in Postgres (background, non-blocking)

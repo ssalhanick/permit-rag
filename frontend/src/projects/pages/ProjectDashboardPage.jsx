@@ -6,6 +6,7 @@ import MaterialsEstimatePanel from "../../components/MaterialsEstimatePanel.jsx"
 import ProjectMapImage from "../../components/ProjectMapImage.jsx";
 import {
   deleteProject,
+  fetchPermitStrategy,
   fetchProjectDocuments,
   fetchProjectRoomScans,
   fetchQueryHistory,
@@ -27,6 +28,7 @@ export default function ProjectDashboardPage() {
   const [scans, setScans] = useState([]);
   const [queries, setQueries] = useState([]);
   const [documents, setDocuments] = useState([]);
+  const [permitStrategy, setPermitStrategy] = useState(null);
   const [dangerActionLoading, setDangerActionLoading] = useState(false);
   const [dangerError, setDangerError] = useState("");
 
@@ -47,6 +49,12 @@ export default function ProjectDashboardPage() {
         setDocuments([]);
       }
     })();
+  }, [projectId]);
+
+  useEffect(() => {
+    fetchPermitStrategy(projectId)
+      .then((res) => setPermitStrategy(res.data || null))
+      .catch(() => setPermitStrategy(null));
   }, [projectId]);
 
   const kickoff = formatKickoffSummary(project);
@@ -155,6 +163,33 @@ export default function ProjectDashboardPage() {
           emptyMessage="No scans linked yet. Add from your library or scan on the Scans tab."
         />
       </section>
+
+      {permitStrategy && permitStrategy.permits.length > 0 && (
+        <section className="panel">
+          <div className="dashboard-section-header">
+            <h3>Permit strategy</h3>
+          </div>
+          <p className="muted">
+            Pull order: {permitStrategy.sequence.join(" → ")}
+          </p>
+          <ul className="dashboard-query-preview">
+            {permitStrategy.permits.map((p) => (
+              <li key={p}>
+                <strong>{p}</strong>
+                <span className="muted">
+                  {permitStrategy.fee_breakdown[p] != null
+                    ? `~$${permitStrategy.fee_breakdown[p]}`
+                    : "—"}
+                </span>
+              </li>
+            ))}
+          </ul>
+          <p className="muted">
+            Estimated permit fees: <strong>~${permitStrategy.estimated_fees_usd}</strong>
+          </p>
+          <p className="muted" style={{ fontSize: "0.8rem" }}>{permitStrategy.fee_disclaimer}</p>
+        </section>
+      )}
 
       <section className="panel">
         <div className="dashboard-section-header">

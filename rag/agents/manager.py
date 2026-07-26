@@ -185,6 +185,9 @@ class ManagerResult:
     # compliance-abstain grounded on video content). The route attaches the
     # educational disclaimer and the frontend labels it accordingly.
     how_to: bool = False
+    # Citation Verifier (#9): sentences citing a chunk retrieval never returned
+    # (fabricated citations). Empty on a clean answer and on an abstain.
+    unsupported_citations: list[str] = field(default_factory=list)
 
     @property
     def retrieval(self) -> Any:
@@ -223,6 +226,10 @@ class _PlanState:
     resolved_persona: str | None = None
     routed: Any = None  # the RoutedPrompt (or None on router failure); reused by C2
     how_to_result: Any = None  # cached how-to retrieval, shared by links + answer
+    # The chunks the answer was generated over (compliance or how-to), so the
+    # Citation Verifier resolves citations against the exact set the model saw.
+    answer_chunks: list[dict[str, Any]] = field(default_factory=list)
+    citation_report: Any = None  # Citation Verifier (#9) output; None until wave 5
     media_refs: list[Any] = field(default_factory=list)
     # Media C2: True when a diy compliance-abstain was answered from how-to
     # transcripts instead. The answer is grounded in video content, not code.
@@ -562,6 +569,10 @@ def _generate(state: _PlanState) -> None:
         ) from exc
 
     _guard_truncation(state, gen)
+    # All retrieved chunks (not just the degraded subset) — every chunk the
+    # generator could legitimately cite resolves, so a citation flagged
+    # unsupported is a real fabrication, not a budget-degrade artifact.
+    state.answer_chunks = result.chunks
     state.generation_ref = state.store.put(
         "answer", gen, summary=_summarise_generation(gen)
     )
@@ -617,7 +628,6 @@ def _semantic_media_refs(state: _PlanState) -> list[Any]:
             ordered.append(did)
     try:
         from db.client import fetch_media_refs_for_how_to_docs
-
         from rag.agents.media import refs_from_rows
         by_doc = {r["doc_id"]: r for r in fetch_media_refs_for_how_to_docs(ordered)}
     except Exception as exc:
@@ -706,6 +716,7 @@ def _how_to_fallback(state: _PlanState) -> None:
         return
 
     _guard_truncation(state, gen)
+    state.answer_chunks = result.chunks  # how-to transcripts this answer cites
     state.generation_ref = state.store.put("answer", gen, summary=_summarise_generation(gen))
     state.governor.charge(
         int(getattr(gen, "input_tokens", 0) or 0), int(getattr(gen, "output_tokens", 0) or 0)
@@ -717,6 +728,45 @@ def _how_to_fallback(state: _PlanState) -> None:
     _notify(deps, "finished", "how_to_generation", {
         "model": gen.model, "num_chunks": len(chunks), "top_sim": result.top_similarity,
     })
+
+
+# ── Wave 5 — post-generation citation verification ───────────
+
+
+def _verify_citations(state: _PlanState) -> None:
+    """Check the answer's citations against the chunks it was generated over.
+
+    Deterministic on the hot path (``use_llm=False`` — token-span match only, $0,
+    no added latency): it surfaces the unambiguous failure — a claim citing a
+    chunk retrieval never returned (a *fabricated* citation) — which in a
+    compliance tool is the most dangerous kind of wrong. The full entailment
+    pass (paraphrase judgement) runs offline in the Evaluator, not per query.
+    Best-effort: any failure leaves the answer untouched.
+    """
+    if state.abstained or state.generation_ref is None or not state.answer_chunks:
+        return
+    gen = state.store.get_or_none(state.generation_ref)
+    if gen is None:
+        return
+    try:
+        state.citation_report = _agent("citation_verifier")(
+            gen.answer, state.answer_chunks, use_llm=False
+        )
+        record_step("citation_verifier", deterministic=True, status="ok")
+    except Exception as exc:  # verification is advisory; never break the answer
+        log.warning("citation verification failed (%s)", exc)
+
+
+def _unsupported_citations(report: Any) -> list[str]:
+    """Sentences whose citation points at a chunk retrieval never returned.
+
+    Only the high-confidence fabrication signal is surfaced to the user — the
+    middling paraphrase cases are left to the offline entailment pass so a
+    legitimately-grounded answer is never flagged on the hot path.
+    """
+    if report is None:
+        return []
+    return [c.sentence for c in report.claims if c.method == "missing_chunk"]
 
 
 # ── Summaries — what the Manager sees instead of the payload ─
@@ -773,6 +823,7 @@ _PLAN: tuple[tuple[Callable[[_PlanState], None], ...], ...] = (
     (_run_retrieval, _check_grounding),
     (_detect_conflicts, _detect_upload_conflicts),
     (_generate, _curate_media, _how_to_fallback),
+    (_verify_citations,),  # post-generation; reads the settled answer + chunks
 )
 
 
@@ -842,4 +893,5 @@ def _assemble(state: _PlanState, iterations: int) -> ManagerResult:
         abstain_message=state.abstain_message,
         media_refs=state.media_refs,
         how_to=state.how_to,
+        unsupported_citations=_unsupported_citations(state.citation_report),
     )

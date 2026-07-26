@@ -318,6 +318,16 @@ class AnswerResponse(BaseModel):
             "instructional guidance, not permit/code compliance advice."
         ),
     )
+    # Citation Verifier (#9): statements that cite a source retrieval never
+    # returned (fabricated citations). Empty on a clean answer. Advisory — the
+    # frontend surfaces a "verify independently" note, never blocks the answer.
+    unsupported_citations: list[str] = Field(
+        default_factory=list,
+        description=(
+            "Answer sentences whose citation points at a chunk that was not "
+            "retrieved. Empty when every citation resolves."
+        ),
+    )
     # Phase 5 feedback loop: the audit run this answer came from. The client
     # sends it back with a thumbs up/down to POST /query/feedback. Null when
     # tracing was disabled (no run row to attach feedback to).
@@ -348,6 +358,17 @@ class FeedbackResponse(BaseModel):
     id: UUID = Field(description="The stored feedback row id.")
     run_id: UUID = Field(description="Run the feedback is attached to.")
     rating: Literal["up", "down"] = Field(description="The rating stored.")
+
+
+class PermitStrategyResponse(BaseModel):
+    """Permit Strategy (#11) output for a project — set, order, and fee estimate."""
+
+    permits: list[str] = Field(description="Required permit categories, deduplicated.")
+    sequence: list[str] = Field(description="Permits in the order they should be pulled.")
+    fee_breakdown: dict[str, int] = Field(description="Per-permit fee estimate (USD).")
+    estimated_fees_usd: int = Field(description="Total estimated permit fees (USD).")
+    notes: str = Field(description="Plain-language sequencing note.")
+    fee_disclaimer: str = Field(description="Reminder that fees are estimates, not a quote.")
 
 
 class ErrorResponse(BaseModel):

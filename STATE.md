@@ -1,12 +1,13 @@
 # permit_rag — State
 
-_Updated: 2026-07-26 (**Phase 4 CLOSED.** Media Curator on prod: B1 links, C1 transcripts, C2 how-to answers, semantic links (H2-6.1), + This Old House channel data (18 videos synced via `sync_how_to_to_prod`). Persona/jurisdiction/settings fixes + `/api/documents` fix deployed. **Ops tooling ff-merged to `deployment/sites`:** channel crawl (H2-6.2, migration 032 — applied on prod), throttle + block-aware ingest, sync script — all committed + pushed (branches `agents/phase-4` = `agents/phase-5` = `deployment/sites` = origin at `203ce7d`). README: Media Curator → Completed. **Deferred (not Phase 4):** B2 web_search, link liveness→Freshness#15, proxy, multi-sample RAGAs→Evaluator#23. Canonical plan: `docs/media-curator-plan.md`. **Next: Phase 5** — Evaluator #23 + feedback loop first, then answer agents (#5/#9/#11) + Performance Review #24 + dashboard v2 + Field Ontology core; fold in the multi-sample live RAGAs baseline (punch #3).)_
+_Updated: 2026-07-26 (**Phase 5 largely done — feedback loop + Performance Review #24 + Evaluator #23 + Citation Verifier #9 + Permit Strategy #11 + Field Ontology core + dashboard v2 all built (581 pytest green).** Feedback loop + dashboard v2 **DEPLOYED to prod** (migration `033` on the real RDS, `ead0fe4` on `deployment/sites`, GHA green); loop verified end-to-end (👎 → `review_feedback.py --apply` → attributed correction → confirmed in dashboard). **#9 + #11 wired into the live path** (Citation Verifier = Manager wave 5; Permit Strategy = `GET /projects/{id}/permit-strategy` + dashboard panel) — machine A, ready to deploy (code-only). **Deferred:** #5 Query Deconstructor (retrieval-fan-out rewrite — validate on machine B first); Evaluator/Perf Review batch runs + multi-sample RAGAs baseline (punch #3) on machine B. **Phase 4 CLOSED** (details below). RDS-from-laptop lesson recorded in the decisions log.)_
 
 ## Phase
 
-**Phase 5 CODE-COMPLETE on machine A (2026-07-26) — all 8 components built + green,
-NOT deployed.** `py -m pytest tests/ -q` → **575 passed**; new files ruff-clean;
-`frontend/ npm run build` clean. The deploy/integration tail is below.
+**Phase 5 — all 8 components built + green; feedback loop + dashboard v2 DEPLOYED
+to prod (2026-07-26).** `py -m pytest tests/ -q` → **581 passed**; new files
+ruff-clean; `frontend/ npm run build` clean. Answer agents **#9 + #11 wired** into
+the live path; **#5 deferred**. Deploy/integration status after the component list.
 
 1. **Feedback loop.** `033_answer_feedback.sql` (`answer_feedback`: run_id FK,
    user_id, rating `up|down`, comment, `UNIQUE(run_id,user_id)`); `db.upsert_answer_feedback`
@@ -42,13 +43,20 @@ NOT deployed.** `py -m pytest tests/ -q` → **575 passed**; new files ruff-clea
    frontend tabs `AgentScorecard` / `CorrectionQueue` / `AutonomyPanel` on
    `AgentDashboardPage`. `tests/test_dashboard_v2_routes.py` (8).
 
-**Phase 5 deploy + integration tail (NOT done):**
-- **Deploy** (machine B/prod): apply `033_answer_feedback.sql` by hand, then
-  commit + GHA (code touches `api/`+`frontend/`). Migration 033 pending on ALL DBs.
-- **Answer-agent wiring:** #5/#9/#11 are built + registered + unit-tested but
-  **not yet wired into `manager.py`'s live query path** (retrieval fan-out per
-  sub-question; post-gen citation verify on the response; permit-strategy on a
-  project view). Deferred to avoid regressing the query path in the build pass.
+**Phase 5 deploy + integration status (2026-07-26):**
+- **Feedback loop + dashboard v2 — DEPLOYED to prod.** Migration `033` applied on
+  the real RDS (votes land); `76aa291`+`ead0fe4` merged to `deployment/sites`, GHA
+  green. Loop verified end-to-end on prod: a 👎 → `review_feedback.py --apply` →
+  attributed `agent_corrections` → confirmed in the dashboard Corrections tab.
+  **RDS access lesson (see decisions log):** from a laptop use
+  `--database-url="postgresql://postgres:<SSM pw>@<rds_endpoint>/permit_rag?sslmode=require"`
+  (`terraform output -raw rds_endpoint`/`db_password`) from an allowlisted IP —
+  **not** `ENVIRONMENT=production` (that machine's `.env.production` host is the
+  in-VPC `permit-rag-postgres`, a different DB).
+- **Answer-agent wiring:** **#9 Citation Verifier + #11 Permit Strategy — WIRED**
+  (machine A, 581 pytest green; ready to deploy, code-only). **#5 Query
+  Deconstructor — DEFERRED** (a live-retrieval-flow rewrite; validate on machine B
+  before wiring — see Next tasks).
 - **Evaluator/Perf Review are batch scripts**, not auto-triggered — run on
   machine B once feedback/trace volume exists. Multi-sample RAGAs baseline
   (punch #3) still to record on machine B; then repoint `eval_guard`.
@@ -357,21 +365,20 @@ journal only." **Phase 3 is fully done.**_
 
 ## Next tasks
 
-1. **Phase 5 — CODE-COMPLETE on machine A (all 8 components, 575 tests green).**
-   Full detail in the Phase banner above. **What's left is the deploy + integration
-   tail:**
-   - **Deploy (machine B → prod):** confirm the DB target
-     (`py scripts/check_migration_details.py --local` — `.env` overrides `.env.local`),
-     apply `py scripts/apply_migration.py db/migrations/033_answer_feedback.sql`
-     (pending on **all** DBs), then commit + GHA (touches `api/`+`frontend/`; no
-     query-hot-path change). Smoke: answer a query → 👍/👎 → row in `answer_feedback`;
-     `/admin/agents` shows Scorecard / Corrections / Autonomy tabs.
-   - **Wire the answer agents into `manager.py`** (#5/#9/#11 are built + registered
-     + unit-tested but not in the live query path): Deconstructor → retrieval
-     fan-out per sub-question; Citation Verifier → post-generation on the response
-     (∥ conflict analyzer); Permit Strategy → a project-context surface. Do this
-     behind the Manager carefully + re-run `test_query_answer_route` + RAGAs (query
-     path is regression-sensitive).
+1. **Phase 5 — feedback loop + dashboard v2 DEPLOYED; #9/#11 wired (581 tests).**
+   Full detail in the Phase banner above. **What's left:**
+   - **Deploy the #9/#11 wire (code-only, no migration):** commit the Citation
+     Verifier + Permit Strategy wiring, `git checkout deployment/sites && git merge
+     --ff-only agents/phase-5 && git push origin deployment/sites` → GHA. Smoke:
+     a compound/odd query → any fabricated-citation banner renders; a project with
+     work types shows the "Permit strategy" panel + `GET /projects/{id}/permit-strategy`
+     200s.
+   - **#5 Query Deconstructor (deferred) — the one remaining answer-agent wire.**
+     Build behind a conservative gate (single-question path byte-identical to today;
+     only compound queries fan out one retrieval per sub-question, then merge/dedup/
+     re-rank/ground). **Validate on machine B before deploy:** `test_query_answer_route`
+     green + RAGAs (`--no-answer-cache`) unchanged + hand-check a few compound
+     queries. Do NOT merge to `deployment/sites` until that passes.
    - **Run the batch/eval loops on machine B** once volume exists:
      `scripts/review_feedback.py` (Perf Review), `scripts/run_agent_eval.py`
      (Evaluator), and the **multi-sample live RAGAs baseline** (punch #3): the
@@ -449,7 +456,11 @@ already applied by name on multiple DBs). The dedupe correction is therefore
 | rag/retriever | **Media C2:** `retrieve_how_to` — lean transcript retrieval (embed + `match_how_to_chunks`, no compliance rerank/guardrails, no municipality filter) |
 | rag/agents/artifacts | **New (Phase 2).** `ArtifactRef` + `ArtifactStore`; bounds the Manager's context |
 | rag/agents/budget | **New (Phase 2).** Deterministic Budget Governor; uncapped default = no-op |
-| rag/agents/registry | Roster lazily bound (Media B1 `media_curator`; Phase 4 `prompt_router` + `guardrail`; Phase 3 `metadata_validator` via api DI). **Phase 5 registered** `citation_verifier` (#9), `query_deconstructor` (#5), `permit_strategy` (#11) — built + unit-tested, **not yet wired into `manager.py`'s live query path** |
+| rag/agents/registry | Roster lazily bound (Media B1 `media_curator`; Phase 4 `prompt_router` + `guardrail`; Phase 3 `metadata_validator` via api DI). **Phase 5 registered** `citation_verifier` (#9), `query_deconstructor` (#5), `permit_strategy` (#11). **#9 wired into `manager.py` (wave 5), #11 wired via `GET /projects/{id}/permit-strategy`; #5 deferred (retrieval-fan-out, needs machine-B validation)** |
+| rag/agents/manager | Phase 2 orchestrator; Phase 4 routing/guardrail/abstain waves. **Phase 5: wave 5 `_verify_citations`** — post-generation Citation Verifier (#9), deterministic (`use_llm=False`, $0), surfaces fabricated citations (a claim citing a chunk retrieval never returned) as `ManagerResult.unsupported_citations`; `state.answer_chunks` records the exact set the model saw. Never blocks the answer |
+| api/routes/projects | Project lifecycle + membership. **Phase 5:** `GET /{id}/permit-strategy` (Permit Strategy #11) — membership-gated; deterministic `plan_permits(use_llm=False)` → permits/sequence/fees |
+| frontend/src/projects/ProjectDashboardPage | **Phase 5:** "Permit strategy" panel (permits, pull order, fee estimate) via `fetchPermitStrategy`; shown when the project has non-cosmetic work |
+| frontend/src/QueryPage | **Query-UX** persona nudge/abstain; **Media** how-to sections; **Phase 5 feedback** 👍/👎 bar; **Phase 5 Citation Verifier** amber "N statement(s) cite a source that wasn't retrieved" banner when `unsupported_citations` non-empty |
 | rag/agents/citation_verifier | **New (Phase 5, #9).** `verify_answer(answer, chunks)` — deterministic token-span match first, one batched entailment call on leftovers; missing cited chunk = unsupported; flags uncited claims. Never raises |
 | rag/agents/deconstructor | **New (Phase 5, #5).** `deconstruct(query)` — compound → sub-questions + per-sub filters; deterministic gate returns the single form for simple queries (no LLM) and on any failure |
 | rag/agents/permit_strategy | **New (Phase 5, #11).** `plan_permits(context)` — permit set (mirrors `projectPermitRules.js`), pull-order sequencing, fee estimate; deterministic except an optional sequencing note |
@@ -474,7 +485,7 @@ already applied by name on multiple DBs). The dedupe correction is therefore
 | api/routes/query | Reduced to HTTP concerns; injects retrieval + grounding thresholds into the Manager. **Query-UX:** `_build_abstain_response` returns a 200 on `plan.abstained`; `_nudge_for` sets `persona_nudge` on both paths. **Media B1:** `_media_ref_responses` maps `plan.media_refs` → `MediaRefResponse` (both paths). **Media C2:** injects `retrieve_how_to` + how-to floors; success builder sets `how_to` + `educational_disclaimer`. **Phase 5:** both response paths carry `run_id` (`_current_run_id()` from the `@traced_run` ctx); `POST /query/feedback` upserts a thumbs up/down (404 on unknown run) |
 | frontend/src/QueryPage | **Query-UX:** renders `persona_nudge` (💡 banner) + abstains as a calm info card (not a red error); `top_k` 5→8. **Media B1:** "📺 How-to videos" section. **Media C2:** "🔧 How-To Guide" title + amber educational-disclaimer banner when `how_to`. **Phase 5:** 👍/👎 feedback bar (per-run state, optional comment on 👎) shown when the answer carries a `run_id` |
 | evaluation | Phase 4: `langsmith_eval.run_pipeline` persona routing; `persona_checks.py`. **Phase 5:** `perf_review.py` (#24, attribute a 👎, batch `scripts/review_feedback.py`) + `agent_eval.py` (#23, per-agent metric contracts → breach files item + auto-demotes, batch `scripts/run_agent_eval.py`) |
-| tests | **575 passing** (machine A, 2026-07-26). **Phase 5 adds** `test_feedback_route.py` (5), `test_perf_review.py` (7), `test_agent_eval.py` (6), `test_citation_verifier.py` (6), `test_deconstructor.py` (6), `test_permit_strategy.py` (6), `test_ontology.py` (8), `test_dashboard_v2_routes.py` (8) |
+| tests | **581 passing** (machine A, 2026-07-26). **Phase 5 adds** `test_feedback_route.py` (5), `test_perf_review.py` (7), `test_agent_eval.py` (6), `test_citation_verifier.py` (6), `test_deconstructor.py` (6), `test_permit_strategy.py` (6), `test_ontology.py` (8), `test_dashboard_v2_routes.py` (8), `test_citation_wire.py` (2), `test_permit_strategy_route.py` (4) |
 
 ## Decisions log
 
@@ -518,6 +529,7 @@ already applied by name on multiple DBs). The dedupe correction is therefore
 | **Answer feedback is its own table, not `agent_corrections` (Phase 5)** | The three feedback granularities (arch "Feedback capture") are distinct: answer-level thumbs are high-volume/weak-signal from all users; `agent_corrections` is an *attributed correction* with expected/actual. A thumbs-**up** is not a correction, so it does not belong in a corrections table. `033_answer_feedback` captures the raw vote (one per `run_id`+`user_id`, upsert); a thumbs-**down** is what Performance Review #24 later reads *with the run trace* to write the attributed `agent_corrections` row. `run_id` is surfaced on `AnswerResponse` (read from the `@traced_run` context) so the client can attach feedback to the exact generation |
 | **Phase 5 feedback migration takes 033; Phase 6 → 034** | Nothing shipped at 033; Phase 5 ships before Phase 6, so `033_answer_feedback` takes it and Phase-6 ontology/bids cascades to 034. The already-deployed `032` file's comment still reads "cascades to 033" — a deployed migration is never edited (AGENTS.md), so the STATE migration-numbering note is authoritative over that stale comment |
 | **Performance Review #24 is batch-triggered, not on the query path (Phase 5)** | Two forces point the same way: (1) the import boundary — `api/` may not import `evaluation/`, and Perf Review lives at `evaluation/perf_review.py`; (2) the arch budgets it as "batched, low volume by nature" (~$0.03/thumbs-down on opus). So the trigger is `scripts/review_feedback.py` (scripts/ may import anything) over the un-reviewed-down-vote queue, never a synchronous cost on the user's request. Deterministic-first keeps the common failure classes (errored step, grounding abstain) at $0 |
+| **Reaching prod RDS from a laptop (Phase 5 ops lesson)** | The real prod DSN is `postgresql://postgres:<SSM /permit_rag/prod/db_password>@<rds_endpoint>/permit_rag?sslmode=require` — get the pieces with `terraform output -raw rds_endpoint` / `-raw db_password`. **`ENVIRONMENT=production` on the laptop does NOT reach it** — that machine's `.env.production` host is `permit-rag-postgres` (an in-VPC name resolving to a *different* local DB), so migrations/backfills run under it silently hit the wrong DB. Use `--database-url` with the real endpoint for every prod op (except `apply_migration.py`, which ignores the flag and reads the ambient env — for prod migrations fix `.env.production` first). The RDS SG only admits two dev IPs on 5432 (`terraform/main.tf`, campus + home); a raw `inet_server_addr()` private IP is not routable — always use the endpoint hostname from an allowlisted IP. |
 | **Perf Review never silent-blames (Phase 5)** | Every review writes an *unconfirmed* `agent_corrections` row; a superadmin confirms attribution in the dashboard (which is what turns it into training data). Below `CONFIDENCE_FLOOR=0.6` the row carries **no** `attributed_agent` — a human assigns blame. Mirrors the autonomy split (high-confidence L2, low-confidence L0) without a second mechanism. The model may only blame agents in a fixed known-roster set; a hallucinated name clamps to None so the attribution metric stays measurable |
 
 ## Canonical validation

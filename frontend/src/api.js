@@ -226,6 +226,11 @@ export async function fetchMaterialsEstimate(projectId) {
   return await requestJson(`/commerce/projects/${projectId}/materials-estimate`);
 }
 
+// Permit Strategy (#11): required permits + pull order + fee estimate for a project.
+export async function fetchPermitStrategy(projectId) {
+  return await requestJson(`/projects/${projectId}/permit-strategy`);
+}
+
 export async function postRoomPreviewImage(payload) {
   return await requestJson("/commerce/room-preview-image", {
     method: "POST",

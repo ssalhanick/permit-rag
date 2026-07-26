@@ -21,6 +21,7 @@ from api.schemas import (
     DesignIntentResponse,
     DocumentSummaryResponse,
     LinkRoomScansRequest,
+    PermitStrategyResponse,
     ProjectLinkedRoomScanResponse,
     ProjectMemberResponse,
     ProjectResponse,
@@ -173,6 +174,35 @@ def get_project(project_id: UUID, current_user: CurrentUser) -> dict:
     if not project:
         raise HTTPException(status_code=404, detail="Project not found.")
     return dict(project)
+
+
+@router.get("/{project_id}/permit-strategy", response_model=PermitStrategyResponse)
+def project_permit_strategy(project_id: UUID, current_user: CurrentUser) -> dict:
+    """Permit set + pull order + fee estimate for a project (Permit Strategy #11).
+
+    Deterministic: the permit set mirrors ``projectPermitRules.js``, the order and
+    fees are table lookups (``use_llm=False`` — no model call, no key needed). A
+    project with no work types returns an empty, cosmetic-only strategy.
+    """
+    _require_role(project_id, current_user["user_id"], {"owner", "editor", "viewer"}, current_user)
+    project = db_client.get_project(project_id)
+    if not project:
+        raise HTTPException(status_code=404, detail="Project not found.")
+    from rag.agents.permit_strategy import plan_permits
+
+    strat = plan_permits(
+        {"work_types": project.get("work_types") or [],
+         "municipality": project.get("municipality")},
+        use_llm=False,
+    )
+    return {
+        "permits": strat.permits,
+        "sequence": strat.sequence,
+        "fee_breakdown": strat.fee_breakdown,
+        "estimated_fees_usd": strat.estimated_fees_usd,
+        "notes": strat.notes,
+        "fee_disclaimer": strat.fee_disclaimer,
+    }
 
 
 @router.patch("/{project_id}", response_model=ProjectResponse)
