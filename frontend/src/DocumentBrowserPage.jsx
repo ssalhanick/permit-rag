@@ -2,6 +2,7 @@ import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { fetchDocuments, fetchDocumentStatus, fetchProjects, shareDocumentToProject } from "./api.js";
 import { useAuth } from "./context/AuthContext.jsx";
 import DocumentAdminPanel from "./components/DocumentAdminPanel.jsx";
+import { FileText, Filter, Share2, Edit3, Layers, Search, Building, RefreshCcw, Check, AlertCircle } from "lucide-react";
 
 const DEFAULT_FILTERS = {
   municipality: "",
@@ -83,110 +84,221 @@ export default function DocumentBrowserPage() {
   };
 
   return (
-    <main className="page">
-      <section className="panel">
-        <h1>Document Browser</h1>
-        <p className="muted">Browse document metadata and status counts from API routes.</p>
+    <main className="p-4 sm:p-6 space-y-6 max-w-7xl mx-auto">
+      {/* Top Banner */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-slate-200 dark:border-slate-800">
+        <div>
+          <h1 className="text-xl sm:text-2xl font-extrabold text-slate-900 dark:text-slate-100 flex items-center gap-2">
+            <FileText className="w-6 h-6 text-blue-600 dark:text-blue-400" />
+            Document Corpus & Building Code Index
+          </h1>
+          <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
+            Search, filter, and inspect municipal building compliance documents, ordinances, and building codes.
+          </p>
+        </div>
+      </div>
 
-        <div className="doc-filter-grid">
-          <div>
-            <label htmlFor="municipality">Municipality</label>
-            <input id="municipality" name="municipality" value={filters.municipality} onChange={handleChange} />
+      {/* Filter Toolbar Section */}
+      <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-5 shadow-sm space-y-4">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <Filter className="w-4 h-4 text-blue-600 dark:text-blue-400" />
+            <h3 className="text-sm font-bold text-slate-900 dark:text-slate-100 m-0">
+              Filter Corpus
+            </h3>
+            {activeFilterCount > 0 && (
+              <span className="px-2 py-0.5 rounded-full bg-blue-100 dark:bg-blue-950 text-blue-700 dark:text-blue-300 text-[10px] font-bold">
+                {activeFilterCount} Active
+              </span>
+            )}
           </div>
-          <div>
-            <label htmlFor="status">Status</label>
-            <input id="status" name="status" value={filters.status} onChange={handleChange} />
-          </div>
-          <div>
-            <label htmlFor="authority">Authority</label>
-            <input id="authority" name="authority" value={filters.authority} onChange={handleChange} />
-          </div>
-          <div>
-            <label htmlFor="doc_type">Doc Type</label>
-            <input id="doc_type" name="doc_type" value={filters.doc_type} onChange={handleChange} />
+
+          <div className="flex items-center gap-2">
+            {activeFilterCount > 0 && (
+              <button
+                type="button"
+                onClick={resetFilters}
+                className="text-xs text-slate-500 hover:text-slate-800 dark:hover:text-slate-200 font-semibold flex items-center gap-1"
+              >
+                <RefreshCcw className="w-3 h-3" />
+                Clear
+              </button>
+            )}
           </div>
         </div>
 
-        <div className="doc-actions">
-          <button type="button" className="secondary-button" onClick={resetFilters} disabled={activeFilterCount === 0}>
-            Clear filters
-          </button>
-          <span className="muted">
-            {loading ? "Loading..." : `${rows.length} document(s), ${statusBuckets.length} status bucket(s)`}
+        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-3">
+          <div>
+            <label className="block text-[11px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-1">
+              Municipality
+            </label>
+            <input
+              type="text"
+              name="municipality"
+              value={filters.municipality}
+              onChange={handleChange}
+              placeholder="e.g. City of Austin"
+              className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-xs text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-blue-500"
+            />
+          </div>
+
+          <div>
+            <label className="block text-[11px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-1">
+              Status
+            </label>
+            <input
+              type="text"
+              name="status"
+              value={filters.status}
+              onChange={handleChange}
+              placeholder="e.g. active"
+              className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-xs text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-blue-500"
+            />
+          </div>
+
+          <div>
+            <label className="block text-[11px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-1">
+              Authority Level
+            </label>
+            <input
+              type="text"
+              name="authority"
+              value={filters.authority}
+              onChange={handleChange}
+              placeholder="e.g. City / Municipal"
+              className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-xs text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-blue-500"
+            />
+          </div>
+
+          <div>
+            <label className="block text-[11px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-1">
+              Doc Type
+            </label>
+            <input
+              type="text"
+              name="doc_type"
+              value={filters.doc_type}
+              onChange={handleChange}
+              placeholder="e.g. Building Code"
+              className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-xs text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-blue-500"
+            />
+          </div>
+        </div>
+      </div>
+
+      {error && (
+        <div className="p-3 bg-rose-50 dark:bg-rose-950/60 border border-rose-200 dark:border-rose-800 text-rose-700 dark:text-rose-300 rounded-xl text-xs font-semibold">
+          {error}
+        </div>
+      )}
+      {shareSuccess && (
+        <div className="p-3 bg-emerald-50 dark:bg-emerald-950/60 border border-emerald-200 dark:border-emerald-800 text-emerald-700 dark:text-emerald-300 rounded-xl text-xs font-semibold">
+          {shareSuccess}
+        </div>
+      )}
+      {shareError && (
+        <div className="p-3 bg-rose-50 dark:bg-rose-950/60 border border-rose-200 dark:border-rose-800 text-rose-700 dark:text-rose-300 rounded-xl text-xs font-semibold">
+          {shareError}
+        </div>
+      )}
+
+      {/* Status Buckets Cards */}
+      {statusBuckets.length > 0 && (
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+          {statusBuckets.map((bucket) => (
+            <div
+              key={bucket.status}
+              className="p-3.5 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl flex items-center justify-between"
+            >
+              <div>
+                <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 block">
+                  {bucket.status}
+                </span>
+                <span className="text-lg font-extrabold text-slate-900 dark:text-slate-100">
+                  {bucket.count}
+                </span>
+              </div>
+              <Layers className="w-5 h-5 text-blue-500 opacity-60" />
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* Documents Data Table */}
+      <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-5 shadow-sm space-y-4">
+        <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-3">
+          <h3 className="text-sm font-bold text-slate-900 dark:text-slate-100 m-0">
+            Document Records ({rows.length})
+          </h3>
+          <span className="text-xs text-slate-400 font-medium">
+            {loading ? "Refreshing..." : `${rows.length} indexed items`}
           </span>
         </div>
 
-        {error ? <p className="error">{error}</p> : null}
-        {shareSuccess && <div className="success-box" style={{ marginTop: "10px" }}>{shareSuccess}</div>}
-        {shareError && <div className="error-box" style={{ marginTop: "10px" }}>{shareError}</div>}
-      </section>
-
-      <section className="panel">
-        <h2>Status Summary</h2>
-        {statusBuckets.length ? (
-          <ul className="status-bucket-list">
-            {statusBuckets.map((bucket) => (
-              <li key={bucket.status}>
-                <strong>{bucket.status}</strong>: {bucket.count}
-              </li>
-            ))}
-          </ul>
+        {loading ? (
+          <div className="py-12 text-center text-xs text-slate-400 animate-pulse">
+            Loading document corpus...
+          </div>
+        ) : rows.length === 0 ? (
+          <div className="py-12 text-center text-xs text-slate-400">
+            No document records matched the selected criteria.
+          </div>
         ) : (
-          <p className="muted">No status data for current filter scope.</p>
-        )}
-      </section>
-
-      <section className="panel">
-        <h2>Documents</h2>
-        {rows.length ? (
-          <div className="doc-table-wrap">
-            <table className="doc-table">
+          <div className="overflow-x-auto">
+            <table className="w-full text-left text-xs border-collapse">
               <thead>
-                <tr>
-                  <th>doc_id</th>
-                  <th>municipality</th>
-                  <th>doc_type</th>
-                  <th>authority</th>
-                  <th>status</th>
-                  <th>updated_at</th>
-                  <th>Actions</th>
+                <tr className="border-b border-slate-200 dark:border-slate-800 text-slate-400 font-bold uppercase tracking-wider text-[10px]">
+                  <th className="pb-3 px-2">Document ID</th>
+                  <th className="pb-3 px-2">Municipality</th>
+                  <th className="pb-3 px-2">Type</th>
+                  <th className="pb-3 px-2">Authority</th>
+                  <th className="pb-3 px-2">Status</th>
+                  <th className="pb-3 px-2 text-right">Actions</th>
                 </tr>
               </thead>
-              <tbody>
+              <tbody className="divide-y divide-slate-100 dark:divide-slate-800 font-medium text-slate-800 dark:text-slate-200">
                 {rows.map((row) => (
-                  <tr key={row.id}>
-                    <td>{row.doc_id}</td>
-                    <td>{row.municipality}</td>
-                    <td>{row.doc_type}</td>
-                    <td>{row.authority_level}</td>
-                    <td>{row.document_status}</td>
-                    <td>{row.updated_at}</td>
-                    <td>
-                      <div className="doc-row-actions">
-                        {user ? (
+                  <tr key={row.id} className="hover:bg-slate-50/70 dark:hover:bg-slate-800/40 transition-colors">
+                    <td className="py-3 px-2 font-bold text-blue-600 dark:text-blue-400">
+                      {row.doc_id}
+                    </td>
+                    <td className="py-3 px-2 text-slate-700 dark:text-slate-300">
+                      {row.municipality || "—"}
+                    </td>
+                    <td className="py-3 px-2 text-slate-500 dark:text-slate-400">
+                      {row.doc_type || "Standard"}
+                    </td>
+                    <td className="py-3 px-2 text-slate-500 dark:text-slate-400">
+                      {row.authority_level || "Municipal"}
+                    </td>
+                    <td className="py-3 px-2">
+                      <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-100 dark:bg-emerald-950/60 text-emerald-800 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800">
+                        {row.document_status || "Active"}
+                      </span>
+                    </td>
+                    <td className="py-3 px-2 text-right">
+                      <div className="flex items-center justify-end gap-2">
+                        {user && (
                           <button
                             type="button"
-                            className="secondary-button"
                             onClick={() => setEditingDocId(row.doc_id)}
+                            className="px-2.5 py-1 rounded-lg bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 text-xs font-semibold flex items-center gap-1 transition-colors"
                           >
+                            <Edit3 className="w-3 h-3" />
                             Edit
                           </button>
-                        ) : null}
-                        {user && projects.length > 0 ? (
+                        )}
+                        {user && projects.length > 0 && (
                           <select
                             value=""
                             onChange={(e) => handleShare(row.id, e.target.value)}
-                            style={{ width: "auto", fontSize: "0.8rem", padding: "2px 6px" }}
+                            className="px-2 py-1 rounded-lg bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 text-[11px] font-semibold border-none focus:ring-1 focus:ring-blue-500"
                           >
-                            <option value="">Share with project...</option>
+                            <option value="">Share...</option>
                             {projects.map((p) => (
                               <option key={p.id} value={p.id}>{p.name}</option>
                             ))}
                           </select>
-                        ) : user ? (
-                          <span className="muted" style={{ fontSize: "0.8rem" }}>No projects</span>
-                        ) : (
-                          <span className="muted" style={{ fontSize: "0.8rem" }}>Sign in to share</span>
                         )}
                       </div>
                     </td>
@@ -195,19 +307,17 @@ export default function DocumentBrowserPage() {
               </tbody>
             </table>
           </div>
-        ) : (
-          <p className="muted">No documents found for current filters.</p>
         )}
-      </section>
+      </div>
 
-      {editingDocId ? (
+      {editingDocId && (
         <DocumentAdminPanel
           docId={editingDocId}
           candidateDocIds={candidateDocIds}
           onClose={() => setEditingDocId(null)}
           onSaved={loadDocuments}
         />
-      ) : null}
+      )}
     </main>
   );
 }

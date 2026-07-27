@@ -1,7 +1,6 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { fetchAnswer, fetchProjects, fetchQueryHistory, submitAnswerFeedback } from "./api.js";
 import { useAuth } from "./context/AuthContext.jsx";
-import RoomScansHomePromo from "./components/RoomScansHomePromo.jsx";
 import {
   MessageSquare,
   Send,
@@ -383,7 +382,6 @@ export default function QueryPage() {
 
         {/* Conversation Feed / Scroll Canvas */}
         <div ref={chatContainerRef} className="flex-1 overflow-y-auto p-4 sm:p-6 md:p-8 space-y-6">
-          <RoomScansHomePromo />
 
           {!activeAnswer && history.length === 0 && !loading ? (
             /* ── Claude-style Welcome & Prompt Suggestions Hero ── */

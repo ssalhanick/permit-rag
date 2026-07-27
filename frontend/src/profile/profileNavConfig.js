@@ -10,7 +10,7 @@ export const PROFILE_NAV_ITEMS = [
 
 export const PROFILE_EXTERNAL_LINKS = [
   { label: "Projects", path: "/projects" },
-  { label: "New Query", path: "/" },
+  { label: "New Query", path: "/query" },
 ];
 
 /** @type {Record<string, string>} */

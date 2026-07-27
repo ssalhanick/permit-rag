@@ -3,7 +3,6 @@ import { Link } from "react-router-dom";
 import { API_BASE_URL, DEFAULT_BASE_URL, fetchAnswer, fetchHealth, fetchProjects } from "./api.js";
 import { useAuth } from "./context/AuthContext.jsx";
 import AddressAutocomplete from "./components/AddressAutocomplete.jsx";
-import RoomScansHomePromo from "./components/RoomScansHomePromo.jsx";
 
 // shadcn component imports
 import { Button } from "@/components/ui/button";
@@ -369,7 +368,6 @@ export default function DebugQueryPage() {
         </aside>
 
         <main className="query-page-main space-y-6">
-          <RoomScansHomePromo />
 
           <Card className="shadow-md">
             <CardHeader>

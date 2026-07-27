@@ -19,6 +19,7 @@ import {
 } from "lucide-react";
 import LogoSVG from "./components/LogoSVG.jsx";
 import ProjectSwitcher from "./components/ProjectSwitcher.jsx";
+import AiAssistantWidget from "./components/AiAssistantWidget.jsx";
 
 export default function Nav() {
   const { user, logout } = useAuth();
@@ -112,28 +113,6 @@ export default function Nav() {
                   <CheckSquare className="w-4 h-4 mr-1.5" />
                   Tasks
                 </NavLink>
-
-                <NavLink
-                  to="/query"
-                  className={({ isActive }) =>
-                    `tt-nav-item ${isActive ? "tt-nav-item-active" : ""}`
-                  }
-                  onClick={closeMenu}
-                >
-                  <Sparkles className="w-4 h-4 mr-1.5 text-cyan-400" />
-                  AI Assistant
-                </NavLink>
-
-                <NavLink
-                  to="/documents"
-                  className={({ isActive }) =>
-                    `tt-nav-item ${isActive ? "tt-nav-item-active" : ""}`
-                  }
-                  onClick={closeMenu}
-                >
-                  <FileText className="w-4 h-4 mr-1.5" />
-                  Documents
-                </NavLink>
               </>
             )}
           </div>
@@ -211,19 +190,26 @@ export default function Nav() {
                     </NavLink>
 
                     {/* Superadmin Menu Items */}
+                    <div className="tt-dropdown-divider" />
+                    <div className="tt-dropdown-section-label">Administration & Resources</div>
+                    <NavLink
+                      to="/documents"
+                      className="tt-dropdown-link"
+                      onClick={closeMenu}
+                    >
+                      <FileText className="w-4 h-4 text-slate-400" />
+                      Document Corpus
+                    </NavLink>
+
                     {isSuperAdmin && (
-                      <>
-                        <div className="tt-dropdown-divider" />
-                        <div className="tt-dropdown-section-label">Administration</div>
-                        <NavLink
-                          to="/admin/agents"
-                          className="tt-dropdown-link text-emerald-400 hover:text-emerald-300"
-                          onClick={closeMenu}
-                        >
-                          <ShieldCheck className="w-4 h-4 text-emerald-400" />
-                          Agent Orchestration
-                        </NavLink>
-                      </>
+                      <NavLink
+                        to="/admin/agents"
+                        className="tt-dropdown-link text-emerald-400 hover:text-emerald-300"
+                        onClick={closeMenu}
+                      >
+                        <ShieldCheck className="w-4 h-4 text-emerald-400" />
+                        Agent Orchestration
+                      </NavLink>
                     )}
 
                     <div className="tt-dropdown-divider" />
@@ -266,6 +252,8 @@ export default function Nav() {
           </div>
         </div>
       </nav>
+      {/* Floating Corner AI Assistant Modal */}
+      <AiAssistantWidget />
     </header>
   );
 }

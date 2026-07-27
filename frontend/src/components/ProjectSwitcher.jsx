@@ -119,7 +119,7 @@ export default function ProjectSwitcher({ onSelect }) {
 
       {/* Dropdown Options Box */}
       {open && (
-        <div className="absolute left-0 top-full z-50 mt-1.5 w-full min-w-[260px] rounded-xl border border-slate-700 bg-slate-900 shadow-2xl overflow-hidden animate-in fade-in slide-in-from-top-1">
+        <div className="absolute left-0 right-0 sm:right-auto top-full z-50 mt-1.5 w-full sm:min-w-[260px] max-w-[calc(100vw-2.5rem)] rounded-xl border border-slate-700 bg-slate-900 shadow-2xl overflow-hidden animate-in fade-in slide-in-from-top-1">
           <div className="p-2 border-b border-slate-800">
             <div className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-slate-800 border border-slate-700">
               <Search className="w-3.5 h-3.5 text-slate-400 flex-shrink-0" />
