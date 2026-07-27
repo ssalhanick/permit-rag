@@ -81,7 +81,7 @@ export default function ProjectLayout() {
               </NavLink>
             </li>
             <li>
-              <NavLink to="/" className="profile-sidebar-link" onClick={() => setSidebarOpen(false)}>
+              <NavLink to={`/query?p=${project.id}`} className="profile-sidebar-link" onClick={() => setSidebarOpen(false)}>
                 New Query
               </NavLink>
             </li>

@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
+import { useLocation } from "react-router-dom";
 import { fetchAnswer, fetchProjects, fetchQueryHistory, submitAnswerFeedback } from "./api.js";
 import { useAuth } from "./context/AuthContext.jsx";
 import {
@@ -57,6 +58,7 @@ const PROMPT_SUGGESTIONS = [
 
 export default function QueryPage() {
   const { user, activeProject } = useAuth();
+  const location = useLocation();
   const [query, setQuery] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
@@ -69,9 +71,8 @@ export default function QueryPage() {
   const [projects, setProjects] = useState([]);
 
   // Manual project pick override
-  const initialOverride = new URLSearchParams(window.location.search).get("p");
-  const manualOverrideRef = useRef(Boolean(initialOverride));
-  const [activeProjectId, setActiveProjectIdState] = useState(initialOverride || "");
+  const manualOverrideRef = useRef(false);
+  const [activeProjectId, setActiveProjectIdState] = useState("");
 
   const chatContainerRef = useRef(null);
   const textareaRef = useRef(null);
@@ -81,18 +82,20 @@ export default function QueryPage() {
     setActiveProjectIdState(id);
   };
 
+  // Reactively track location params (e.g., /query?p=123) and active project
   useEffect(() => {
-    const params = new URLSearchParams(window.location.search);
-    const q = params.get("q");
-    if (q) setQuery(q);
-  }, []);
-
-  // Track the navbar's active project until manual override
-  useEffect(() => {
-    if (!manualOverrideRef.current) {
+    const params = new URLSearchParams(location.search);
+    const pParam = params.get("p") || params.get("project_id") || params.get("projectId");
+    if (pParam) {
+      manualOverrideRef.current = true;
+      setActiveProjectIdState(pParam);
+    } else if (!manualOverrideRef.current) {
       setActiveProjectIdState(activeProject?.id || "");
     }
-  }, [activeProject?.id]);
+
+    const q = params.get("q");
+    if (q) setQuery(q);
+  }, [location.search, activeProject?.id]);
 
   useEffect(() => {
     if (user) {

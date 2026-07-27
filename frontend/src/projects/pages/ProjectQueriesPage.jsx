@@ -110,7 +110,7 @@ export default function ProjectQueriesPage() {
 
         <button
           type="button"
-          onClick={() => navigate(`/?p=${projectId}`)}
+          onClick={() => navigate(`/query?p=${projectId}`)}
           className="tt-btn-primary text-xs px-4 py-2.5 rounded-xl flex items-center gap-1.5 self-start sm:self-auto shadow-sm"
         >
           <MessageSquare className="w-3.5 h-3.5" /> Start New Query
