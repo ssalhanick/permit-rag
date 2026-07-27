@@ -1,11 +1,11 @@
 # permit_rag — State
 
-_Updated: 2026-07-26 (**Phase 5 largely done — feedback loop + Performance Review #24 + Evaluator #23 + Citation Verifier #9 + Permit Strategy #11 + Field Ontology core + dashboard v2 all built (587 pytest green).** Feedback loop + dashboard v2 **DEPLOYED to prod** (migration `033` on the real RDS, `ead0fe4` on `deployment/sites`, GHA green); loop verified end-to-end (👎 → `review_feedback.py --apply` → attributed correction → confirmed in dashboard). **#9 + #11 wired into the live path** (Citation Verifier = Manager wave 5; Permit Strategy = `GET /projects/{id}/permit-strategy` + dashboard panel) — machine A, ready to deploy (code-only). **Deferred:** #5 Query Deconstructor (retrieval-fan-out rewrite — validate on machine B first); Evaluator/Perf Review batch runs + multi-sample RAGAs baseline (punch #3) on machine B. **Phase 4 CLOSED** (details below). RDS-from-laptop lesson recorded in the decisions log.)_
+_Updated: 2026-07-27 (**UI & Navigation Modernization Completed** — Design system parity across profile/history, project dashboard, document browser, members, settings, and query history pages (`tt-*` CSS tokens, high contrast WCAG 2.0 AA dark/light mode); global floating `AiAssistantWidget` added with quick chat & full screen expansion; mobile/tablet nav dropdown centered & contained; SVG favicon (`favicon.svg`) deployed; `fetchAnswer` import verified. **Phase 5 largely done — feedback loop + Performance Review #24 + Evaluator #23 + Citation Verifier #9 + Permit Strategy #11 + Field Ontology core + dashboard v2 all built (587 pytest green).** Feedback loop + dashboard v2 **DEPLOYED to prod**; #9 + #11 wired into the live path.)_
 
 ## Phase
 
 **Phase 5 — all 8 components built + green; feedback loop + dashboard v2 DEPLOYED
-to prod (2026-07-26).** `py -m pytest tests/ -q` → **587 passed**; new files
+to prod (2026-07-26). UI Modernization Completed (2026-07-27).** `py -m pytest tests/ -q` → **587 passed**; new files
 ruff-clean; `frontend/ npm run build` clean. Answer agents **#9 + #11 wired** into
 the live path; **#5 deferred**. Deploy/integration status after the component list.
 
