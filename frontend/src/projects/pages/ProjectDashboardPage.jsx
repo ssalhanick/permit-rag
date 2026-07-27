@@ -284,26 +284,26 @@ export default function ProjectDashboardPage() {
   return (
     <div className="max-w-6xl mx-auto p-4 sm:p-6">
       {/* ── Breadcrumbs ── */}
-      <nav className="text-xs font-semibold text-slate-500 mb-2 flex items-center gap-1.5">
-        <Link to="/projects" className="hover:text-blue-600 transition-colors">
+      <nav className="text-xs font-semibold text-slate-500 dark:text-slate-400 mb-2 flex items-center gap-1.5">
+        <Link to="/projects" className="hover:text-blue-600 dark:hover:text-blue-400 transition-colors">
           Projects
         </Link>
         <span>/</span>
-        <span className="text-slate-900">{project.name}</span>
+        <span className="text-slate-900 dark:text-slate-100">{project.name}</span>
       </nav>
 
       {/* ── Top Header Section ── */}
       <header className="mb-6 flex flex-col md:flex-row md:items-center md:justify-between gap-4">
         <div>
           <div className="flex items-center gap-3">
-            <h1 className="text-2xl sm:text-3xl font-extrabold text-slate-900 tracking-tight">
+            <h1 className="text-2xl sm:text-3xl font-extrabold text-slate-900 dark:text-slate-100 tracking-tight">
               {project.name}
             </h1>
             <span className="tt-status-badge tt-status-badge-progress">
               {project.is_archived ? "Archived" : "In Progress"}
             </span>
           </div>
-          <p className="text-xs text-slate-500 mt-1">
+          <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
             {project.contractor || "Marta's Remodeling Co."} • Started {project.startDate || "Jun 1, 2026"} • Due {project.dueDate || "Sep 14, 2026"}
           </p>
         </div>
@@ -330,66 +330,66 @@ export default function ProjectDashboardPage() {
       {/* ── 3 Summary Metric Cards ── */}
       <section className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
         {/* Card 1: Overall Progress */}
-        <div className="bg-white rounded-xl border border-slate-200 p-5 shadow-sm">
-          <div className="text-xs font-bold uppercase tracking-wider text-slate-500 mb-1">
+        <div className="bg-white dark:bg-slate-800/90 rounded-xl border border-slate-200 dark:border-slate-700 p-5 shadow-sm">
+          <div className="text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-1">
             Overall Progress
           </div>
-          <div className="text-2xl font-extrabold text-slate-900">
+          <div className="text-2xl font-extrabold text-slate-900 dark:text-slate-100">
             {progressPercent}%
           </div>
-          <div className="w-full bg-slate-100 rounded-full h-2 my-2 overflow-hidden">
+          <div className="w-full bg-slate-100 dark:bg-slate-700 rounded-full h-2 my-2 overflow-hidden">
             <div
-              className="bg-blue-600 h-full rounded-full transition-all duration-300"
+              className="bg-blue-600 dark:bg-blue-500 h-full rounded-full transition-all duration-300"
               style={{ width: `${progressPercent}%` }}
             />
           </div>
-          <div className="text-xs text-slate-500 font-medium">
+          <p className="text-xs text-slate-500 dark:text-slate-300 font-medium">
             {completedTasks.length} of {totalTasksCount} tasks complete
-          </div>
+          </p>
         </div>
 
         {/* Card 2: Spent */}
-        <div className="bg-white rounded-xl border border-slate-200 p-5 shadow-sm">
-          <div className="text-xs font-bold uppercase tracking-wider text-slate-500 mb-1">
+        <div className="bg-white dark:bg-slate-800/90 rounded-xl border border-slate-200 dark:border-slate-700 p-5 shadow-sm">
+          <div className="text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-1">
             Spent
           </div>
-          <div className="text-2xl font-extrabold text-slate-900">
+          <div className="text-2xl font-extrabold text-slate-900 dark:text-slate-100">
             ${spentAmount.toLocaleString()}
           </div>
-          <div className="w-full bg-slate-100 rounded-full h-2 my-2 overflow-hidden">
+          <div className="w-full bg-slate-100 dark:bg-slate-700 rounded-full h-2 my-2 overflow-hidden">
             <div
               className="bg-sky-500 h-full rounded-full transition-all duration-300"
               style={{ width: `${spentPercent}%` }}
             />
           </div>
-          <div className="text-xs text-slate-500 font-medium">
+          <p className="text-xs text-slate-500 dark:text-slate-300 font-medium">
             of ${budgetTotal.toLocaleString()} budget ({spentPercent}% used)
-          </div>
+          </p>
         </div>
 
         {/* Card 3: Remaining */}
-        <div className="bg-white rounded-xl border border-slate-200 p-5 shadow-sm">
-          <div className="text-xs font-bold uppercase tracking-wider text-slate-500 mb-1">
+        <div className="bg-white dark:bg-slate-800/90 rounded-xl border border-slate-200 dark:border-slate-700 p-5 shadow-sm">
+          <div className="text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-1">
             Remaining Budget
           </div>
-          <div className="text-2xl font-extrabold text-emerald-600">
+          <div className="text-2xl font-extrabold text-emerald-600 dark:text-emerald-400">
             ${remainingBudget.toLocaleString()}
           </div>
-          <p className="text-xs text-slate-500 mt-3 font-medium">
+          <p className="text-xs text-slate-500 dark:text-slate-300 mt-3 font-medium">
             Project jurisdiction: {project.municipality || "Local"}
           </p>
         </div>
       </section>
 
       {/* ── Sub Navigation Tab Bar ── */}
-      <div className="border-b border-slate-200 mb-6 flex flex-wrap items-center gap-4 sm:gap-6 text-sm font-semibold">
+      <div className="border-b border-slate-200 dark:border-slate-700 mb-6 flex flex-wrap items-center gap-4 sm:gap-6 text-sm font-semibold">
         <button
           type="button"
           onClick={() => setActiveTab("tasks")}
           className={`pb-3 border-b-2 transition-colors ${
             activeTab === "tasks"
-              ? "border-blue-600 text-blue-600"
-              : "border-transparent text-slate-500 hover:text-slate-800"
+              ? "border-blue-600 text-blue-600 dark:text-blue-400"
+              : "border-transparent text-slate-500 dark:text-slate-400 hover:text-slate-800 dark:hover:text-slate-200"
           }`}
         >
           Tasks ({openTasksCount})
@@ -400,8 +400,8 @@ export default function ProjectDashboardPage() {
           onClick={() => setActiveTab("materials")}
           className={`pb-3 border-b-2 transition-colors flex items-center gap-1.5 ${
             activeTab === "materials"
-              ? "border-blue-600 text-blue-600"
-              : "border-transparent text-slate-500 hover:text-slate-800"
+              ? "border-blue-600 text-blue-600 dark:text-blue-400"
+              : "border-transparent text-slate-500 dark:text-slate-400 hover:text-slate-800 dark:hover:text-slate-200"
           }`}
         >
           <Package className="w-4 h-4 text-indigo-500" />
@@ -413,8 +413,8 @@ export default function ProjectDashboardPage() {
           onClick={() => setActiveTab("uploaded")}
           className={`pb-3 border-b-2 transition-colors flex items-center gap-1.5 ${
             activeTab === "uploaded"
-              ? "border-blue-600 text-blue-600"
-              : "border-transparent text-slate-500 hover:text-slate-800"
+              ? "border-blue-600 text-blue-600 dark:text-blue-400"
+              : "border-transparent text-slate-500 dark:text-slate-400 hover:text-slate-800 dark:hover:text-slate-200"
           }`}
         >
           <FileText className="w-4 h-4" />
@@ -426,8 +426,8 @@ export default function ProjectDashboardPage() {
           onClick={() => setActiveTab("generated")}
           className={`pb-3 border-b-2 transition-colors flex items-center gap-1.5 ${
             activeTab === "generated"
-              ? "border-blue-600 text-blue-600"
-              : "border-transparent text-slate-500 hover:text-slate-800"
+              ? "border-blue-600 text-blue-600 dark:text-blue-400"
+              : "border-transparent text-slate-500 dark:text-slate-400 hover:text-slate-800 dark:hover:text-slate-200"
           }`}
         >
           <Sparkles className="w-4 h-4 text-cyan-500" />
@@ -439,8 +439,8 @@ export default function ProjectDashboardPage() {
           onClick={() => setActiveTab("permit")}
           className={`pb-3 border-b-2 transition-colors ${
             activeTab === "permit"
-              ? "border-blue-600 text-blue-600"
-              : "border-transparent text-slate-500 hover:text-slate-800"
+              ? "border-blue-600 text-blue-600 dark:text-blue-400"
+              : "border-transparent text-slate-500 dark:text-slate-400 hover:text-slate-800 dark:hover:text-slate-200"
           }`}
         >
           Permit Strategy
@@ -449,11 +449,11 @@ export default function ProjectDashboardPage() {
 
       {/* ── Tab 1: Tasks ── */}
       {activeTab === "tasks" && (
-        <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-6">
+        <div className="bg-white dark:bg-slate-800/90 rounded-xl border border-slate-200 dark:border-slate-700 shadow-sm p-6">
           {/* Add Inline Task Form */}
           {showAddInline && (
             <form onSubmit={handleAddInlineTask} className="tt-add-task-card mb-6">
-              <h4 className="text-sm font-semibold text-slate-800 mb-3">Add Task to {project.name}</h4>
+              <h4 className="text-sm font-semibold text-slate-800 dark:text-slate-200 mb-3">Add Task to {project.name}</h4>
               <div className="grid grid-cols-1 md:grid-cols-3 gap-3 mb-3">
                 <input
                   type="text"
@@ -492,29 +492,29 @@ export default function ProjectDashboardPage() {
           {/* Grouped Category Sections */}
           {projectTasks.map((cat, catIdx) => (
             <div key={cat.category} className="mb-6 last:mb-0">
-              <div className="text-xs font-extrabold uppercase tracking-wider text-slate-400 mb-3">
+              <div className="text-xs font-extrabold uppercase tracking-wider text-slate-400 dark:text-slate-400 mb-3">
                 {cat.category}
               </div>
 
-              <ul className="divide-y divide-slate-100">
+              <ul className="divide-y divide-slate-100 dark:divide-slate-700/60">
                 {cat.tasks.map((task) => (
                   <li
                     key={task.id}
-                    className="py-3 flex items-center justify-between gap-4 hover:bg-slate-50/60 px-2 rounded-lg transition-colors"
+                    className="py-3 flex items-center justify-between gap-4 hover:bg-slate-50/60 dark:hover:bg-slate-700/50 px-2 rounded-lg transition-colors"
                   >
                     <div className="flex items-center gap-3">
                       <button
                         type="button"
                         onClick={() => toggleOpenTask(catIdx, task.id)}
-                        className="w-5 h-5 rounded-full border-2 border-slate-300 hover:border-blue-600 flex items-center justify-center transition-colors"
+                        className="w-5 h-5 rounded-full border-2 border-slate-300 dark:border-slate-500 hover:border-blue-600 flex items-center justify-center transition-colors"
                         aria-label={`Complete ${task.title}`}
                       />
-                      <span className="text-sm font-semibold text-slate-900">
+                      <span className="text-sm font-semibold text-slate-900 dark:text-slate-100">
                         {task.title}
                       </span>
                     </div>
 
-                    <div className="flex items-center gap-3 text-xs text-slate-500 font-medium">
+                    <div className="flex items-center gap-3 text-xs text-slate-500 dark:text-slate-400 font-medium">
                       <span className="flex items-center">
                         <span className={`inline-block w-2 h-2 rounded-full mr-1.5 ${task.urgencyDot}`} />
                         {task.priority}
@@ -528,11 +528,11 @@ export default function ProjectDashboardPage() {
           ))}
 
           {/* Completed Accordion Footer */}
-          <div className="mt-8 pt-4 border-t border-slate-100 flex items-center justify-between">
+          <div className="mt-8 pt-4 border-t border-slate-100 dark:border-slate-700 flex items-center justify-between">
             <button
               type="button"
               onClick={() => setShowCompleted(!showCompleted)}
-              className="text-xs font-bold uppercase tracking-wider text-slate-500 hover:text-blue-600 transition-colors flex items-center gap-1.5"
+              className="text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 hover:text-blue-600 dark:hover:text-blue-400 transition-colors flex items-center gap-1.5"
             >
               {showCompleted ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
               Completed ({completedTasks.length})
@@ -541,7 +541,7 @@ export default function ProjectDashboardPage() {
             <button
               type="button"
               onClick={() => setShowAddInline(true)}
-              className="text-xs font-semibold text-blue-600 hover:text-blue-800 flex items-center gap-1"
+              className="text-xs font-semibold text-blue-600 dark:text-blue-400 hover:underline flex items-center gap-1"
             >
               <Plus className="w-3.5 h-3.5" /> Add task
             </button>
@@ -549,9 +549,9 @@ export default function ProjectDashboardPage() {
 
           {/* Completed Items Accordion List */}
           {showCompleted && (
-            <ul className="mt-4 divide-y divide-slate-100 bg-slate-50/50 rounded-lg p-3">
+            <ul className="mt-4 divide-y divide-slate-100 dark:divide-slate-700 bg-slate-50/50 dark:bg-slate-900/60 rounded-lg p-3">
               {completedTasks.map((t) => (
-                <li key={t.id} className="py-2.5 flex items-center justify-between text-xs opacity-60">
+                <li key={t.id} className="py-2.5 flex items-center justify-between text-xs opacity-75">
                   <div className="flex items-center gap-3">
                     <button
                       type="button"
@@ -560,11 +560,11 @@ export default function ProjectDashboardPage() {
                     >
                       <Check className="w-3 h-3 stroke-[3]" />
                     </button>
-                    <span className="font-semibold text-slate-700 line-through">
+                    <span className="font-semibold text-slate-700 dark:text-slate-300 line-through">
                       {t.title}
                     </span>
                   </div>
-                  <span className="text-slate-400">Done</span>
+                  <span className="text-slate-400 dark:text-slate-400">Done</span>
                 </li>
               ))}
             </ul>
@@ -574,11 +574,11 @@ export default function ProjectDashboardPage() {
 
       {/* ── Tab 2: Materials & Supplies ── */}
       {activeTab === "materials" && (
-        <div className="bg-white rounded-xl border border-slate-200 p-6 shadow-sm">
+        <div className="bg-white dark:bg-slate-800/90 rounded-xl border border-slate-200 dark:border-slate-700 p-6 shadow-sm">
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6">
             <div>
-              <h3 className="text-base font-bold text-slate-900">Materials & Supplies</h3>
-              <p className="text-xs text-slate-500">Track required hardware, tile, wiring, and construction supplies for {project.name}.</p>
+              <h3 className="text-base font-bold text-slate-900 dark:text-slate-100">Materials & Supplies</h3>
+              <p className="text-xs text-slate-500 dark:text-slate-300">Track required hardware, tile, wiring, and construction supplies for {project.name}.</p>
             </div>
             <button
               type="button"
@@ -592,24 +592,24 @@ export default function ProjectDashboardPage() {
 
           {/* Materials Metrics Cards */}
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mb-6">
-            <div className="p-4 bg-slate-50 rounded-xl border border-slate-200">
-              <span className="text-[11px] font-bold uppercase tracking-wider text-slate-500 block mb-1">Total Estimated Cost</span>
-              <span className="text-xl font-extrabold text-slate-900">${totalMaterialCost.toLocaleString()}</span>
+            <div className="p-4 bg-slate-50 dark:bg-slate-900/60 rounded-xl border border-slate-200 dark:border-slate-700">
+              <span className="text-[11px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 block mb-1">Total Estimated Cost</span>
+              <span className="text-xl font-extrabold text-slate-900 dark:text-slate-100">${totalMaterialCost.toLocaleString()}</span>
             </div>
-            <div className="p-4 bg-emerald-50/50 rounded-xl border border-emerald-200/60">
-              <span className="text-[11px] font-bold uppercase tracking-wider text-emerald-700 block mb-1">Purchased & Delivered</span>
-              <span className="text-xl font-extrabold text-emerald-800">${purchasedMaterialCost.toLocaleString()}</span>
+            <div className="p-4 bg-emerald-50/50 dark:bg-emerald-950/40 rounded-xl border border-emerald-200/60 dark:border-emerald-800/60">
+              <span className="text-[11px] font-bold uppercase tracking-wider text-emerald-700 dark:text-emerald-400 block mb-1">Purchased & Delivered</span>
+              <span className="text-xl font-extrabold text-emerald-800 dark:text-emerald-300">${purchasedMaterialCost.toLocaleString()}</span>
             </div>
-            <div className="p-4 bg-amber-50/50 rounded-xl border border-amber-200/60">
-              <span className="text-[11px] font-bold uppercase tracking-wider text-amber-700 block mb-1">On Order / Needed</span>
-              <span className="text-xl font-extrabold text-amber-800">${(totalMaterialCost - purchasedMaterialCost).toLocaleString()}</span>
+            <div className="p-4 bg-amber-50/50 dark:bg-amber-950/40 rounded-xl border border-amber-200/60 dark:border-amber-800/60">
+              <span className="text-[11px] font-bold uppercase tracking-wider text-amber-700 dark:text-amber-400 block mb-1">On Order / Needed</span>
+              <span className="text-xl font-extrabold text-amber-800 dark:text-amber-300">${(totalMaterialCost - purchasedMaterialCost).toLocaleString()}</span>
             </div>
           </div>
 
           {/* Inline Add Material Form */}
           {showAddMaterial && (
-            <form onSubmit={handleAddMaterial} className="p-4 bg-slate-50 rounded-xl border border-slate-200 mb-6 space-y-3">
-              <h4 className="text-xs font-bold uppercase tracking-wider text-slate-700">New Material Record</h4>
+            <form onSubmit={handleAddMaterial} className="p-4 bg-slate-50 dark:bg-slate-900/60 rounded-xl border border-slate-200 dark:border-slate-700 mb-6 space-y-3">
+              <h4 className="text-xs font-bold uppercase tracking-wider text-slate-700 dark:text-slate-300">New Material Record</h4>
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                 <input
                   type="text"
@@ -681,7 +681,7 @@ export default function ProjectDashboardPage() {
           <div className="overflow-x-auto">
             <table className="w-full text-left text-xs border-collapse">
               <thead>
-                <tr className="border-b border-slate-200 text-slate-400 font-bold uppercase tracking-wider text-[10px]">
+                <tr className="border-b border-slate-200 dark:border-slate-700 text-slate-400 dark:text-slate-400 font-bold uppercase tracking-wider text-[10px]">
                   <th className="pb-3 px-2">Item</th>
                   <th className="pb-3 px-2">Category</th>
                   <th className="pb-3 px-2">Supplier</th>
@@ -690,20 +690,20 @@ export default function ProjectDashboardPage() {
                   <th className="pb-3 px-2 text-center">Status</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-slate-100 font-medium text-slate-800">
+              <tbody className="divide-y divide-slate-100 dark:divide-slate-700 font-medium text-slate-800 dark:text-slate-200">
                 {materials.map((m) => {
                   const total = m.quantity * m.unitPrice;
-                  let badgeStyle = "bg-slate-100 text-slate-600";
-                  if (m.status === "Delivered") badgeStyle = "bg-blue-100 text-blue-800";
-                  if (m.status === "Purchased") badgeStyle = "bg-emerald-100 text-emerald-800";
-                  if (m.status === "On Order") badgeStyle = "bg-amber-100 text-amber-800";
-                  if (m.status === "Needed") badgeStyle = "bg-rose-100 text-rose-800";
+                  let badgeStyle = "bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-300";
+                  if (m.status === "Delivered") badgeStyle = "bg-blue-100 dark:bg-blue-900/60 text-blue-800 dark:text-blue-200";
+                  if (m.status === "Purchased") badgeStyle = "bg-emerald-100 dark:bg-emerald-900/60 text-emerald-800 dark:text-emerald-200";
+                  if (m.status === "On Order") badgeStyle = "bg-amber-100 dark:bg-amber-900/60 text-amber-800 dark:text-amber-200";
+                  if (m.status === "Needed") badgeStyle = "bg-rose-100 dark:bg-rose-900/60 text-rose-800 dark:text-rose-200";
 
                   return (
-                    <tr key={m.id} className="hover:bg-slate-50/70 transition-colors">
-                      <td className="py-3 px-2 font-semibold text-slate-900">{m.name}</td>
-                      <td className="py-3 px-2 text-slate-500">{m.category}</td>
-                      <td className="py-3 px-2 text-slate-500">{m.supplier}</td>
+                    <tr key={m.id} className="hover:bg-slate-50/70 dark:hover:bg-slate-700/40 transition-colors">
+                      <td className="py-3 px-2 font-semibold text-slate-900 dark:text-slate-100">{m.name}</td>
+                      <td className="py-3 px-2 text-slate-500 dark:text-slate-400">{m.category}</td>
+                      <td className="py-3 px-2 text-slate-500 dark:text-slate-400">{m.supplier}</td>
                       <td className="py-3 px-2 text-right">{m.quantity}</td>
                       <td className="py-3 px-2 text-right font-bold">${total.toLocaleString()}</td>
                       <td className="py-3 px-2 text-center">
@@ -722,11 +722,11 @@ export default function ProjectDashboardPage() {
 
       {/* ── Tab 3: Uploaded Documents ── */}
       {activeTab === "uploaded" && (
-        <div className="bg-white rounded-xl border border-slate-200 p-6 shadow-sm">
+        <div className="bg-white dark:bg-slate-800/90 rounded-xl border border-slate-200 dark:border-slate-700 p-6 shadow-sm">
           <div className="flex items-center justify-between mb-4">
             <div>
-              <h3 className="text-base font-bold text-slate-900">Uploaded Documents & Files</h3>
-              <p className="text-xs text-slate-500">Permits, inspection PDF documents, and 3D room scans uploaded for this project.</p>
+              <h3 className="text-base font-bold text-slate-900 dark:text-slate-100">Uploaded Documents & Files</h3>
+              <p className="text-xs text-slate-500 dark:text-slate-300">Permits, inspection PDF documents, and 3D room scans uploaded for this project.</p>
             </div>
             <Link to="/upload" className="tt-btn-primary flex items-center gap-1.5 text-xs">
               <Upload className="w-3.5 h-3.5" />
@@ -736,19 +736,19 @@ export default function ProjectDashboardPage() {
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
             {uploadedFiles.map((file) => (
-              <div key={file.id} className="p-4 border border-slate-200 rounded-xl hover:border-blue-400 transition-colors flex items-start justify-between">
+              <div key={file.id} className="p-4 border border-slate-200 dark:border-slate-700 rounded-xl hover:border-blue-400 dark:hover:border-blue-500 transition-colors flex items-start justify-between bg-white dark:bg-slate-900/60">
                 <div className="flex items-start gap-3">
-                  <div className="w-9 h-9 rounded-lg bg-blue-50 text-blue-600 flex items-center justify-center flex-shrink-0 mt-0.5">
+                  <div className="w-9 h-9 rounded-lg bg-blue-50 dark:bg-blue-950/60 text-blue-600 dark:text-blue-400 flex items-center justify-center flex-shrink-0 mt-0.5">
                     <FileText className="w-5 h-5" />
                   </div>
                   <div>
-                    <h4 className="text-sm font-semibold text-slate-900">{file.name}</h4>
-                    <span className="text-xs text-slate-500 font-medium">{file.type} • {file.date}</span>
+                    <h4 className="text-sm font-semibold text-slate-900 dark:text-slate-100">{file.name}</h4>
+                    <span className="text-xs text-slate-500 dark:text-slate-400 font-medium">{file.type} • {file.date}</span>
                   </div>
                 </div>
                 <button
                   type="button"
-                  className="text-xs text-slate-500 hover:text-blue-600 p-1"
+                  className="text-xs text-slate-500 dark:text-slate-400 hover:text-blue-600 p-1"
                   onClick={() => alert(`Opening ${file.name}`)}
                 >
                   <Eye className="w-4 h-4" />
@@ -761,16 +761,16 @@ export default function ProjectDashboardPage() {
 
       {/* ── Tab 4: Generated Documents (AI LLM Instructions & Assets) ── */}
       {activeTab === "generated" && (
-        <div className="bg-white rounded-xl border border-slate-200 p-6 shadow-sm">
+        <div className="bg-white dark:bg-slate-800/90 rounded-xl border border-slate-200 dark:border-slate-700 p-6 shadow-sm">
           <div className="flex items-center justify-between mb-4">
             <div>
               <div className="flex items-center gap-2">
-                <h3 className="text-base font-bold text-slate-900">Generated Documents & AI Assets</h3>
-                <span className="px-2 py-0.5 text-[10px] font-bold text-cyan-700 bg-cyan-50 border border-cyan-200 rounded-full flex items-center gap-1">
+                <h3 className="text-base font-bold text-slate-900 dark:text-slate-100">Generated Documents & AI Assets</h3>
+                <span className="px-2 py-0.5 text-[10px] font-bold text-cyan-700 dark:text-cyan-300 bg-cyan-50 dark:bg-cyan-950/60 border border-cyan-200 dark:border-cyan-800 rounded-full flex items-center gap-1">
                   <Sparkles className="w-3 h-3 text-cyan-500" /> AI Assistant
                 </span>
               </div>
-              <p className="text-xs text-slate-500 mt-0.5">
+              <p className="text-xs text-slate-500 dark:text-slate-300 mt-0.5">
                 Step-by-step instructions, compliance checklists, and material estimates generated automatically by the AI query engine.
               </p>
             </div>
@@ -780,28 +780,28 @@ export default function ProjectDashboardPage() {
             {generatedDocs.map((doc) => (
               <div
                 key={doc.id}
-                className="border border-slate-200 rounded-xl p-5 hover:border-cyan-400 transition-all bg-gradient-to-r from-white to-cyan-50/20"
+                className="border border-slate-200 dark:border-slate-700 rounded-xl p-5 hover:border-cyan-400 transition-all bg-gradient-to-r from-white dark:from-slate-900 to-cyan-50/20 dark:to-cyan-950/20"
               >
                 <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 mb-2">
                   <div className="flex items-center gap-2">
-                    <FileCheck className="w-5 h-5 text-cyan-600 flex-shrink-0" />
-                    <h4 className="text-sm font-bold text-slate-900">{doc.title}</h4>
+                    <FileCheck className="w-5 h-5 text-cyan-600 dark:text-cyan-400 flex-shrink-0" />
+                    <h4 className="text-sm font-bold text-slate-900 dark:text-slate-100">{doc.title}</h4>
                   </div>
                   <div className="flex items-center gap-2">
-                    <span className="text-xs font-semibold px-2 py-0.5 rounded-full bg-slate-100 text-slate-600">
+                    <span className="text-xs font-semibold px-2 py-0.5 rounded-full bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-300">
                       {doc.type}
                     </span>
                     <span className="text-xs text-slate-400">{doc.date}</span>
                   </div>
                 </div>
 
-                <p className="text-xs text-slate-600 mb-3">{doc.summary}</p>
+                <p className="text-xs text-slate-600 dark:text-slate-300 mb-3">{doc.summary}</p>
 
-                <div className="flex items-center justify-between pt-3 border-t border-slate-100">
+                <div className="flex items-center justify-between pt-3 border-t border-slate-100 dark:border-slate-700">
                   <div className="flex items-center gap-3">
                     <button
                       type="button"
-                      className="text-xs font-semibold text-blue-600 hover:text-blue-800 flex items-center gap-1"
+                      className="text-xs font-semibold text-blue-600 dark:text-blue-400 hover:underline flex items-center gap-1"
                       onClick={() => setSelectedDocPreview(doc)}
                     >
                       <Eye className="w-3.5 h-3.5" /> View Instructions
@@ -810,7 +810,7 @@ export default function ProjectDashboardPage() {
                     {doc.steps && (
                       <button
                         type="button"
-                        className="text-xs font-semibold text-emerald-600 hover:text-emerald-800 flex items-center gap-1 bg-emerald-50 px-2 py-1 rounded-md border border-emerald-200"
+                        className="text-xs font-semibold text-emerald-600 dark:text-emerald-400 hover:underline flex items-center gap-1 bg-emerald-50 dark:bg-emerald-950/60 px-2 py-1 rounded-md border border-emerald-200 dark:border-emerald-800"
                         onClick={() => handleConvertStepsToTasks(doc)}
                       >
                         <Plus className="w-3.5 h-3.5" /> Convert Steps into Project Tasks
@@ -820,7 +820,7 @@ export default function ProjectDashboardPage() {
 
                   <button
                     type="button"
-                    className="text-xs text-slate-500 hover:text-slate-700 flex items-center gap-1"
+                    className="text-xs text-slate-500 dark:text-slate-400 hover:text-slate-700 flex items-center gap-1"
                     onClick={() => {
                       navigator.clipboard.writeText(doc.content);
                       alert("Step-by-step instructions copied to clipboard!");
@@ -836,22 +836,22 @@ export default function ProjectDashboardPage() {
           {/* Modal Preview Dialog for Generated Document Instructions */}
           {selectedDocPreview && (
             <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4">
-              <div className="bg-white rounded-2xl max-w-2xl w-full p-6 shadow-2xl border border-slate-200">
-                <div className="flex items-center justify-between pb-3 border-b border-slate-100 mb-4">
+              <div className="bg-white dark:bg-slate-800 rounded-2xl max-w-2xl w-full p-6 shadow-2xl border border-slate-200 dark:border-slate-700">
+                <div className="flex items-center justify-between pb-3 border-b border-slate-100 dark:border-slate-700 mb-4">
                   <div className="flex items-center gap-2">
                     <Sparkles className="w-5 h-5 text-cyan-500" />
-                    <h3 className="text-base font-bold text-slate-900">{selectedDocPreview.title}</h3>
+                    <h3 className="text-base font-bold text-slate-900 dark:text-slate-100">{selectedDocPreview.title}</h3>
                   </div>
                   <button
                     type="button"
                     onClick={() => setSelectedDocPreview(null)}
-                    className="text-slate-400 hover:text-slate-600 font-bold"
+                    className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 font-bold"
                   >
                     ✕
                   </button>
                 </div>
 
-                <div className="bg-slate-50 p-4 rounded-xl text-xs font-mono text-slate-800 whitespace-pre-wrap leading-relaxed max-h-96 overflow-y-auto mb-4 border border-slate-200">
+                <div className="bg-slate-50 dark:bg-slate-900 p-4 rounded-xl text-xs font-mono text-slate-800 dark:text-slate-200 whitespace-pre-wrap leading-relaxed max-h-96 overflow-y-auto mb-4 border border-slate-200 dark:border-slate-700">
                   {selectedDocPreview.content}
                 </div>
 
@@ -897,27 +897,28 @@ export default function ProjectDashboardPage() {
 
       {/* ── Tab 5: Permit Strategy ── */}
       {activeTab === "permit" && (
-        <div className="bg-white rounded-xl border border-slate-200 p-6 shadow-sm">
-          <h3 className="text-base font-bold text-slate-900 mb-2">Permit Strategy & Pull Order</h3>
+        <div className="bg-white dark:bg-slate-800/90 rounded-xl border border-slate-200 dark:border-slate-700 p-6 shadow-sm">
+          <h3 className="text-base font-bold text-slate-900 dark:text-slate-100 mb-2">Permit Strategy & Pull Order</h3>
           {permitStrategy && permitStrategy.permits?.length > 0 ? (
             <div>
-              <p className="text-sm text-slate-600 mb-4 font-medium">
+              <p className="text-sm text-slate-600 dark:text-slate-300 mb-4 font-medium">
                 Sequence: {permitStrategy.sequence.join(" → ")}
               </p>
               <ul className="space-y-2 mb-4">
                 {permitStrategy.permits.map((p) => (
-                  <li key={p} className="p-3 bg-slate-50 rounded-lg text-sm font-semibold text-slate-800 flex justify-between">
+                  <li key={p} className="p-3 bg-slate-50 dark:bg-slate-900/60 rounded-lg text-sm font-semibold text-slate-800 dark:text-slate-200 flex justify-between items-center">
                     <span>{p}</span>
-                    <span className="text-slate-500">~${permitStrategy.fee_breakdown?.[p] || "150"}</span>
+                    <span className="text-slate-500 dark:text-slate-400">~${permitStrategy.fee_breakdown?.[p] || "150"}</span>
                   </li>
                 ))}
               </ul>
-              <p className="text-sm font-bold text-slate-900">
-                Total Estimated Permit Fees: ~${permitStrategy.estimated_fees_usd}
-              </p>
+              <div className="p-3 bg-slate-100 dark:bg-slate-900/80 rounded-lg text-sm font-bold text-slate-900 dark:text-slate-100 flex justify-between items-center border border-slate-200 dark:border-slate-700">
+                <span>Total Estimated Permit Fees</span>
+                <span>~${permitStrategy.estimated_fees_usd}</span>
+              </div>
             </div>
           ) : (
-            <p className="text-sm text-slate-500">
+            <p className="text-sm text-slate-500 dark:text-slate-400">
               Permit strategy requires completing municipal jurisdiction checks for {project.municipality || "this project"}.
             </p>
           )}
