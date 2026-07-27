@@ -64,7 +64,6 @@ export default function Nav() {
           <NavLink to="/" className="tt-nav-brand-link" aria-label="ToolTime Home" onClick={closeMenu}>
             <LogoSVG className="nav-brand-logo nav-logo-themed" aria-hidden="true" />
           </NavLink>
-
           <button
             type="button"
             className="tt-nav-mobile-toggle"
@@ -79,7 +78,7 @@ export default function Nav() {
         {/* Primary Navigation Bar (Information Architecture Streamlined) */}
         <div className={`tt-nav-collapse ${isOpen ? "tt-show" : ""}`}>
           <div className="tt-nav-links-group">
-            {user ? (
+            {user && (
               <>
                 <NavLink
                   to="/dashboard"
@@ -135,25 +134,6 @@ export default function Nav() {
                   <FileText className="w-4 h-4 mr-1.5" />
                   Documents
                 </NavLink>
-              </>
-            ) : (
-              <>
-                <NavLink
-                  to="/"
-                  className={({ isActive }) =>
-                    `tt-nav-item ${isActive ? "tt-nav-item-active" : ""}`
-                  }
-                  onClick={closeMenu}
-                >
-                  Overview
-                </NavLink>
-                <a
-                  href="#features"
-                  className="tt-nav-item"
-                  onClick={closeMenu}
-                >
-                  Features
-                </a>
               </>
             )}
           </div>
@@ -264,10 +244,10 @@ export default function Nav() {
                 )}
               </div>
             ) : (
-              <div className="flex items-center gap-3 w-full sm:w-auto mt-3 sm:mt-0 pt-3 sm:pt-0 border-t sm:border-t-0 border-slate-800">
+              <div className="flex items-center gap-3 w-full sm:w-auto mt-3 sm:mt-0 pt-3 sm:pt-0 border-t sm:border-t-0 border-slate-800 flex-nowrap shrink-0 whitespace-nowrap">
                 <NavLink
                   to="/auth"
-                  className="tt-nav-item flex items-center justify-center gap-1.5 w-full sm:w-auto"
+                  className="tt-nav-item flex items-center justify-center gap-1.5 whitespace-nowrap shrink-0"
                   onClick={closeMenu}
                 >
                   <LogIn className="w-4 h-4 text-slate-400" />
@@ -275,7 +255,7 @@ export default function Nav() {
                 </NavLink>
                 <NavLink
                   to="/auth"
-                  className="tt-btn-primary flex items-center justify-center gap-1.5 w-full sm:w-auto text-xs px-4 py-2"
+                  className="tt-btn-primary flex items-center justify-center gap-1.5 text-xs px-4 py-2 whitespace-nowrap shrink-0"
                   onClick={closeMenu}
                 >
                   Get Started

@@ -17,21 +17,21 @@ export default function LogoSVG({ animated = false, ...props }) {
     <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 678.34 734.94" {...props}>
       <defs>
         <style>{`
-          .st0  { fill: #2b2b2b; }
-          .st1  { fill: #f6f6f6; }
-          .st2  { fill: #c4c4c4; }
-          .st3  { fill: #696969; }
-          .st4  { fill: #c6c6c6; }
-          .st5  { fill: #656565; }
-          .st6  { fill: #3f3f3f; }
-          .st7  { fill: #3d3d3d; }
-          .st8  { fill: #f9f9f9; }
-          .st9  { fill: #c5c5c5; }
-          .st10 { fill: #f7f7f7; }
-          .st11 { fill: #6b6b6b; }
-          .st12 { fill: #434343; }
-          .st13 { fill: #404040; }
-          .st14 { fill: #686868; }
+          .st0  { fill: #1e293b; }
+          .st1  { fill: #ffffff; } /* Checkmark 1 crisp white */
+          .st2  { fill: #60a5fa; } /* Row 3 line accent tint */
+          .st3  { fill: #1d4ed8; } /* Row 2 Bubble — Deep Blue pop */
+          .st4  { fill: #0284c7; } /* Row 3 Bubble — Vibrant Cyan Blue pop */
+          .st5  { fill: #475569; }
+          .st6  { fill: #334155; }
+          .st7  { fill: #1e293b; }
+          .st8  { fill: #ffffff; } /* Checkmark 3 crisp white */
+          .st9  { fill: #38bdf8; } /* Row 1 & 2 lines accent tint */
+          .st10 { fill: #ffffff; } /* Checkmark 2 crisp white */
+          .st11 { fill: #64748b; }
+          .st12 { fill: #334155; }
+          .st13 { fill: #2563eb; } /* Row 1 Bubble — Primary Blue pop */
+          .st14 { fill: #475569; }
         `}</style>
       </defs>
 

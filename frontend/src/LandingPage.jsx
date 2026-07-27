@@ -59,36 +59,40 @@ export default function LandingPage() {
       {/* Hero Section */}
       <section className="relative overflow-hidden pt-20 pb-16 md:pt-32 md:pb-24 border-b border-border bg-gradient-to-b from-background via-background/50 to-secondary/10">
         <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 text-center space-y-8">
-          {/* Animated hero logo */}
-          <div className="flex justify-center mb-2">
-            <LogoSVG animated className="hero-logo" aria-label="permit_rag logo" />
-          </div>
+          {/* Side-by-side Hero Logo & H1 / Content Column */}
+          <div className="flex flex-col md:flex-row items-center justify-center gap-6 md:gap-10 max-w-5xl mx-auto text-center md:text-left">
+            <div className="flex-shrink-0 flex justify-center items-center">
+              <LogoSVG animated className="tt-site-logo w-auto object-contain drop-shadow-md" aria-label="permit_rag logo" />
+            </div>
 
-          <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full border border-accent/20 bg-accent/5 text-accent text-xs font-semibold tracking-wide uppercase font-heading animate-fade-in">
-            <Sparkles className="h-3.5 w-3.5" />
-            RAG-Powered DFW Permit Compliance
-          </div>
-          
-          <h1 className="text-4xl sm:text-5xl md:text-6xl font-black font-heading tracking-tight leading-none text-foreground max-w-4xl mx-auto">
-            Municipality Ordinance <span className="text-accent bg-clip-text">Searching</span> Done in Seconds
-          </h1>
-          
-          <p className="text-lg md:text-xl text-muted-foreground max-w-2xl mx-auto font-normal leading-relaxed">
-            Stop digging through thousands of pages of municipal code PDFs. Get instant, cited compliance answers for Dallas, Plano, Frisco, McKinney, and Fort Worth.
-          </p>
+            <div className="space-y-6 flex-1">
+              <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full border border-accent/20 bg-accent/5 text-accent text-xs font-semibold tracking-wide uppercase font-heading animate-fade-in">
+                <Sparkles className="h-3.5 w-3.5" />
+                RAG-Powered DFW Permit Compliance
+              </div>
 
-          <div className="flex flex-col sm:flex-row items-center justify-center gap-4 pt-4">
-            <Link to="/auth">
-              <Button size="lg" className="w-full sm:w-auto px-8 font-semibold flex items-center gap-2 shadow-lg landing-hero-primary">
-                Get Started Free
-                <ArrowRight className="h-4 w-4" />
-              </Button>
-            </Link>
-            <a href="#features">
-              <Button variant="outline" size="lg" className="w-full sm:w-auto px-8 font-semibold landing-hero-outline">
-                Learn More
-              </Button>
-            </a>
+              <h1 className="text-3xl sm:text-4xl md:text-5xl lg:text-6xl font-black font-heading tracking-tight leading-tight text-foreground">
+                Municipality Ordinance <span className="text-accent bg-clip-text">Searching</span> Done in Seconds
+              </h1>
+
+              <p className="text-lg md:text-xl text-muted-foreground max-w-2xl font-normal leading-relaxed">
+                Stop digging through thousands of pages of municipal code PDFs. Get instant, cited compliance answers for Dallas, Plano, Frisco, McKinney, and Fort Worth.
+              </p>
+
+              <div className="flex flex-col sm:flex-row items-center justify-center md:justify-start gap-4 pt-2">
+                <Link to="/auth">
+                  <Button size="lg" className="w-full sm:w-auto px-8 font-semibold flex items-center gap-2 shadow-lg landing-hero-primary">
+                    Get Started Free
+                    <ArrowRight className="h-4 w-4" />
+                  </Button>
+                </Link>
+                <a href="#features">
+                  <Button variant="outline" size="lg" className="w-full sm:w-auto px-8 font-semibold landing-hero-outline">
+                    Learn More
+                  </Button>
+                </a>
+              </div>
+            </div>
           </div>
 
           {/* DFW Badge Banner */}
@@ -96,8 +100,8 @@ export default function LandingPage() {
             <p className="text-xs uppercase font-semibold tracking-wider text-muted-foreground mb-6">Supported DFW Municipalities</p>
             <div className="flex flex-wrap justify-center gap-3">
               {municipalities.map((city, index) => (
-                <div 
-                  key={index} 
+                <div
+                  key={index}
                   className="px-4 py-2 bg-card border border-border rounded-xl text-sm font-medium hover:border-accent/40 hover:bg-secondary/10 transition-all cursor-default shadow-sm group"
                 >
                   <span className="font-heading font-bold text-foreground block">{city.name}</span>
@@ -122,8 +126,8 @@ export default function LandingPage() {
 
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
           {features.map((feature, idx) => (
-            <div 
-              key={idx} 
+            <div
+              key={idx}
               className="p-6 bg-card border border-border rounded-2xl hover:border-accent/30 hover:shadow-md transition-all space-y-4 shadow-sm"
             >
               <div className="p-3 bg-secondary/50 rounded-xl w-fit">

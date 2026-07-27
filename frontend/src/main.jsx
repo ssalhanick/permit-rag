@@ -36,6 +36,7 @@ import OfflineBanner from "./components/OfflineBanner.jsx";
 import BiometricGate from "./components/BiometricGate.jsx";
 import Nav from "./Nav.jsx";
 import { AuthProvider } from "./context/AuthContext.jsx";
+import { ThemeProvider } from "./context/ThemeContext.jsx";
 import { initPushNotifications } from "./services/pushNotifications.js";
 import { isNativePlatform } from "./platform.js";
 import "./styles.css";
@@ -57,12 +58,13 @@ function MobileBootstrap() {
 ReactDOM.createRoot(document.getElementById("root")).render(
   <React.StrictMode>
     <BrowserRouter>
-      <AuthProvider>
-        <MobileBootstrap />
-        <OfflineBanner />
-        <BiometricGate>
-          <Nav />
-          <Routes>
+      <ThemeProvider>
+        <AuthProvider>
+          <MobileBootstrap />
+          <OfflineBanner />
+          <BiometricGate>
+            <Nav />
+            <Routes>
           <Route path="/" element={<App />} />
           <Route
             path="/dashboard"
@@ -185,6 +187,7 @@ ReactDOM.createRoot(document.getElementById("root")).render(
           </Routes>
         </BiometricGate>
       </AuthProvider>
-    </BrowserRouter>
-  </React.StrictMode>,
+    </ThemeProvider>
+  </BrowserRouter>
+</React.StrictMode>,
 );
