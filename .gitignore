@@ -42,3 +42,8 @@ evaluation/cache/
 # runtime, the corpus lives in the DB. catalog.json + registry.json stay
 # tracked. Metadata source-of-truth is redesigned in agent architecture Phase 3.
 documents/metadata/
+
+# ── Mobile & Build ───────────────────────────────────────
+.gradle/
+*.lock
+
