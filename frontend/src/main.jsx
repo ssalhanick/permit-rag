@@ -2,6 +2,8 @@ import React, { useEffect } from "react";
 import ReactDOM from "react-dom/client";
 import { BrowserRouter, Navigate, Route, Routes } from "react-router-dom";
 import App from "./App.jsx";
+import DashboardPage from "./DashboardPage.jsx";
+import TasksPage from "./TasksPage.jsx";
 import QueryPage from "./QueryPage.jsx";
 import DebugQueryPage from "./DebugQueryPage.jsx";
 import UploadPage from "./UploadPage.jsx";
@@ -62,6 +64,22 @@ ReactDOM.createRoot(document.getElementById("root")).render(
           <Nav />
           <Routes>
           <Route path="/" element={<App />} />
+          <Route
+            path="/dashboard"
+            element={
+              <ProtectedRoute>
+                <DashboardPage />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/tasks"
+            element={
+              <ProtectedRoute>
+                <TasksPage />
+              </ProtectedRoute>
+            }
+          />
           <Route
             path="/query"
             element={

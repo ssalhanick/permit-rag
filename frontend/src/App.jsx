@@ -7,7 +7,7 @@ function App() {
   const { user } = useAuth();
 
   if (user) {
-    return <Navigate to="/query" replace />;
+    return <Navigate to="/dashboard" replace />;
   }
 
   return <LandingPage />;
