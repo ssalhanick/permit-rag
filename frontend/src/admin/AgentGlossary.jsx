@@ -184,7 +184,7 @@ const FALLBACK_GLOSSARY = [
     category: "Domain & Context",
     tier: "cheap",
     execution_mode: "Hybrid (Deterministic Calculation + LLM Guidance Note)",
-    autonomy_ceiling": "L3",
+    autonomy_ceiling: "L3",
     description: "Plans required permit filing sequences, estimates filing fees, and outlines submittal prerequisites for construction projects.",
     dependencies: {
       calls: ["db/client.py"],
