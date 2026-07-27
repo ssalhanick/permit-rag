@@ -13,7 +13,9 @@ import {
   User,
   History,
   Layers,
-  ChevronDown
+  ChevronDown,
+  LogIn,
+  ArrowRight
 } from "lucide-react";
 import LogoSVG from "./components/LogoSVG.jsx";
 import ProjectSwitcher from "./components/ProjectSwitcher.jsx";
@@ -134,10 +136,29 @@ export default function Nav() {
                   Documents
                 </NavLink>
               </>
-            ) : null}
+            ) : (
+              <>
+                <NavLink
+                  to="/"
+                  className={({ isActive }) =>
+                    `tt-nav-item ${isActive ? "tt-nav-item-active" : ""}`
+                  }
+                  onClick={closeMenu}
+                >
+                  Overview
+                </NavLink>
+                <a
+                  href="#features"
+                  className="tt-nav-item"
+                  onClick={closeMenu}
+                >
+                  Features
+                </a>
+              </>
+            )}
           </div>
 
-          {/* User Profile Mini Menu Dropdown Trigger */}
+          {/* User Profile / Auth Action Section */}
           <div className="tt-nav-user-section" ref={menuRef}>
             {user ? (
               <div className="tt-user-dropdown-container">
@@ -242,7 +263,26 @@ export default function Nav() {
                   </div>
                 )}
               </div>
-            ) : null}
+            ) : (
+              <div className="flex items-center gap-3 w-full sm:w-auto mt-3 sm:mt-0 pt-3 sm:pt-0 border-t sm:border-t-0 border-slate-800">
+                <NavLink
+                  to="/auth"
+                  className="tt-nav-item flex items-center justify-center gap-1.5 w-full sm:w-auto"
+                  onClick={closeMenu}
+                >
+                  <LogIn className="w-4 h-4 text-slate-400" />
+                  Sign In
+                </NavLink>
+                <NavLink
+                  to="/auth"
+                  className="tt-btn-primary flex items-center justify-center gap-1.5 w-full sm:w-auto text-xs px-4 py-2"
+                  onClick={closeMenu}
+                >
+                  Get Started
+                  <ArrowRight className="w-3.5 h-3.5" />
+                </NavLink>
+              </div>
+            )}
           </div>
         </div>
       </nav>
