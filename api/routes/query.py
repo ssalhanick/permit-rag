@@ -36,6 +36,7 @@ from api.schemas import (
     AnswerResponse,
     ChunkResponse,
     CitationResponse,
+    ClarifyingOption,
     ConflictWarning,
     DiagnosticsResponse,
     ErrorResponse,
@@ -318,6 +319,10 @@ def _build_abstain_response(
         unique_doc_count=len(result.unique_documents),
         unique_doc_ids=result.unique_documents,
     )
+    clarifying = [
+        ClarifyingOption(**opt) if isinstance(opt, dict) else opt
+        for opt in (getattr(plan, "clarifying_options", []) or [])
+    ]
     response = AnswerResponse(
         query=body.query,
         answer=plan.abstain_message or "",
@@ -337,6 +342,7 @@ def _build_abstain_response(
         conflict_warnings=[],
         persona_nudge=_nudge_for(plan),
         abstained=True,
+        clarifying_options=clarifying,
         media_refs=_media_ref_responses(plan),
         run_id=_current_run_id(),
     )

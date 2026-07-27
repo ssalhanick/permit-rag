@@ -178,6 +178,7 @@ class ManagerResult:
     # user-facing text; the route returns it as a 200, not a 422.
     abstained: bool = False
     abstain_message: str | None = None
+    clarifying_options: list[dict[str, Any]] = field(default_factory=list)
     # Phase 4 second pass: sourced how-to videos for the diy path. Empty for every
     # other persona, on an abstain, and when the query names no curated task.
     media_refs: list[Any] = field(default_factory=list)
@@ -221,6 +222,7 @@ class _PlanState:
     persona_defaulted: bool = False
     abstained: bool = False
     abstain_message: str | None = None
+    clarifying_options: list[dict[str, Any]] = field(default_factory=list)
     # Set by _route_prompt so the media curator can read the resolved persona
     # (unknown/absent → research → no videos) without re-routing.
     resolved_persona: str | None = None
@@ -611,6 +613,16 @@ def _generate(state: _PlanState) -> None:
     # abstain message as a 200.
     if state.abstained:
         _route_prompt(state)
+        from rag.generator import generate_clarification_fallback
+
+        fallback_res = generate_clarification_fallback(
+            request.query,
+            municipality=state.effective_municipality,
+        )
+        if fallback_res.get("answer"):
+            state.abstain_message = fallback_res["answer"]
+        if fallback_res.get("clarifying_options"):
+            state.clarifying_options = fallback_res["clarifying_options"]
         return
     result = state.store.get(state.retrieval_ref)
     chunks, _ = state.governor.degrade(
@@ -962,6 +974,7 @@ def _assemble(state: _PlanState, iterations: int) -> ManagerResult:
         persona_defaulted=state.persona_defaulted,
         abstained=state.abstained,
         abstain_message=state.abstain_message,
+        clarifying_options=state.clarifying_options,
         media_refs=state.media_refs,
         how_to=state.how_to,
         unsupported_citations=_unsupported_citations(state.citation_report),

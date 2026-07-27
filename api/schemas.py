@@ -210,6 +210,13 @@ class MediaRefResponse(BaseModel):
     )
 
 
+class ClarifyingOption(BaseModel):
+    """Interactive multiple-choice option for clarifying low-confidence or broad queries."""
+
+    label: str = Field(description="The question or clarification category.")
+    choices: list[str] = Field(description="List of clickable option choices.")
+
+
 class AnswerResponse(BaseModel):
     """Response for POST /query/answer — generated answer with citations."""
 
@@ -288,6 +295,14 @@ class AnswerResponse(BaseModel):
             "True when the system declined to answer because retrieval fell below "
             "the grounding floor. `answer` holds a conversational explanation; this "
             "is a normal outcome, not an error."
+        ),
+    )
+    # Dual-Mode Fallback: structured interactive multiple choice options to clarify low-confidence/broad queries
+    clarifying_options: list[ClarifyingOption] = Field(
+        default_factory=list,
+        description=(
+            "Interactive multiple-choice option chips surfaced on broad/unverified "
+            "queries to guide the user into narrowing their request."
         ),
     )
     # Phase 4 second pass — Media Curator: sourced how-to videos, diy path only.

@@ -679,3 +679,106 @@ def generate_kickoff_chat_response(
         input_parts=(address, municipality, len(history)),
     )
     return _bound_kickoff_notes(_parse_json_response(result.text))
+
+
+CLARIFICATION_SYSTEM_PROMPT = """\
+You are an expert construction permit and building code compliance assistant for the Dallas–Fort Worth metroplex.
+The user asked a question or project request that lacks sufficient specific context or vector similarity in our local ordinance database.
+
+Your goals:
+1. Provide helpful, well-structured, general construction and permitting guidance based on standard building codes (e.g. IRC, IBC, NEC, UPC).
+2. Detail critical structural, trade, zoning, or safety considerations (e.g., structural load calculation, setback limits, height caps, electrical service sizing).
+3. Explicitly state that these general principles must be verified against local municipal code.
+4. Formulate 2-3 structured clarifying questions with clickable multiple-choice options so the user can refine their query.
+
+Format your output STRICTLY as a JSON object with this shape:
+{
+  "answer": "Clear, concise general guidance (2-3 paragraphs or bullet points).",
+  "clarifying_options": [
+    {
+      "label": "Which DFW jurisdiction is your property in?",
+      "choices": ["Dallas", "Plano", "Fort Worth", "Frisco", "McKinney"]
+    },
+    {
+      "label": "Question label...",
+      "choices": ["Option 1", "Option 2", "Option 3"]
+    }
+  ]
+}
+
+Return ONLY valid JSON. Do not include markdown or extra commentary outside the JSON.
+"""
+
+
+def generate_clarification_fallback(
+    query: str,
+    *,
+    municipality: str | None = None,
+) -> dict[str, Any]:
+    """
+    Generate dual-mode general guidance and structured clarifying options when RAG abstains.
+    """
+    capabilities = get_provider_capabilities()
+    user_prompt = f"User Query: {query}\nTarget Municipality: {municipality or 'Unspecified (DFW area)'}"
+
+    fallback_default = {
+        "answer": (
+            "I couldn't find specific code sections matching your exact query in our published database. "
+            "However, in general construction, this type of project requires verifying structural load-bearing capacity, "
+            "zoning setback/height limits, and trade permit requirements."
+        ),
+        "clarifying_options": [
+            {
+                "label": "Which DFW jurisdiction is your property located in?",
+                "choices": ["Dallas", "Plano", "Fort Worth", "Frisco", "McKinney"]
+            },
+            {
+                "label": "What is the primary scope of your project?",
+                "choices": ["Structural / Addition", "Electrical & Plumbing", "Zoning & Setbacks", "Permit Fee & Checklist"]
+            }
+        ]
+    }
+
+    try:
+        if capabilities.supports_local_runtime:
+            import requests
+
+            base_url = os.environ.get("OLLAMA_BASE_URL", "http://localhost:11434").rstrip("/")
+            timeout_s = int(os.environ.get("OLLAMA_TIMEOUT_SECONDS", "180"))
+            model = os.environ.get("OLLAMA_MODEL", "qwen2.5:14b-instruct-q4_K_M")
+            payload = {
+                "model": model,
+                "messages": [
+                    {"role": "system", "content": CLARIFICATION_SYSTEM_PROMPT},
+                    {"role": "user", "content": user_prompt},
+                ],
+                "stream": False,
+                "format": "json",
+                "options": {"temperature": 0.2},
+            }
+            response = requests.post(f"{base_url}/api/chat", json=payload, timeout=timeout_s)
+            response.raise_for_status()
+            content = response.json().get("message", {}).get("content", "")
+            parsed = _parse_json_response(content)
+            if parsed and parsed.get("answer"):
+                return parsed
+        elif os.environ.get("ANTHROPIC_API_KEY"):
+            result = run_agent(
+                "clarification_fallback",
+                system=CLARIFICATION_SYSTEM_PROMPT,
+                messages=[{"role": "user", "content": user_prompt}],
+                tier=Tier.CHEAP,
+                model=os.environ.get("LLM_MODEL", "claude-haiku-4-5-20251001"),
+                max_tokens=1024,
+                temperature=0.2,
+                cache_system=False,
+                input_parts=(query, municipality),
+            )
+            parsed = _parse_json_response(result.text)
+            if parsed and parsed.get("answer"):
+                return parsed
+    except Exception as exc:
+        log.warning("generate_clarification_fallback failed (%s) — using default fallback", exc)
+
+    return fallback_default
+

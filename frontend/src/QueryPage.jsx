@@ -456,7 +456,7 @@ export default function QueryPage() {
                             {activeAnswer.how_to
                               ? "🔧 How-To Guide"
                               : activeAnswer.abstained
-                              ? "Grounding Threshold Abstain"
+                              ? "⚠️ General Regulatory Guidance"
                               : "Compliance Analysis"}
                           </span>
                           {activeAnswer.resolved_municipality && (
@@ -485,6 +485,14 @@ export default function QueryPage() {
                         </button>
                       </div>
 
+                      {/* Ungrounded Guidance Warning Banner */}
+                      {activeAnswer.abstained && (
+                        <div className="flex items-center gap-2 text-xs font-bold px-3.5 py-2.5 rounded-xl bg-amber-500/10 text-amber-800 dark:text-amber-300 border border-amber-500/30">
+                          <AlertOctagon className="w-4 h-4 text-amber-600 dark:text-amber-400 flex-shrink-0" />
+                          <span>General Knowledge Fallback (Unverified against specific local municipal code corpus)</span>
+                        </div>
+                      )}
+
                       {/* Persona Nudge */}
                       {activeAnswer.persona_nudge && (
                         <div className="flex gap-2.5 p-3 bg-blue-50/80 dark:bg-blue-950/40 border border-blue-200/80 dark:border-blue-800/60 text-blue-900 dark:text-blue-200 rounded-xl text-xs">
@@ -505,12 +513,46 @@ export default function QueryPage() {
                       <div
                         className={`p-4 rounded-xl text-xs sm:text-sm leading-relaxed whitespace-pre-wrap ${
                           activeAnswer.abstained
-                            ? "bg-blue-50/60 dark:bg-blue-950/30 border border-blue-200 dark:border-blue-900/60 text-blue-950 dark:text-blue-100"
+                            ? "bg-slate-50 dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700/80 text-slate-900 dark:text-slate-100"
                             : "bg-slate-50/70 dark:bg-slate-800/50 border border-slate-100 dark:border-slate-800 text-slate-800 dark:text-slate-100"
                         }`}
                       >
                         {activeAnswer.answer}
                       </div>
+
+                      {/* Interactive Clarification Multiple-Choice Chips */}
+                      {(activeAnswer.clarifying_options || []).length > 0 && (
+                        <div className="p-4 bg-slate-100/70 dark:bg-slate-800/90 border border-slate-200 dark:border-slate-700 rounded-xl space-y-3">
+                          <div className="flex items-center gap-1.5 font-bold text-xs text-slate-800 dark:text-slate-200">
+                            <Lightbulb className="w-4 h-4 text-blue-500" />
+                            <span>Refine query with specific parameters:</span>
+                          </div>
+                          <div className="space-y-3 pt-1">
+                            {activeAnswer.clarifying_options.map((opt, oIdx) => (
+                              <div key={oIdx} className="space-y-1.5">
+                                <span className="text-[11px] font-semibold text-slate-600 dark:text-slate-400 block">
+                                  {opt.label}
+                                </span>
+                                <div className="flex flex-wrap gap-2">
+                                  {opt.choices.map((choice, cIdx) => (
+                                    <button
+                                      key={cIdx}
+                                      type="button"
+                                      onClick={() => {
+                                        setQuery((prev) => (prev.trim() ? `${prev.trim()} (${choice})` : choice));
+                                        textareaRef.current?.focus();
+                                      }}
+                                      className="px-3 py-1.5 text-xs rounded-full bg-white dark:bg-slate-900 hover:bg-blue-600 hover:text-white dark:hover:bg-blue-600 dark:hover:text-white border border-slate-200 dark:border-slate-700 font-medium transition-all shadow-sm flex items-center gap-1 cursor-pointer"
+                                    >
+                                      <span>+ {choice}</span>
+                                    </button>
+                                  ))}
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      )}
 
                       {/* AHJ Disclaimer */}
                       {activeAnswer.ahj_disclaimer && (

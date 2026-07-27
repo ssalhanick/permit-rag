@@ -245,3 +245,50 @@ def test_media_ref_responses_empty_when_absent() -> None:
 
     assert _media_ref_responses(SimpleNamespace(media_refs=[])) == []
     assert _media_ref_responses(SimpleNamespace()) == []
+
+
+def test_query_answer_abstain_returns_clarifying_options(monkeypatch) -> None:
+    """Grounding-floor abstain should return dual-mode guidance and clarifying_options array."""
+    from api.routes import query as query_route
+    from db import client as db_client
+
+    empty_result = SimpleNamespace(
+        query="test broad query",
+        top_k=5,
+        municipality="dallas",
+        chunks=[],
+        passing_chunks=[],
+        num_results=0,
+        top_similarity=0.0,
+        mean_similarity=0.0,
+        unique_documents=[],
+        latency_ms=10,
+    )
+    monkeypatch.setattr(db_client, "insert_query_log", lambda **kwargs: {})
+    monkeypatch.setattr(query_route, "retrieve_with_project", lambda *_a, **_k: empty_result)
+    monkeypatch.setattr(query_route, "get_jurisdiction", lambda _m: None)
+
+    app.dependency_overrides[query_route.get_current_user] = lambda: {
+        "user_id": uuid4(),
+        "role": "member",
+        "username": "tester",
+    }
+
+    try:
+        client = TestClient(app)
+        response = client.post(
+            "/api/query/answer",
+            json={"query": "adding a second story to house", "top_k": 5, "municipality": "dallas"},
+        )
+        assert response.status_code == 200
+        body = response.json()
+        assert body["abstained"] is True
+        assert isinstance(body["clarifying_options"], list)
+        assert len(body["clarifying_options"]) > 0
+        first_opt = body["clarifying_options"][0]
+        assert "label" in first_opt
+        assert "choices" in first_opt
+        assert len(first_opt["choices"]) > 0
+    finally:
+        app.dependency_overrides.clear()
+
