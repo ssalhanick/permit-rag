@@ -37,10 +37,10 @@ the live path; **#5 deferred**. Deploy/integration status after the component li
    AGENTS.md boundary added): canonical vocabulary + per-field type/validation +
    source binding. A git-tracked module (like fragments), no migration.
    `tests/test_ontology.py` (8).
-8. **Dashboard v2** — `agents_admin.py` routes `/scorecard`, `/autonomy` (+set,
+8. **Dashboard v2 & Agent Glossary** — `agents_admin.py` routes `/scorecard`, `/glossary` (`GET /admin/agents/glossary`), `/autonomy` (+set,
    409 over ceiling), `/runs/{id}/trace`, `/feedback-summary`, `/corrections`
    (+`/confirm`); `db.list_agent_corrections` + `confirm_agent_correction`;
-   frontend tabs `AgentScorecard` / `CorrectionQueue` / `AutonomyPanel` on
+   frontend tabs `AgentScorecard` / `AgentGlossary` / `CorrectionQueue` / `AutonomyPanel` on
    `AgentDashboardPage`. `tests/test_dashboard_v2_routes.py` (8).
 
 **Phase 5 deploy + integration status (2026-07-26):**

@@ -537,4 +537,8 @@ export async function confirmAgentCorrection(correctionId, attributedAgent = nul
   });
 }
 
+export async function fetchAgentGlossary() {
+  return await requestJson("/admin/agents/glossary");
+}
+
 export { API_BASE_URL, DEFAULT_BASE_URL };

@@ -212,7 +212,305 @@ def apply_metadata_correction(
     return {"document": updated_doc, "item": item}
 
 
-# ── Dashboard v2 (Phase 5): scorecard · autonomy · trace · feedback · corrections ──
+# ── Agent Glossary ───────────────────────────────────────────
+
+GLOSSARY_DATA: list[dict[str, Any]] = [
+    {
+        "name": "manager",
+        "display_name": "Pipeline Manager / Orchestrator",
+        "category": "Control & Safety",
+        "tier": "cheap",
+        "execution_mode": "Hybrid (Deterministic State Machine + Delegation)",
+        "autonomy_ceiling": "L3",
+        "description": "Central orchestrator for the multi-wave /query/answer RAG pipeline. Coordinates intent routing, query deconstruction, retrieval, grounding checks, answer generation, and citation verification across 5 waves.",
+        "dependencies": {
+            "calls": [
+                "permit_classifier", "jurisdiction_resolver", "project_context",
+                "query_deconstructor", "retriever", "conflict_detector",
+                "mini_rag_conflicts", "prompt_router", "budget_governor",
+                "answer_generator", "citation_verifier", "media_curator", "guardrail"
+            ],
+            "called_by": ["api/routes/query.py (/query/answer)"]
+        },
+        "inputs": ["query", "top_k", "municipality", "address", "project_id", "chunk_ids"],
+        "outputs": ["ManagerResult (ArtifactRefs, answer text, citations, conflict warnings, media links, abstain status)"],
+        "metrics": ["routing_accuracy", "plan_length", "replan_rate", "react_iterations"],
+        "governance_rules": ["Bounded at MAX_ITERATIONS = 6", "Must never import commerce/, forms/, or bids/ directly"]
+    },
+    {
+        "name": "budget_governor",
+        "display_name": "Budget & Token Governor",
+        "category": "Control & Safety",
+        "tier": "cheap",
+        "execution_mode": "Deterministic",
+        "autonomy_ceiling": "L3",
+        "description": "Tracks token usage and dollar budgets across agent runs. Enforces tier degradation (e.g. Sonnet -> Haiku) and context trimming when token/cost caps are approached.",
+        "dependencies": {
+            "calls": [],
+            "called_by": ["manager", "rag.agent_runtime"]
+        },
+        "inputs": ["agent_name", "context chunks", "budget_limits"],
+        "outputs": ["Degraded chunk sets", "Tier overrides", "Token usage accounting"],
+        "metrics": ["budget_trips", "degradation_rate"],
+        "governance_rules": ["Deterministic execution", "Cannot be bypassed by non-superadmins"]
+    },
+    {
+        "name": "prompt_router",
+        "display_name": "Prompt Router & Persona Composer",
+        "category": "Control & Safety",
+        "tier": "cheap",
+        "execution_mode": "Deterministic Fragment Lookup",
+        "autonomy_ceiling": "L3",
+        "description": "Assembles persona-tailored system prompts (DIY homeowner, contractor, architect, inspector, research) and jurisdiction-specific regulatory fragments dynamically.",
+        "dependencies": {
+            "calls": ["rag/prompts/ fragment library"],
+            "called_by": ["manager"]
+        },
+        "inputs": ["persona", "jurisdiction", "intent", "experience", "project_notes"],
+        "outputs": ["RoutedPrompt (composed system prompt string, max_tokens, persona, fragment_ids)"],
+        "metrics": ["fragment_selection_accuracy", "persona_appropriateness", "default_to_research_rate"],
+        "governance_rules": ["Defaults to 'research' persona when user persona is missing/unknown"]
+    },
+    {
+        "name": "guardrail",
+        "display_name": "Output & Truncation Guardrail",
+        "category": "Control & Safety",
+        "tier": "cheap",
+        "execution_mode": "Deterministic Rules",
+        "autonomy_ceiling": "L3",
+        "description": "Monitors output generation for truncation, incomplete answers, and untrusted external media URLs. Filters out unverified domains.",
+        "dependencies": {
+            "calls": [],
+            "called_by": ["manager"]
+        },
+        "inputs": ["GenerationResult", "query", "entity_id", "media_refs"],
+        "outputs": ["Truncation status", "Sanitized media_refs list"],
+        "metrics": ["guard_trip_rate"],
+        "governance_rules": ["Non-fatal check; logs warnings without throwing 500 errors"]
+    },
+    {
+        "name": "answer_generator",
+        "display_name": "Compliance Answer Generator",
+        "category": "Answer Synthesis",
+        "tier": "mid",
+        "execution_mode": "LLM-backed (Claude Sonnet / Haiku)",
+        "autonomy_ceiling": "L3",
+        "description": "Synthesizes formal municipal building compliance answers grounded exclusively in retrieved code chunks with required inline citations [doc_id, chunk_index].",
+        "dependencies": {
+            "calls": ["rag.agent_runtime"],
+            "called_by": ["manager"]
+        },
+        "inputs": ["user query", "passing retrieved chunks", "RoutedPrompt", "project_context"],
+        "outputs": ["GenerationResult (answer string, citations list, model, token usage, latency)"],
+        "metrics": ["faithfulness", "answer_relevancy", "citation_density"],
+        "governance_rules": ["Must include at least one valid inline citation", "Never cite superseded documents as sole source"]
+    },
+    {
+        "name": "permit_classifier",
+        "display_name": "Permit Type Classifier",
+        "category": "Domain & Context",
+        "tier": "cheap",
+        "execution_mode": "Deterministic NLI & Heuristics",
+        "autonomy_ceiling": "L3",
+        "description": "Classifies the required permit categories (building, electrical, plumbing, mechanical, zoning, fire, energy, demolition) relevant to the user query.",
+        "dependencies": {
+            "calls": [],
+            "called_by": ["manager"]
+        },
+        "inputs": ["query text"],
+        "outputs": ["List of permit category strings"],
+        "metrics": ["permit_type_f1"],
+        "governance_rules": ["Non-blocking; defaults to empty list [] on error"]
+    },
+    {
+        "name": "jurisdiction_resolver",
+        "display_name": "Jurisdiction & Geocoding Resolver",
+        "category": "Domain & Context",
+        "tier": "cheap",
+        "execution_mode": "Deterministic GIS & Geocoding",
+        "autonomy_ceiling": "L3",
+        "description": "Geocodes project addresses or parses location names to identify the governing municipality (Dallas, Fort Worth, Plano, Frisco, McKinney).",
+        "dependencies": {
+            "calls": ["GIS address geocoding"],
+            "called_by": ["manager"]
+        },
+        "inputs": ["address string or site description"],
+        "outputs": ["Municipality name string"],
+        "metrics": ["municipality_accuracy"],
+        "governance_rules": ["Precedence: explicit request > project kickoff > geocoded address"]
+    },
+    {
+        "name": "conflict_detector",
+        "display_name": "Municipal Code Conflict Detector",
+        "category": "Domain & Context",
+        "tier": "cheap",
+        "execution_mode": "Deterministic Rule Matching",
+        "autonomy_ceiling": "L3",
+        "description": "Detects conflicts or contradictory regulations between retrieved municipal ordinances and state/federal building standards.",
+        "dependencies": {
+            "calls": [],
+            "called_by": ["manager"]
+        },
+        "inputs": ["list of retrieved chunks"],
+        "outputs": ["list of ConflictWarning items"],
+        "metrics": ["detection_precision", "false_alarm_rate"],
+        "governance_rules": ["Must surface ConflictWarning rather than silently resolving code differences"]
+    },
+    {
+        "name": "citation_verifier",
+        "display_name": "Citation & Grounding Verifier",
+        "category": "Control & Safety",
+        "tier": "mid",
+        "execution_mode": "Hybrid (Deterministic Span Match + LLM Entailment)",
+        "autonomy_ceiling": "L3",
+        "description": "Verifies that every statement and citation in the generated compliance answer is backed by source chunks. Flags hallucinated or unsupported citations.",
+        "dependencies": {
+            "calls": ["rag.agent_runtime"],
+            "called_by": ["manager"]
+        },
+        "inputs": ["generated answer text", "citations list", "source chunks"],
+        "outputs": ["Verification report", "unsupported_citations list", "claim precision/recall"],
+        "metrics": ["claim_precision", "claim_recall"],
+        "governance_rules": ["Runs in Wave 5 post-generation; flags hallucinated claims without blocking response delivery"]
+    },
+    {
+        "name": "query_deconstructor",
+        "display_name": "Compound Query Deconstructor",
+        "category": "Domain & Context",
+        "tier": "cheap",
+        "execution_mode": "Hybrid (Deterministic Gating + Single-shot LLM)",
+        "autonomy_ceiling": "L3",
+        "description": "Deconstructs complex multi-part building queries into individual sub-questions to allow targeted parallel retrievals across different code sections.",
+        "dependencies": {
+            "calls": ["rag.retriever"],
+            "called_by": ["manager"]
+        },
+        "inputs": ["complex query text"],
+        "outputs": ["sub_questions list"],
+        "metrics": ["sub_question_coverage", "filter_precision"],
+        "governance_rules": ["Gated deterministically: simple queries bypass LLM deconstruction"]
+    },
+    {
+        "name": "permit_strategy",
+        "display_name": "Permit Strategy & Fee Planner",
+        "category": "Domain & Context",
+        "tier": "cheap",
+        "execution_mode": "Hybrid (Deterministic Calculation + LLM Guidance Note)",
+        "autonomy_ceiling": "L3",
+        "description": "Plans required permit filing sequences, estimates filing fees, and outlines submittal prerequisites for construction projects.",
+        "dependencies": {
+            "calls": ["db/client.py"],
+            "called_by": ["api/routes/projects.py", "manager"]
+        },
+        "inputs": ["project_id", "municipality", "permit_types"],
+        "outputs": ["PermitPlan (permit list, submission order, fee estimates, strategy notes)"],
+        "metrics": ["permit_set_f1"],
+        "governance_rules": ["Calculations are deterministic; only the strategy note uses an LLM"]
+    },
+    {
+        "name": "mini_rag_conflicts",
+        "display_name": "Project Upload Conflict Detector",
+        "category": "Domain & Context",
+        "tier": "cheap",
+        "execution_mode": "Deterministic Comparison",
+        "autonomy_ceiling": "L3",
+        "description": "Compares user-uploaded project documents (architectural drawings, contractor specs) against city municipal code chunks to identify project discrepancies.",
+        "dependencies": {
+            "calls": [],
+            "called_by": ["manager"]
+        },
+        "inputs": ["corpus chunks", "user project chunks"],
+        "outputs": ["upload_conflicts list"],
+        "metrics": ["detection_precision"],
+        "governance_rules": ["Non-blocking check; flags project vs code differences as warnings"]
+    },
+    {
+        "name": "project_context",
+        "display_name": "Project Context & Fact Loader",
+        "category": "Domain & Context",
+        "tier": "cheap",
+        "execution_mode": "Deterministic DB Lookup",
+        "autonomy_ceiling": "L3",
+        "description": "Loads project facts, site location, kickoff specs, active room scans, and user preferences into the active pipeline session.",
+        "dependencies": {
+            "calls": ["db/client.py"],
+            "called_by": ["manager"]
+        },
+        "inputs": ["project_id"],
+        "outputs": ["project_context dict / ArtifactRef"],
+        "metrics": ["fact_coverage"],
+        "governance_rules": ["Runs in Wave 1; cached in ArtifactStore per session"]
+    },
+    {
+        "name": "design_intent",
+        "display_name": "Design Intent & Spec Parser",
+        "category": "Domain & Context",
+        "tier": "cheap",
+        "execution_mode": "LLM Structured Extraction",
+        "autonomy_ceiling": "L2",
+        "description": "Parses unstructured architectural notes, room scan specs, and construction goals into a structured design intent schema for compliance checking.",
+        "dependencies": {
+            "calls": ["rag.agent_runtime"],
+            "called_by": ["api/routes/projects.py"]
+        },
+        "inputs": ["room scan specs", "architectural notes"],
+        "outputs": ["Structured design intent overlay"],
+        "metrics": ["schema_validity", "overlay_precision"],
+        "governance_rules": ["Validated against Pydantic schema before saving"]
+    },
+    {
+        "name": "media_curator",
+        "display_name": "Instructional Media & DIY Linker",
+        "category": "Domain & Context",
+        "tier": "cheap",
+        "execution_mode": "Deterministic Mapping + Semantic Search",
+        "autonomy_ceiling": "L3",
+        "description": "Curates verified step-by-step instructional video tutorials, official guides, and timestamped media links for DIY homeowner queries.",
+        "dependencies": {
+            "calls": ["db/client.py"],
+            "called_by": ["manager"]
+        },
+        "inputs": ["query", "persona ('diy')", "jurisdiction", "permit_types"],
+        "outputs": ["media_refs list (title, URL, channel, timestamp)"],
+        "metrics": ["link_liveness", "relevance", "zero_unsourced_urls"],
+        "governance_rules": ["Runs on DIY persona paths; all URLs checked against guardrail allowlists"]
+    },
+    {
+        "name": "metadata_validator",
+        "display_name": "Corpus Metadata Validator",
+        "category": "Governance & Maintenance",
+        "tier": "mid",
+        "execution_mode": "Hybrid (Deterministic Schema Check + LLM Sampling)",
+        "autonomy_ceiling": "L1",
+        "description": "Audits corpus document metadata (effective_date, doc_type, authority_level, subject_tags) against chunk text. Generates proposals for human review in the dashboard queue.",
+        "dependencies": {
+            "calls": ["rag.agent_runtime", "ingestion.governance"],
+            "called_by": ["ingestion scripts", "admin action queue"]
+        },
+        "inputs": ["Corpus document rows", "sampled chunks"],
+        "outputs": ["ValidationReport", "action_items proposals"],
+        "metrics": ["enum_precision", "date_extraction_accuracy", "tag_vocab_compliance"],
+        "governance_rules": ["L1 Autonomy (Human-in-the-loop): Cannot edit corpus directly. Writes proposals to action queue; human approval in Metadata Review Pane invokes ingestion.governance."]
+    }
+]
+
+
+@router.get("/glossary")
+def get_agent_glossary(
+    _user: Annotated[dict, Depends(require_superadmin)],
+) -> dict[str, Any]:
+    """Complete glossary of agents, how they are used, dependencies, and rules."""
+    return {"agents": GLOSSARY_DATA, "count": len(GLOSSARY_DATA)}
+
+
+@router.get("/scorecard")
+def agent_scorecard(
+    _user: Annotated[dict, Depends(require_superadmin)],
+    days: int = Query(7, ge=1, le=365),
+) -> dict[str, Any]:
+    """Per-agent rollup (calls, cost, latency, deterministic rate, error rate)."""
+    since = datetime.now(UTC) - timedelta(days=days)
+    return {"days": days, "agents": db_client.agent_scorecard(since=since)}
 
 
 class SetAutonomyRequest(BaseModel):
@@ -226,16 +524,6 @@ class ConfirmCorrectionRequest(BaseModel):
     """Confirm a Performance Review attribution, optionally re-assigning blame."""
 
     attributed_agent: str | None = None
-
-
-@router.get("/scorecard")
-def agent_scorecard(
-    _user: Annotated[dict, Depends(require_superadmin)],
-    days: int = Query(7, ge=1, le=365),
-) -> dict[str, Any]:
-    """Per-agent rollup (calls, cost, latency, deterministic rate, error rate)."""
-    since = datetime.now(UTC) - timedelta(days=days)
-    return {"days": days, "agents": db_client.agent_scorecard(since=since)}
 
 
 @router.get("/autonomy")
