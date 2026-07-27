@@ -448,16 +448,12 @@ svg.tt-site-logo {
   }
 
   .tt-user-trigger-btn {
-    width: auto;
-    max-width: none;
-    justify-content: flex-start;
-    margin: 0;
-    display: inline-flex;
+    display: none !important;
   }
 
   .tt-user-dropdown-menu {
     position: relative !important;
-    top: 8px !important;
+    top: 0 !important;
     right: auto !important;
     left: 0 !important;
     width: 100% !important;
