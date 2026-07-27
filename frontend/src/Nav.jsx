@@ -121,113 +121,114 @@ export default function Nav() {
           <div className="tt-nav-user-section" ref={menuRef}>
             {user ? (
               <div className="tt-user-dropdown-container">
+                {/* Desktop compact trigger pill (hidden on mobile, visible on desktop) */}
                 <button
                   type="button"
-                  className="tt-user-trigger-btn"
+                  className="tt-user-trigger-btn hidden min-[901px]:inline-flex"
                   onClick={() => setUserMenuOpen(!userMenuOpen)}
                   aria-expanded={userMenuOpen}
                   aria-label="User Account Menu"
                 >
                   <div className="tt-user-avatar">{initials}</div>
-                  <span className="tt-user-name text-sm font-medium text-slate-200 hidden sm:inline">
+                  <span className="tt-user-name text-sm font-medium text-slate-200">
                     {username}
                   </span>
                   <Settings className="w-4 h-4 text-slate-400 hover:text-slate-200 transition-colors" />
                   <ChevronDown className={`w-3.5 h-3.5 text-slate-400 transition-transform ${userMenuOpen ? "rotate-180" : ""}`} />
                 </button>
 
-                {/* Dropdown Mini Menu */}
-                {userMenuOpen && (
-                  <div className="tt-user-dropdown-menu">
-                    {/* Header */}
-                    <div className="tt-dropdown-header">
-                      <div className="tt-dropdown-avatar">{initials}</div>
-                      <div className="tt-dropdown-user-info">
-                        <span className="tt-dropdown-username">{username}</span>
-                        <span className="tt-dropdown-email">{userEmail}</span>
-                        {isSuperAdmin && (
-                          <span className="inline-block mt-0.5 text-[10px] font-bold uppercase tracking-wider text-emerald-400 bg-emerald-950/80 border border-emerald-800/80 px-1.5 py-0.5 rounded">
-                            Superadmin
-                          </span>
-                        )}
-                      </div>
+                {/* Dropdown Mini Menu:
+                    - On Desktop (min-width: 901px): renders as absolute popover when userMenuOpen is true.
+                    - On Mobile (max-width: 900px): renders directly inline inside the mobile collapse drawer! */}
+                <div className={`tt-user-dropdown-menu ${userMenuOpen ? "block" : "hidden min-[901px]:hidden"} min-[901px]:${userMenuOpen ? "block" : "hidden"} max-[900px]:block`}>
+                  {/* Header */}
+                  <div className="tt-dropdown-header">
+                    <div className="tt-dropdown-avatar">{initials}</div>
+                    <div className="tt-dropdown-user-info">
+                      <span className="tt-dropdown-username">{username}</span>
+                      <span className="tt-dropdown-email">{userEmail}</span>
+                      {isSuperAdmin && (
+                        <span className="inline-block mt-0.5 text-[10px] font-bold uppercase tracking-wider text-emerald-400 bg-emerald-950/80 border border-emerald-800/80 px-1.5 py-0.5 rounded">
+                          Superadmin
+                        </span>
+                      )}
                     </div>
-
-                    {/* Active Project Switcher Section */}
-                    <div className="mb-2 px-1">
-                      <ProjectSwitcher onSelect={() => setUserMenuOpen(false)} />
-                    </div>
-
-                    <div className="tt-dropdown-divider" />
-
-                    {/* Shortcuts */}
-                    <div className="tt-dropdown-section-label">Account & Tools</div>
-                    <NavLink
-                      to="/profile"
-                      className="tt-dropdown-link"
-                      onClick={closeMenu}
-                    >
-                      <User className="w-4 h-4 text-slate-400" />
-                      Profile & Account
-                    </NavLink>
-
-                    <NavLink
-                      to="/profile/history"
-                      className="tt-dropdown-link"
-                      onClick={closeMenu}
-                    >
-                      <History className="w-4 h-4 text-slate-400" />
-                      Query History
-                    </NavLink>
-
-                    <NavLink
-                      to="/profile/room-scans"
-                      className="tt-dropdown-link"
-                      onClick={closeMenu}
-                    >
-                      <Layers className="w-4 h-4 text-slate-400" />
-                      Room Scan Library
-                    </NavLink>
-
-                    {/* Superadmin Menu Items */}
-                    <div className="tt-dropdown-divider" />
-                    <div className="tt-dropdown-section-label">Administration & Resources</div>
-                    <NavLink
-                      to="/documents"
-                      className="tt-dropdown-link"
-                      onClick={closeMenu}
-                    >
-                      <FileText className="w-4 h-4 text-slate-400" />
-                      Document Corpus
-                    </NavLink>
-
-                    {isSuperAdmin && (
-                      <NavLink
-                        to="/admin/agents"
-                        className="tt-dropdown-link text-emerald-400 hover:text-emerald-300"
-                        onClick={closeMenu}
-                      >
-                        <ShieldCheck className="w-4 h-4 text-emerald-400" />
-                        Agent Orchestration
-                      </NavLink>
-                    )}
-
-                    <div className="tt-dropdown-divider" />
-
-                    {/* Sign Out */}
-                    <button
-                      type="button"
-                      className="tt-dropdown-btn-signout"
-                      onClick={() => {
-                        logout();
-                        closeMenu();
-                      }}
-                    >
-                      <LogOut className="w-4 h-4" />
-                      Sign Out
-                    </button>
                   </div>
-                )}
+
+                  {/* Active Project Switcher Section */}
+                  <div className="mb-2 px-1">
+                    <ProjectSwitcher onSelect={closeMenu} />
+                  </div>
+
+                  <div className="tt-dropdown-divider" />
+
+                  {/* Shortcuts */}
+                  <div className="tt-dropdown-section-label">Account & Tools</div>
+                  <NavLink
+                    to="/profile"
+                    className="tt-dropdown-link"
+                    onClick={closeMenu}
+                  >
+                    <User className="w-4 h-4 text-slate-400" />
+                    Profile & Account
+                  </NavLink>
+
+                  <NavLink
+                    to="/profile/history"
+                    className="tt-dropdown-link"
+                    onClick={closeMenu}
+                  >
+                    <History className="w-4 h-4 text-slate-400" />
+                    Query History
+                  </NavLink>
+
+                  <NavLink
+                    to="/profile/room-scans"
+                    className="tt-dropdown-link"
+                    onClick={closeMenu}
+                  >
+                    <Layers className="w-4 h-4 text-slate-400" />
+                    Room Scan Library
+                  </NavLink>
+
+                  {/* Superadmin Menu Items */}
+                  <div className="tt-dropdown-divider" />
+                  <div className="tt-dropdown-section-label">Administration & Resources</div>
+                  <NavLink
+                    to="/documents"
+                    className="tt-dropdown-link"
+                    onClick={closeMenu}
+                  >
+                    <FileText className="w-4 h-4 text-slate-400" />
+                    Document Corpus
+                  </NavLink>
+
+                  {isSuperAdmin && (
+                    <NavLink
+                      to="/admin/agents"
+                      className="tt-dropdown-link text-emerald-400 hover:text-emerald-300"
+                      onClick={closeMenu}
+                    >
+                      <ShieldCheck className="w-4 h-4 text-emerald-400" />
+                      Agent Orchestration
+                    </NavLink>
+                  )}
+
+                  <div className="tt-dropdown-divider" />
+
+                  {/* Sign Out */}
+                  <button
+                    type="button"
+                    className="tt-dropdown-btn-signout"
+                    onClick={() => {
+                      logout();
+                      closeMenu();
+                    }}
+                  >
+                    <LogOut className="w-4 h-4" />
+                    Sign Out
+                  </button>
+                </div>
               </div>
             ) : (
               <div className="flex items-center gap-3 w-full sm:w-auto mt-3 sm:mt-0 pt-3 sm:pt-0 border-t sm:border-t-0 border-slate-800 flex-nowrap shrink-0 whitespace-nowrap">
