@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from "react";
-import { NavLink } from "react-router-dom";
+import { NavLink, useLocation } from "react-router-dom";
 import { useAuth } from "./context/AuthContext.jsx";
 import {
   LayoutDashboard,
@@ -23,6 +23,7 @@ import AiAssistantWidget from "./components/AiAssistantWidget.jsx";
 
 export default function Nav() {
   const { user, logout } = useAuth();
+  const location = useLocation();
   const [isOpen, setIsOpen] = useState(false);
   const [userMenuOpen, setUserMenuOpen] = useState(false);
   const menuRef = useRef(null);
@@ -253,8 +254,8 @@ export default function Nav() {
           </div>
         </div>
       </nav>
-      {/* Floating Corner AI Assistant Modal */}
-      <AiAssistantWidget />
+      {/* Floating Corner AI Assistant Modal — hidden on /query, it already is the full chat and the widget covers the submit button there */}
+      {location.pathname !== "/query" && <AiAssistantWidget />}
     </header>
   );
 }

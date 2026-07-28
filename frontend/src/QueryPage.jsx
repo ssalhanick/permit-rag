@@ -1,5 +1,7 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { useLocation } from "react-router-dom";
+import ReactMarkdown from "react-markdown";
+import remarkGfm from "remark-gfm";
 import { fetchAnswer, fetchProjects, fetchQueryHistory, submitAnswerFeedback } from "./api.js";
 import { useAuth } from "./context/AuthContext.jsx";
 import {
@@ -56,6 +58,50 @@ const PROMPT_SUGGESTIONS = [
   },
 ];
 
+// Static so react-markdown doesn't get a new components object (and remount) every render.
+const markdownComponents = {
+  p: ({ children }) => <p className="mb-2 last:mb-0">{children}</p>,
+  ul: ({ children }) => <ul className="list-disc pl-5 mb-2 space-y-1">{children}</ul>,
+  ol: ({ children }) => <ol className="list-decimal pl-5 mb-2 space-y-1">{children}</ol>,
+  li: ({ children }) => <li>{children}</li>,
+  h1: ({ children }) => <h1 className="text-base font-extrabold mt-1 mb-2">{children}</h1>,
+  h2: ({ children }) => <h2 className="text-sm font-extrabold mt-1 mb-2">{children}</h2>,
+  h3: ({ children }) => <h3 className="text-xs font-extrabold mt-1 mb-1.5">{children}</h3>,
+  a: ({ children, href }) => (
+    <a
+      href={href}
+      target="_blank"
+      rel="noopener noreferrer"
+      className="text-blue-600 dark:text-blue-400 underline hover:no-underline"
+    >
+      {children}
+    </a>
+  ),
+  code: ({ children }) => (
+    <code className="px-1 py-0.5 rounded bg-slate-200 dark:bg-slate-700 text-[0.9em] font-mono">
+      {children}
+    </code>
+  ),
+  blockquote: ({ children }) => (
+    <blockquote className="border-l-2 border-slate-300 dark:border-slate-600 pl-3 italic text-slate-600 dark:text-slate-400 my-2">
+      {children}
+    </blockquote>
+  ),
+  table: ({ children }) => (
+    <div className="overflow-x-auto my-2">
+      <table className="min-w-full text-left border-collapse">{children}</table>
+    </div>
+  ),
+  th: ({ children }) => (
+    <th className="border border-slate-200 dark:border-slate-700 px-2 py-1 font-bold bg-slate-100 dark:bg-slate-800">
+      {children}
+    </th>
+  ),
+  td: ({ children }) => (
+    <td className="border border-slate-200 dark:border-slate-700 px-2 py-1">{children}</td>
+  ),
+};
+
 export default function QueryPage() {
   const { user, activeProject } = useAuth();
   const location = useLocation();
@@ -76,6 +122,7 @@ export default function QueryPage() {
 
   const chatContainerRef = useRef(null);
   const textareaRef = useRef(null);
+  const botAnswerRef = useRef(null);
 
   const setActiveProjectId = (id) => {
     manualOverrideRef.current = true;
@@ -216,7 +263,9 @@ export default function QueryPage() {
   };
 
   const handleKeyDown = (e) => {
-    if (e.key === "Enter" && !e.shiftKey) {
+    // isComposing guards mobile IME/predictive-text keyboards, where the Enter
+    // that commits a suggestion shouldn't also submit the form.
+    if (e.key === "Enter" && !e.shiftKey && !e.nativeEvent.isComposing) {
       e.preventDefault();
       handleSubmit();
     }
@@ -227,6 +276,13 @@ export default function QueryPage() {
     if (!activeAnswerId) return history[0];
     return history.find((item) => item.id === activeAnswerId) || history[0];
   }, [history, activeAnswerId]);
+
+  // Scroll so the top of the bot's answer is visible, not the bottom of the card.
+  useEffect(() => {
+    if (activeAnswer && botAnswerRef.current) {
+      botAnswerRef.current.scrollIntoView({ behavior: "smooth", block: "start" });
+    }
+  }, [activeAnswer?.id]);
 
   // Phase 5 feedback loop
   const [feedbackByRun, setFeedbackByRun] = useState({});
@@ -443,7 +499,7 @@ export default function QueryPage() {
                   </div>
 
                   {/* Assistant Answer Card Bubble */}
-                  <div className="flex items-start gap-3">
+                  <div ref={botAnswerRef} className="flex items-start gap-3">
                     <div className="w-8 h-8 rounded-full bg-blue-600 text-white flex items-center justify-center text-xs font-bold flex-shrink-0 shadow-md">
                       <Bot className="w-4 h-4" />
                     </div>
@@ -511,13 +567,15 @@ export default function QueryPage() {
 
                       {/* Main Answer Content */}
                       <div
-                        className={`p-4 rounded-xl text-xs sm:text-sm leading-relaxed whitespace-pre-wrap ${
+                        className={`p-4 rounded-xl text-xs sm:text-sm leading-relaxed ${
                           activeAnswer.abstained
                             ? "bg-slate-50 dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700/80 text-slate-900 dark:text-slate-100"
                             : "bg-slate-50/70 dark:bg-slate-800/50 border border-slate-100 dark:border-slate-800 text-slate-800 dark:text-slate-100"
                         }`}
                       >
-                        {activeAnswer.answer}
+                        <ReactMarkdown remarkPlugins={[remarkGfm]} components={markdownComponents}>
+                          {activeAnswer.answer}
+                        </ReactMarkdown>
                       </div>
 
                       {/* Interactive Clarification Multiple-Choice Chips */}
@@ -700,6 +758,7 @@ export default function QueryPage() {
                 value={query}
                 onChange={(e) => setQuery(e.target.value)}
                 onKeyDown={handleKeyDown}
+                enterKeyHint="send"
                 placeholder="Ask about building codes, setback rules, or permit requirements... (Enter to send, Shift+Enter for newline)"
                 className="w-full resize-none border-none focus-visible:ring-0 focus-visible:ring-offset-0 bg-transparent text-xs sm:text-sm text-slate-900 dark:text-slate-100 placeholder-slate-400 dark:placeholder-slate-500 p-1"
                 required
