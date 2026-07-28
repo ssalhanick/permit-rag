@@ -102,6 +102,20 @@ const markdownComponents = {
   ),
 };
 
+// Groups queries into a chat-style session/thread. crypto.randomUUID() needs a
+// secure context (https/localhost) — true for every environment this app runs
+// in — with a manual fallback for older Capacitor WebViews just in case.
+function makeSessionId() {
+  if (typeof crypto !== "undefined" && crypto.randomUUID) {
+    return crypto.randomUUID();
+  }
+  return "xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx".replace(/[xy]/g, (c) => {
+    const r = (Math.random() * 16) | 0;
+    const v = c === "x" ? r : (r & 0x3) | 0x8;
+    return v.toString(16);
+  });
+}
+
 export default function QueryPage() {
   const { user, activeProject } = useAuth();
   const location = useLocation();
@@ -110,7 +124,7 @@ export default function QueryPage() {
   const [error, setError] = useState("");
   const [history, setHistory] = useState([]);
   const [historyLoading, setHistoryLoading] = useState(false);
-  const [activeAnswerId, setActiveAnswerId] = useState(null);
+  const [sessionId, setSessionId] = useState(() => makeSessionId());
   const [historySearch, setHistorySearch] = useState("");
   const [copiedId, setCopiedId] = useState(null);
 
@@ -165,7 +179,6 @@ export default function QueryPage() {
   useEffect(() => {
     if (!user) {
       setHistory([]);
-      setActiveAnswerId(null);
       return;
     }
     let cancelled = false;
@@ -175,6 +188,7 @@ export default function QueryPage() {
         if (cancelled) return;
         const items = (res.data || []).map((row) => ({
           id: row.id,
+          session_id: row.session_id,
           createdAt: new Date(row.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
           query: row.query_text,
           answer: row.answer_text,
@@ -183,7 +197,10 @@ export default function QueryPage() {
           run_id: row.run_id,
         }));
         setHistory(items);
-        setActiveAnswerId(items[0]?.id ?? null);
+        // Jump to the most recent session on load (or project switch), same as
+        // the old single-answer behavior; fall back to a fresh session if empty.
+        const firstItem = items[0];
+        setSessionId(firstItem ? (firstItem.session_id || firstItem.id) : makeSessionId());
       })
       .catch(() => {
         if (!cancelled) setHistory([]);
@@ -240,16 +257,17 @@ export default function QueryPage() {
     try {
       const result = await fetchAnswer(payload, {
         "X-Client-Request-Id": requestId,
+        "X-Client-Session-Id": sessionId,
       });
       const data = result.data;
       const answerItem = {
         id: `${Date.now()}`,
+        session_id: sessionId,
         createdAt: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
         query: currentQueryText,
         ...data,
       };
       setHistory((prev) => [answerItem, ...prev]);
-      setActiveAnswerId(answerItem.id);
       setQuery(""); // Clear input on success
     } catch (requestError) {
       setError(requestError.message || "Unknown error occurred.");
@@ -271,18 +289,39 @@ export default function QueryPage() {
     }
   };
 
-  const activeAnswer = useMemo(() => {
-    if (!history.length) return null;
-    if (!activeAnswerId) return history[0];
-    return history.find((item) => item.id === activeAnswerId) || history[0];
-  }, [history, activeAnswerId]);
+  // Group individual questions into sessions/threads. `history` is always
+  // newest-first (DB fetch is ORDER BY created_at DESC; live submits prepend),
+  // so the first time we see a session key while iterating is its most recent
+  // turn — no timestamp parsing needed to keep sessions newest-first too.
+  const sessions = useMemo(() => {
+    const order = [];
+    const groups = new Map();
+    for (const item of history) {
+      const key = item.session_id || item.id; // legacy rows: singleton session
+      if (!groups.has(key)) {
+        groups.set(key, []);
+        order.push(key);
+      }
+      groups.get(key).push(item);
+    }
+    return order.map((key) => {
+      const items = groups.get(key);
+      return { key, latest: items[0], thread: [...items].reverse() }; // oldest -> newest
+    });
+  }, [history]);
 
-  // Scroll so the top of the bot's answer is visible, not the bottom of the card.
+  const activeSession = useMemo(
+    () => sessions.find((s) => s.key === sessionId) || null,
+    [sessions, sessionId]
+  );
+
+  // Scroll so the top of the newest bot answer is visible, not the bottom of the card.
+  const newestTurnId = activeSession?.thread?.at(-1)?.id;
   useEffect(() => {
-    if (activeAnswer && botAnswerRef.current) {
+    if (newestTurnId && botAnswerRef.current) {
       botAnswerRef.current.scrollIntoView({ behavior: "smooth", block: "start" });
     }
-  }, [activeAnswer?.id]);
+  }, [newestTurnId]);
 
   // Phase 5 feedback loop
   const [feedbackByRun, setFeedbackByRun] = useState({});
@@ -312,8 +351,10 @@ export default function QueryPage() {
     setTimeout(() => setCopiedId(null), 2500);
   };
 
-  const filteredHistory = history.filter((item) =>
-    item.query.toLowerCase().includes(historySearch.toLowerCase())
+  const filteredSessions = sessions.filter((session) =>
+    session.thread.some((item) =>
+      item.query.toLowerCase().includes(historySearch.toLowerCase())
+    )
   );
 
   const selectedProjectObj = projects.find((p) => p.id === activeProjectId);
@@ -327,7 +368,7 @@ export default function QueryPage() {
           <button
             type="button"
             onClick={() => {
-              setActiveAnswerId(null);
+              setSessionId(makeSessionId());
               setQuery("");
             }}
             className="w-full py-2.5 px-4 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-semibold text-xs flex items-center justify-center gap-2 shadow-sm transition-all"
@@ -376,14 +417,15 @@ export default function QueryPage() {
         <div className="flex-1 overflow-y-auto p-3 space-y-1">
           {historyLoading ? (
             <div className="py-8 text-center text-xs text-slate-400">Loading conversation history...</div>
-          ) : filteredHistory.length > 0 ? (
-            filteredHistory.map((item) => {
-              const isActive = item.id === activeAnswer?.id;
+          ) : filteredSessions.length > 0 ? (
+            filteredSessions.map((session) => {
+              const isActive = session.key === sessionId;
+              const title = session.thread[0].query;
               return (
                 <button
-                  key={item.id}
+                  key={session.key}
                   type="button"
-                  onClick={() => setActiveAnswerId(item.id)}
+                  onClick={() => setSessionId(session.key)}
                   className={`w-full text-left p-2.5 rounded-xl text-xs transition-all flex flex-col gap-1 group ${
                     isActive
                       ? "bg-slate-900 dark:bg-slate-800 text-white font-medium shadow-sm"
@@ -392,13 +434,20 @@ export default function QueryPage() {
                 >
                   <div className="flex items-center gap-2 truncate">
                     <MessageSquare className={`w-3.5 h-3.5 flex-shrink-0 ${isActive ? "text-blue-400" : "text-slate-400 group-hover:text-slate-600"}`} />
-                    <span className="truncate">{item.query}</span>
+                    <span className="truncate">{title}</span>
                   </div>
                   <div className="flex items-center justify-between text-[10px] opacity-70 pl-5">
-                    <span>{item.createdAt}</span>
-                    {item.resolved_municipality && (
+                    <span className="flex items-center gap-1.5">
+                      <span>{session.latest.createdAt}</span>
+                      {session.thread.length > 1 && (
+                        <span className="px-1.5 py-0.5 rounded-full bg-slate-500/20 font-semibold">
+                          {session.thread.length}
+                        </span>
+                      )}
+                    </span>
+                    {session.latest.resolved_municipality && (
                       <span className="uppercase tracking-wider font-semibold text-[9px] px-1.5 py-0.5 rounded bg-blue-500/20 text-blue-300">
-                        {item.resolved_municipality}
+                        {session.latest.resolved_municipality}
                       </span>
                     )}
                   </div>
@@ -442,7 +491,7 @@ export default function QueryPage() {
         {/* Conversation Feed / Scroll Canvas */}
         <div ref={chatContainerRef} className="flex-1 overflow-y-auto p-4 sm:p-6 md:p-8 space-y-6">
 
-          {!activeAnswer && history.length === 0 && !loading ? (
+          {!activeSession && !loading ? (
             /* ── Claude-style Welcome & Prompt Suggestions Hero ── */
             <div className="max-w-2xl mx-auto py-12 text-center space-y-8">
               <div className="w-16 h-16 rounded-2xl bg-gradient-to-tr from-blue-600 to-indigo-500 text-white flex items-center justify-center mx-auto shadow-xl shadow-blue-500/20">
@@ -486,12 +535,12 @@ export default function QueryPage() {
           ) : (
             /* ── Thread Message Display ── */
             <div className="max-w-3xl mx-auto space-y-6">
-              {activeAnswer && (
-                <>
+              {activeSession && activeSession.thread.map((turn, idx) => (
+                <React.Fragment key={turn.id}>
                   {/* User Question Bubble */}
                   <div className="flex items-start justify-end gap-3">
                     <div className="bg-blue-600 text-white rounded-2xl rounded-tr-none px-4 py-3 shadow-md text-sm max-w-xl">
-                      <p className="whitespace-pre-wrap">{activeAnswer.query}</p>
+                      <p className="whitespace-pre-wrap">{turn.query}</p>
                     </div>
                     <div className="w-8 h-8 rounded-full bg-slate-900 text-white flex items-center justify-center text-xs font-bold flex-shrink-0">
                       <User className="w-4 h-4" />
@@ -499,7 +548,10 @@ export default function QueryPage() {
                   </div>
 
                   {/* Assistant Answer Card Bubble */}
-                  <div ref={botAnswerRef} className="flex items-start gap-3">
+                  <div
+                    ref={idx === activeSession.thread.length - 1 ? botAnswerRef : null}
+                    className="flex items-start gap-3"
+                  >
                     <div className="w-8 h-8 rounded-full bg-blue-600 text-white flex items-center justify-center text-xs font-bold flex-shrink-0 shadow-md">
                       <Bot className="w-4 h-4" />
                     </div>
@@ -509,25 +561,25 @@ export default function QueryPage() {
                       <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-3">
                         <div className="flex items-center gap-2">
                           <span className="text-xs font-bold text-slate-900 dark:text-slate-100">
-                            {activeAnswer.how_to
+                            {turn.how_to
                               ? "🔧 How-To Guide"
-                              : activeAnswer.abstained
+                              : turn.abstained
                               ? "⚠️ General Regulatory Guidance"
                               : "Compliance Analysis"}
                           </span>
-                          {activeAnswer.resolved_municipality && (
+                          {turn.resolved_municipality && (
                             <span className="text-[10px] font-extrabold uppercase px-2 py-0.5 rounded-md bg-blue-50 dark:bg-blue-950 text-blue-600 dark:text-blue-400 border border-blue-200 dark:border-blue-800">
-                              📍 {activeAnswer.resolved_municipality}
+                              📍 {turn.resolved_municipality}
                             </span>
                           )}
                         </div>
 
                         <button
                           type="button"
-                          onClick={() => handleCopyText(activeAnswer.answer, activeAnswer.id)}
+                          onClick={() => handleCopyText(turn.answer, turn.id)}
                           className="text-xs text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 flex items-center gap-1 transition-colors"
                         >
-                          {copiedId === activeAnswer.id ? (
+                          {copiedId === turn.id ? (
                             <>
                               <Check className="w-3.5 h-3.5 text-emerald-500" />
                               <span className="text-emerald-600 font-semibold text-[11px]">Copied!</span>
@@ -542,7 +594,7 @@ export default function QueryPage() {
                       </div>
 
                       {/* Ungrounded Guidance Warning Banner */}
-                      {activeAnswer.abstained && (
+                      {turn.abstained && (
                         <div className="flex items-center gap-2 text-xs font-bold px-3.5 py-2.5 rounded-xl bg-amber-500/10 text-amber-800 dark:text-amber-300 border border-amber-500/30">
                           <AlertOctagon className="w-4 h-4 text-amber-600 dark:text-amber-400 flex-shrink-0" />
                           <span>General Knowledge Fallback (Unverified against specific local municipal code corpus)</span>
@@ -550,43 +602,43 @@ export default function QueryPage() {
                       )}
 
                       {/* Persona Nudge */}
-                      {activeAnswer.persona_nudge && (
+                      {turn.persona_nudge && (
                         <div className="flex gap-2.5 p-3 bg-blue-50/80 dark:bg-blue-950/40 border border-blue-200/80 dark:border-blue-800/60 text-blue-900 dark:text-blue-200 rounded-xl text-xs">
                           <Lightbulb className="w-4 h-4 text-blue-600 flex-shrink-0 mt-0.5" />
-                          <span>{activeAnswer.persona_nudge}</span>
+                          <span>{turn.persona_nudge}</span>
                         </div>
                       )}
 
                       {/* Educational Disclaimer */}
-                      {activeAnswer.how_to && activeAnswer.educational_disclaimer && (
+                      {turn.how_to && turn.educational_disclaimer && (
                         <div className="flex gap-2.5 p-3 bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-800 text-amber-900 dark:text-amber-200 rounded-xl text-xs">
                           <HelpCircle className="w-4 h-4 text-amber-600 flex-shrink-0 mt-0.5" />
-                          <span>{activeAnswer.educational_disclaimer}</span>
+                          <span>{turn.educational_disclaimer}</span>
                         </div>
                       )}
 
                       {/* Main Answer Content */}
                       <div
                         className={`p-4 rounded-xl text-xs sm:text-sm leading-relaxed ${
-                          activeAnswer.abstained
+                          turn.abstained
                             ? "bg-slate-50 dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700/80 text-slate-900 dark:text-slate-100"
                             : "bg-slate-50/70 dark:bg-slate-800/50 border border-slate-100 dark:border-slate-800 text-slate-800 dark:text-slate-100"
                         }`}
                       >
                         <ReactMarkdown remarkPlugins={[remarkGfm]} components={markdownComponents}>
-                          {activeAnswer.answer}
+                          {turn.answer}
                         </ReactMarkdown>
                       </div>
 
                       {/* Interactive Clarification Multiple-Choice Chips */}
-                      {(activeAnswer.clarifying_options || []).length > 0 && (
+                      {(turn.clarifying_options || []).length > 0 && (
                         <div className="p-4 bg-slate-100/70 dark:bg-slate-800/90 border border-slate-200 dark:border-slate-700 rounded-xl space-y-3">
                           <div className="flex items-center gap-1.5 font-bold text-xs text-slate-800 dark:text-slate-200">
                             <Lightbulb className="w-4 h-4 text-blue-500" />
                             <span>Refine query with specific parameters:</span>
                           </div>
                           <div className="space-y-3 pt-1">
-                            {activeAnswer.clarifying_options.map((opt, oIdx) => (
+                            {turn.clarifying_options.map((opt, oIdx) => (
                               <div key={oIdx} className="space-y-1.5">
                                 <span className="text-[11px] font-semibold text-slate-600 dark:text-slate-400 block">
                                   {opt.label}
@@ -613,17 +665,17 @@ export default function QueryPage() {
                       )}
 
                       {/* AHJ Disclaimer */}
-                      {activeAnswer.ahj_disclaimer && (
+                      {turn.ahj_disclaimer && (
                         <div className="flex gap-3 p-4 bg-amber-50/70 dark:bg-amber-950/30 border-l-4 border-amber-500 rounded-r-xl text-xs text-amber-900 dark:text-amber-200">
                           <ShieldAlert className="w-5 h-5 text-amber-600 flex-shrink-0 mt-0.5" />
                           <div className="space-y-1">
                             <strong className="font-bold text-amber-950 dark:text-amber-100 block">
                               Authority Having Jurisdiction (AHJ) Notice
                             </strong>
-                            <p className="leading-relaxed">{activeAnswer.ahj_disclaimer.text}</p>
-                            {activeAnswer.ahj_disclaimer.learn_more_url && (
+                            <p className="leading-relaxed">{turn.ahj_disclaimer.text}</p>
+                            {turn.ahj_disclaimer.learn_more_url && (
                               <a
-                                href={activeAnswer.ahj_disclaimer.learn_more_url}
+                                href={turn.ahj_disclaimer.learn_more_url}
                                 target="_blank"
                                 rel="noopener noreferrer"
                                 className="inline-flex items-center gap-1 mt-1 underline font-bold text-amber-900 dark:text-amber-100 hover:text-amber-700"
@@ -636,7 +688,7 @@ export default function QueryPage() {
                       )}
 
                       {/* Conflict Warnings */}
-                      {activeAnswer.conflict_warnings?.length > 0 && (
+                      {turn.conflict_warnings?.length > 0 && (
                         <div className="p-4 bg-orange-50/70 dark:bg-orange-950/30 border-l-4 border-orange-500 rounded-r-xl text-xs text-orange-900 dark:text-orange-200 space-y-2">
                           <strong className="font-extrabold text-orange-950 dark:text-orange-100 block flex items-center gap-1.5">
                             <AlertOctagon className="w-4 h-4 text-orange-600" /> Regulatory Conflicts Detected
@@ -645,7 +697,7 @@ export default function QueryPage() {
                             The following topics have differing requirements across municipal or state levels.
                           </p>
                           <ul className="space-y-2 pt-1">
-                            {activeAnswer.conflict_warnings.map((w, i) => (
+                            {turn.conflict_warnings.map((w, i) => (
                               <li key={i} className="bg-white/90 dark:bg-slate-900 p-3 rounded-lg border border-orange-200 dark:border-orange-900/60">
                                 <span className="font-bold text-orange-950 dark:text-orange-100 block">{w.subject}</span>
                                 <span className="text-[10px] text-slate-500 block mb-1">
@@ -659,13 +711,13 @@ export default function QueryPage() {
                       )}
 
                       {/* Source Citations */}
-                      {(activeAnswer.citations || []).length > 0 && (
+                      {(turn.citations || []).length > 0 && (
                         <div className="pt-3 border-t border-slate-100 dark:border-slate-800">
                           <h4 className="font-bold text-xs text-slate-700 dark:text-slate-300 mb-2">Verified Code Sources:</h4>
                           <div className="flex flex-wrap gap-2">
-                            {activeAnswer.citations.map((citation, idx) => (
+                            {turn.citations.map((citation, cIdx) => (
                               <span
-                                key={idx}
+                                key={cIdx}
                                 className="inline-flex items-center gap-1 text-[11px] font-semibold bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 px-2.5 py-1 rounded-lg border border-slate-200 dark:border-slate-700"
                               >
                                 <FileText className="w-3 h-3 text-blue-500" />
@@ -677,11 +729,11 @@ export default function QueryPage() {
                       )}
 
                       {/* How-to Videos */}
-                      {(activeAnswer.media_refs || []).length > 0 && (
+                      {(turn.media_refs || []).length > 0 && (
                         <div className="pt-3 border-t border-slate-100 dark:border-slate-800">
                           <h4 className="font-bold text-xs text-slate-700 dark:text-slate-300 mb-2">📺 Instructional Video References:</h4>
                           <ul className="space-y-2">
-                            {activeAnswer.media_refs.map((m, i) => (
+                            {turn.media_refs.map((m, i) => (
                               <li key={i} className="text-xs">
                                 <a
                                   href={m.url}
@@ -701,8 +753,8 @@ export default function QueryPage() {
                       )}
 
                       {/* Feedback Rating Controls */}
-                      {activeAnswer.run_id && (() => {
-                        const fb = feedbackByRun[activeAnswer.run_id] || {};
+                      {turn.run_id && (() => {
+                        const fb = feedbackByRun[turn.run_id] || {};
                         return (
                           <div className="pt-3 border-t border-slate-100 dark:border-slate-800 flex flex-wrap items-center justify-between gap-3 text-xs">
                             <span className="text-slate-500 dark:text-slate-400">Was this response helpful?</span>
@@ -710,7 +762,7 @@ export default function QueryPage() {
                               <button
                                 type="button"
                                 disabled={fb.sending}
-                                onClick={() => sendFeedback(activeAnswer.run_id, "up", fb.comment)}
+                                onClick={() => sendFeedback(turn.run_id, "up", fb.comment)}
                                 className={`p-1.5 rounded-lg border transition-colors flex items-center gap-1 text-xs font-semibold ${
                                   fb.rating === "up"
                                     ? "bg-emerald-50 dark:bg-emerald-950 border-emerald-500 text-emerald-700 dark:text-emerald-300"
@@ -722,7 +774,7 @@ export default function QueryPage() {
                               <button
                                 type="button"
                                 disabled={fb.sending}
-                                onClick={() => sendFeedback(activeAnswer.run_id, "down", fb.comment)}
+                                onClick={() => sendFeedback(turn.run_id, "down", fb.comment)}
                                 className={`p-1.5 rounded-lg border transition-colors flex items-center gap-1 text-xs font-semibold ${
                                   fb.rating === "down"
                                     ? "bg-rose-50 dark:bg-rose-950 border-rose-500 text-rose-700 dark:text-rose-300"
@@ -737,8 +789,8 @@ export default function QueryPage() {
                       })()}
                     </div>
                   </div>
-                </>
-              )}
+                </React.Fragment>
+              ))}
             </div>
           )}
         </div>

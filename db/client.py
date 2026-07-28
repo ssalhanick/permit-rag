@@ -987,6 +987,7 @@ def insert_query_log(
     latency_ms: int | None = None,
     user_id: UUID | None = None,
     project_id: UUID | None = None,
+    session_id: UUID | None = None,
 ) -> dict[str, Any]:
     """Log a RAG query for auditing and evaluation."""
     import json as _json
@@ -994,12 +995,13 @@ def insert_query_log(
     sql = """
         INSERT INTO query_log
             (query_text, municipality, top_k, chunk_ids,
-             answer_text, citations, model, latency_ms, user_id, project_id)
+             answer_text, citations, model, latency_ms, user_id, project_id,
+             session_id)
         VALUES
             (%(query_text)s, %(municipality)s, %(top_k)s,
              %(chunk_ids)s, %(answer_text)s,
              %(citations)s::jsonb, %(model)s, %(latency_ms)s,
-             %(user_id)s, %(project_id)s)
+             %(user_id)s, %(project_id)s, %(session_id)s)
         RETURNING *;
     """
     params = {
@@ -1013,6 +1015,7 @@ def insert_query_log(
         "latency_ms": latency_ms,
         "user_id": user_id,
         "project_id": project_id,
+        "session_id": session_id,
     }
     with get_conn() as conn:
         row = conn.execute(sql, params).fetchone()
@@ -1690,11 +1693,11 @@ def unshare_document_from_project(project_id: UUID, document_id: UUID) -> bool:
 def get_user_query_history(user_id: UUID, project_id: UUID | None = None) -> list[dict[str, Any]]:
     """Fetch query log history for a specific user, sorted by newest first."""
     if project_id:
-        sql = "SELECT id, query_text, municipality, top_k, answer_text, citations, model, latency_ms, created_at, project_id FROM query_log WHERE user_id = %s AND project_id = %s ORDER BY created_at DESC;"
+        sql = "SELECT id, query_text, municipality, top_k, answer_text, citations, model, latency_ms, created_at, project_id, session_id FROM query_log WHERE user_id = %s AND project_id = %s ORDER BY created_at DESC;"
         with get_conn() as conn:
             return conn.execute(sql, (user_id, project_id)).fetchall()
     else:
-        sql = "SELECT id, query_text, municipality, top_k, answer_text, citations, model, latency_ms, created_at, project_id FROM query_log WHERE user_id = %s ORDER BY created_at DESC;"
+        sql = "SELECT id, query_text, municipality, top_k, answer_text, citations, model, latency_ms, created_at, project_id, session_id FROM query_log WHERE user_id = %s ORDER BY created_at DESC;"
         with get_conn() as conn:
             return conn.execute(sql, (user_id,)).fetchall()
 

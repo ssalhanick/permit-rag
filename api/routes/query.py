@@ -302,6 +302,7 @@ def _build_abstain_response(
     background_tasks: BackgroundTasks,
     current_user: Any,
     started_at: float,
+    session_uuid: UUID | None,
 ) -> AnswerResponse:
     """
     Build the 200 response for a grounding-floor abstain (Phase 4 query-UX).
@@ -360,6 +361,7 @@ def _build_abstain_response(
             latency_ms=int((time.perf_counter() - started_at) * 1000),
             user_id=current_user["user_id"] if (current_user and isinstance(current_user, dict)) else None,
             project_id=UUID(body.project_id) if body.project_id else None,
+            session_id=session_uuid,
         )
     except Exception as exc:
         log.warning("could not schedule abstain query logging task: %s", exc)
@@ -474,6 +476,10 @@ def query_answer(
     """Retrieve chunks and generate a cited answer via Claude."""
     started_at = time.perf_counter()
     session_id = request.headers.get("X-Client-Session-Id", "").strip() or "unknown"
+    try:
+        session_uuid: UUID | None = UUID(session_id)
+    except ValueError:
+        session_uuid = None
     request_id = request.headers.get("X-Client-Request-Id", "").strip() or f"api-{int(time.time() * 1000)}"
     tracing_on = _langsmith_enabled()
 
@@ -543,7 +549,7 @@ def query_answer(
     # and disclaimer attached — never a 422 red error.
     if plan.abstained:
         return _build_abstain_response(
-            body, plan, root_trace, background_tasks, current_user, started_at
+            body, plan, root_trace, background_tasks, current_user, started_at, session_uuid
         )
 
     result = plan.retrieval
@@ -672,6 +678,7 @@ def query_answer(
             latency_ms=int((time.perf_counter() - started_at) * 1000),
             user_id=current_user["user_id"] if (current_user and isinstance(current_user, dict)) else None,
             project_id=UUID(body.project_id) if body.project_id else None,
+            session_id=session_uuid,
         )
     except Exception as exc:
         log.warning("could not schedule Postgres query logging task: %s", exc)
