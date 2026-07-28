@@ -13,15 +13,6 @@ export default function ProjectSwitcher({ onSelect }) {
   const [justSelected, setJustSelected] = useState(false);
   const containerRef = useRef(null);
 
-  // Default starter projects if backend project list is empty
-  const starterProjects = [
-    { id: "proj-kitchen-renovation", name: "Kitchen Renovation", category: "Kitchen" },
-    { id: "proj-basement-finishing", name: "Basement Finishing", category: "Basement" },
-    { id: "proj-electrical-panel-upgrade", name: "Electrical Panel Upgrade", category: "Electrical" },
-    { id: "proj-master-bath-retile", name: "Master Bath Retile", category: "Bathroom" },
-    { id: "proj-deck-landscaping", name: "Deck & Landscaping", category: "Exterior" },
-  ];
-
   useEffect(() => {
     if (!open) return;
     let cancelled = false;
@@ -51,7 +42,7 @@ export default function ProjectSwitcher({ onSelect }) {
     return () => document.removeEventListener("mousedown", handler);
   }, []);
 
-  const displayList = projects.length > 0 ? projects : starterProjects;
+  const displayList = projects;
 
   const filtered = displayList.filter((p) => {
     const q = search.trim().toLowerCase();
@@ -81,7 +72,7 @@ export default function ProjectSwitcher({ onSelect }) {
     }
   };
 
-  const selectedName = activeProject?.name || "Kitchen Renovation";
+  const selectedName = activeProject?.name || "No project selected";
 
   return (
     <div ref={containerRef} className="relative w-full">
@@ -136,7 +127,19 @@ export default function ProjectSwitcher({ onSelect }) {
 
           <ul role="listbox" className="max-h-56 overflow-y-auto divide-y divide-slate-800/50 p-1">
             {loading && <li className="px-3 py-2 text-xs text-slate-400">Loading projects…</li>}
-            {!loading && filtered.length === 0 && (
+            {!loading && filtered.length === 0 && projects.length === 0 && (
+              <li className="px-3 py-3 text-xs text-slate-400">
+                <p className="mb-2">You don't have any projects yet.</p>
+                <NavLink
+                  to="/kickoff"
+                  onClick={() => setOpen(false)}
+                  className="inline-flex items-center gap-1 font-semibold text-blue-400 hover:text-blue-300"
+                >
+                  Create your first project →
+                </NavLink>
+              </li>
+            )}
+            {!loading && filtered.length === 0 && projects.length > 0 && (
               <li className="px-3 py-2 text-xs text-slate-400">No matching projects found.</li>
             )}
             {!loading &&

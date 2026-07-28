@@ -21,17 +21,56 @@ import { isNativePlatform } from "../platform.js";
 const _poolId = import.meta.env.VITE_COGNITO_USER_POOL_ID;
 const _clientId = import.meta.env.VITE_COGNITO_APP_CLIENT_ID;
 
-if (!_poolId || _poolId.startsWith("REPLACE_") || !_clientId || _clientId.startsWith("REPLACE_")) {
+const isAuthConfigured = Boolean(
+  _poolId && !_poolId.startsWith("REPLACE_") && _clientId && !_clientId.startsWith("REPLACE_")
+);
+
+if (!isAuthConfigured) {
   console.error(
     "[AuthContext] Missing Cognito env vars. " +
     "Set VITE_COGNITO_USER_POOL_ID and VITE_COGNITO_APP_CLIENT_ID in frontend/.env and restart Vite."
   );
 }
 
-const userPool = new CognitoUserPool({
-  UserPoolId: _poolId || "us-east-1_PLACEHOLDER",
-  ClientId: _clientId || "PLACEHOLDER",
-});
+// Only construct the real pool when configured — a pool built from fake
+// placeholder IDs would fail confusingly deep inside the Cognito SDK instead
+// of surfacing a clear error at the top of the app (see AuthConfigErrorScreen).
+const userPool = isAuthConfigured
+  ? new CognitoUserPool({ UserPoolId: _poolId, ClientId: _clientId })
+  : null;
+
+/**
+ * Shown instead of the app when required Cognito env vars are missing or
+ * still contain the "REPLACE_" placeholder, so a misconfigured deploy fails
+ * loudly instead of silently breaking sign-in.
+ */
+function AuthConfigErrorScreen() {
+  return (
+    <div
+      role="alert"
+      style={{
+        minHeight: "100vh",
+        display: "flex",
+        flexDirection: "column",
+        alignItems: "center",
+        justifyContent: "center",
+        gap: "0.75rem",
+        padding: "2rem",
+        textAlign: "center",
+        fontFamily: "system-ui, sans-serif",
+      }}
+    >
+      <h1 style={{ fontSize: "1.25rem", fontWeight: 700, color: "#991b1b" }}>
+        Authentication is not configured
+      </h1>
+      <p style={{ maxWidth: "32rem", color: "#475569" }}>
+        This deployment is missing its Cognito configuration
+        (VITE_COGNITO_USER_POOL_ID / VITE_COGNITO_APP_CLIENT_ID). Sign-in cannot work until
+        these are set. Contact the site administrator.
+      </p>
+    </div>
+  );
+}
 
 // ── Helpers ───────────────────────────────────────────────────
 
@@ -95,6 +134,11 @@ export function AuthProvider({ children }) {
   // ── Session restoration on mount ─────────────────────────────
 
   const restoreSession = useCallback(async () => {
+    if (!isAuthConfigured) {
+      setUser(null);
+      setLoading(false);
+      return;
+    }
     const currentCognitoUser = userPool.getCurrentUser();
     if (!currentCognitoUser) {
       setUser(null);
@@ -150,6 +194,7 @@ export function AuthProvider({ children }) {
 
   useEffect(() => {
     registerTokenRefresher(async () => {
+      if (!isAuthConfigured) return null;
       const currentCognitoUser = userPool.getCurrentUser();
       if (!currentCognitoUser) return null;
       try {
@@ -448,7 +493,7 @@ export function AuthProvider({ children }) {
   // ── Logout ────────────────────────────────────────────────────
 
   const logout = useCallback(() => {
-    const cognitoUser = userPool.getCurrentUser();
+    const cognitoUser = userPool?.getCurrentUser();
     if (cognitoUser) {
       cognitoUser.signOut();
     }
@@ -478,7 +523,7 @@ export function AuthProvider({ children }) {
         logout,
       }}
     >
-      {children}
+      {isAuthConfigured ? children : <AuthConfigErrorScreen />}
     </AuthContext.Provider>
   );
 }

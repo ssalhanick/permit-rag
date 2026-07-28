@@ -2,6 +2,8 @@ import React, { useState, useEffect } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { useAuth } from "./context/AuthContext.jsx";
 import { fetchProjects } from "./api.js";
+import { loadProjectTasks, saveProjectTasks } from "./services/taskStorage.js";
+import { parseMoneyNum } from "./utils/parseMoneyNum.js";
 import {
   FolderKanban,
   CalendarCheck,
@@ -20,10 +22,11 @@ export default function DashboardPage() {
   const navigate = useNavigate();
   const [projects, setProjects] = useState([]);
   const [loading, setLoading] = useState(true);
+  // Flat list of tasks aggregated across all of the user's real projects
   const [tasks, setTasks] = useState([]);
   const [showAddTaskForm, setShowAddTaskForm] = useState(false);
   const [newTaskTitle, setNewTaskTitle] = useState("");
-  const [newTaskProject, setNewTaskProject] = useState("");
+  const [newTaskProjectId, setNewTaskProjectId] = useState("");
   const [newTaskPriority, setNewTaskPriority] = useState("Medium");
   const [newTaskDueDate, setNewTaskDueDate] = useState("");
 
@@ -37,6 +40,13 @@ export default function DashboardPage() {
 
   const username = user?.username || user?.email?.split("@")[0] || "User";
 
+  const loadAllTasks = (projectList) => {
+    const aggregated = projectList.flatMap((p) =>
+      loadProjectTasks(p.id).map((t) => ({ ...t, projectId: p.id, projectName: p.name }))
+    );
+    setTasks(aggregated);
+  };
+
   useEffect(() => {
     if (!user) return;
     setLoading(true);
@@ -44,9 +54,10 @@ export default function DashboardPage() {
       .then((res) => {
         const loadedProjects = res.data || [];
         setProjects(loadedProjects);
-        if (loadedProjects.length > 0 && !newTaskProject) {
-          setNewTaskProject(loadedProjects[0].name);
+        if (loadedProjects.length > 0 && !newTaskProjectId) {
+          setNewTaskProjectId(loadedProjects[0].id);
         }
+        loadAllTasks(loadedProjects);
       })
       .catch(() => setProjects([]))
       .finally(() => setLoading(false));
@@ -54,36 +65,32 @@ export default function DashboardPage() {
 
   const activeProjects = projects.filter((p) => !p.is_archived);
 
-  // Utility helper to safely convert strings or numbers into numeric values
-  const parseMoneyNum = (val) => {
-    if (typeof val === "number") return isNaN(val) ? 0 : val;
-    if (!val) return 0;
-    const num = parseFloat(String(val).replace(/[^0-9.]/g, ""));
-    return isNaN(num) ? 0 : num;
-  };
-
   // Dynamic budget calculations based on real project data
   const totalBudget = projects.reduce((acc, p) => acc + parseMoneyNum(p.budget), 0);
-  const totalSpent = projects.reduce((acc, p) => acc + parseMoneyNum(p.spent), 0);
 
-  const toggleTask = (id) => {
-    setTasks(
-      tasks.map((t) => (t.id === id ? { ...t, completed: !t.completed } : t))
+  const toggleTask = (projectId, taskId) => {
+    const updated = loadProjectTasks(projectId).map((t) =>
+      t.id === taskId ? { ...t, completed: !t.completed } : t
     );
+    saveProjectTasks(projectId, updated);
+    loadAllTasks(projects);
   };
 
   const handleAddTask = (e) => {
     e.preventDefault();
-    if (!newTaskTitle.trim()) return;
+    if (!newTaskTitle.trim() || !newTaskProjectId) return;
     const newTask = {
-      id: Date.now(),
+      id: `task_${Date.now()}`,
       title: newTaskTitle.trim(),
-      project: newTaskProject || (projects[0]?.name || "General"),
-      dueDate: newTaskDueDate || "Soon",
+      category: "GENERAL",
       priority: newTaskPriority,
+      urgencyDot: "bg-sky-500",
+      dueDate: newTaskDueDate || "Soon",
       completed: false,
+      createdAt: new Date().toISOString(),
     };
-    setTasks([newTask, ...tasks]);
+    saveProjectTasks(newTaskProjectId, [newTask, ...loadProjectTasks(newTaskProjectId)]);
+    loadAllTasks(projects);
     setNewTaskTitle("");
     setNewTaskDueDate("");
     setShowAddTaskForm(false);
@@ -165,22 +172,22 @@ export default function DashboardPage() {
               ${totalBudget > 0 ? totalBudget.toLocaleString() : "0"} Total Budget
             </div>
             <div className="tt-stat-label">
-              ${totalSpent > 0 ? totalSpent.toLocaleString() : "0"} spent
+              Across {projects.length} {projects.length === 1 ? "project" : "projects"}
             </div>
           </div>
         </div>
 
-        {/* Card 4: Project Status */}
+        {/* Card 4: Archived Projects */}
         <div className="tt-stat-card">
           <div className="tt-stat-icon-wrapper tt-icon-green">
             <ShieldCheck className="w-6 h-6" />
           </div>
           <div className="tt-stat-content">
             <div className="tt-stat-value">
-              {totalSpent <= totalBudget ? "On Track" : "Over Budget"}
+              {projects.length - activeProjects.length} Archived
             </div>
             <div className="tt-stat-label">
-              {activeProjects.length > 0 ? "Projects active" : "No active projects"}
+              {activeProjects.length} still active
             </div>
           </div>
         </div>
@@ -263,13 +270,15 @@ export default function DashboardPage() {
         <div className="tt-section-header">
           <div className="flex items-center gap-2">
             <h2 className="tt-section-title">Upcoming Tasks</h2>
-            <button
-              type="button"
-              className="tt-btn-add-task-inline"
-              onClick={() => setShowAddTaskForm(!showAddTaskForm)}
-            >
-              <Plus className="w-4 h-4 mr-1" /> Add Task
-            </button>
+            {projects.length > 0 && (
+              <button
+                type="button"
+                className="tt-btn-add-task-inline"
+                onClick={() => setShowAddTaskForm(!showAddTaskForm)}
+              >
+                <Plus className="w-4 h-4 mr-1" /> Add Task
+              </button>
+            )}
           </div>
           <Link to="/tasks" className="tt-link-see-all">
             View All <ChevronRight className="w-4 h-4 ml-0.5" />
@@ -290,19 +299,15 @@ export default function DashboardPage() {
                 className="tt-input"
               />
               <select
-                value={newTaskProject}
-                onChange={(e) => setNewTaskProject(e.target.value)}
+                value={newTaskProjectId}
+                onChange={(e) => setNewTaskProjectId(e.target.value)}
                 className="tt-select"
               >
-                {projects.length > 0 ? (
-                  projects.map((p) => (
-                    <option key={p.id} value={p.name}>
-                      {p.name}
-                    </option>
-                  ))
-                ) : (
-                  <option value="General Project">General Project</option>
-                )}
+                {projects.map((p) => (
+                  <option key={p.id} value={p.id}>
+                    {p.name}
+                  </option>
+                ))}
               </select>
               <select
                 value={newTaskPriority}
@@ -333,20 +338,24 @@ export default function DashboardPage() {
           {tasks.length === 0 ? (
             <div className="p-6 text-center text-slate-500">
               <CheckSquare className="w-8 h-8 text-slate-300 mx-auto mb-2" />
-              <p className="text-sm">No tasks added yet. Click "+ Add Task" to create your first task.</p>
+              <p className="text-sm">
+                {projects.length === 0
+                  ? "Create a project to start adding tasks."
+                  : 'No tasks added yet. Click "+ Add Task" to create your first task.'}
+              </p>
             </div>
           ) : (
             <ul className="tt-tasks-list">
               {tasks.map((t) => (
                 <li
-                  key={t.id}
+                  key={`${t.projectId}-${t.id}`}
                   className={`tt-task-item ${t.completed ? "tt-task-completed" : ""}`}
                 >
                   <label className="tt-checkbox-container">
                     <input
                       type="checkbox"
                       checked={t.completed}
-                      onChange={() => toggleTask(t.id)}
+                      onChange={() => toggleTask(t.projectId, t.id)}
                       className="tt-custom-checkbox-input"
                     />
                     <span className="tt-custom-checkbox">
@@ -359,7 +368,7 @@ export default function DashboardPage() {
                   </div>
 
                   <div className="tt-task-meta">
-                    <span className="tt-project-tag">{t.project}</span>
+                    <span className="tt-project-tag">{t.projectName}</span>
                     <span className="tt-task-duedate">Due {t.dueDate}</span>
                     <span
                       className={`tt-priority-badge ${getPriorityStyle(t.priority)}`}

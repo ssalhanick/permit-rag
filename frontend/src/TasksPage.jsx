@@ -1,160 +1,74 @@
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
-import { Plus, Check, Search, Calendar, ChevronDown, ChevronUp } from "lucide-react";
+import { Plus, Check, Search, ChevronDown, ChevronUp } from "lucide-react";
+import { fetchProjects } from "./api.js";
+import { loadProjectTasks, saveProjectTasks } from "./services/taskStorage.js";
 
 export default function TasksPage() {
-  const [tasks, setTasks] = useState([
-    {
-      id: 1,
-      title: "Get three quotes for cabinet install",
-      project: "Kitchen Renovation",
-      dueDate: "2d overdue",
-      urgency: "urgent", // red dot
-      priority: "High",
-      completed: false,
-    },
-    {
-      id: 2,
-      title: "Order countertop samples",
-      project: "Kitchen Renovation",
-      dueDate: "1d",
-      urgency: "soon", // orange dot
-      priority: "Medium",
-      completed: false,
-    },
-    {
-      id: 3,
-      title: "Confirm electrician start date",
-      project: "Electrical Panel Upgrade",
-      dueDate: "3d",
-      urgency: "soon",
-      priority: "High",
-      completed: false,
-    },
-    {
-      id: 4,
-      title: "Drywall Patching & Sanding",
-      project: "Kitchen Renovation",
-      dueDate: "5d",
-      urgency: "urgent",
-      priority: "Medium",
-      completed: false,
-    },
-    {
-      id: 5,
-      title: "Inspect Circuit Breaker Labeling",
-      project: "Electrical Panel Upgrade",
-      dueDate: "9d",
-      urgency: "urgent",
-      priority: "Low",
-      completed: false,
-    },
-    {
-      id: 6,
-      title: "Schedule Plumbing Rough-in Inspection",
-      project: "Kitchen Renovation",
-      dueDate: "19d",
-      urgency: "later", // blue dot
-      priority: "High",
-      completed: false,
-    },
-    {
-      id: 7,
-      title: "Select paint color for trim",
-      project: "Basement Finishing",
-      dueDate: "24d",
-      urgency: "soon",
-      priority: "Low",
-      completed: false,
-    },
-    {
-      id: 8,
-      title: "Finalize landscaping layout plan",
-      project: "Deck & Landscaping",
-      dueDate: "45d",
-      urgency: "urgent",
-      priority: "Medium",
-      completed: false,
-    },
-    {
-      id: 9,
-      title: "Review permit requirements",
-      project: "Kitchen Renovation",
-      dueDate: "Done",
-      urgency: "completed",
-      priority: "High",
-      completed: true,
-    },
-    {
-      id: 10,
-      title: "Order tile samples for backsplash",
-      project: "Kitchen Renovation",
-      dueDate: "Done",
-      urgency: "completed",
-      priority: "Medium",
-      completed: true,
-    },
-    {
-      id: 11,
-      title: "Disconnect old appliance lines",
-      project: "Kitchen Renovation",
-      dueDate: "Done",
-      urgency: "completed",
-      priority: "High",
-      completed: true,
-    },
-    {
-      id: 12,
-      title: "Submit electrical permit application",
-      project: "Electrical Panel Upgrade",
-      dueDate: "Done",
-      urgency: "completed",
-      priority: "High",
-      completed: true,
-    },
-    {
-      id: 13,
-      title: "Clear out basement storage area",
-      project: "Basement Finishing",
-      dueDate: "Done",
-      urgency: "completed",
-      priority: "Low",
-      completed: true,
-    },
-  ]);
+  const [projects, setProjects] = useState([]);
+  const [loading, setLoading] = useState(true);
+  // Flat list of tasks aggregated across all of the user's real projects
+  const [tasks, setTasks] = useState([]);
 
   const [showCompleted, setShowCompleted] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
   const [showAddForm, setShowAddForm] = useState(false);
 
   const [newTaskTitle, setNewTaskTitle] = useState("");
-  const [newTaskProject, setNewTaskProject] = useState("Kitchen Renovation");
+  const [newTaskProjectId, setNewTaskProjectId] = useState("");
   const [newTaskPriority, setNewTaskPriority] = useState("Medium");
-  const [newTaskDueDate, setNewTaskDueDate] = useState("7d");
+  const [newTaskDueDate, setNewTaskDueDate] = useState("");
+
+  const loadAllTasks = (projectList) => {
+    const aggregated = projectList.flatMap((p) =>
+      loadProjectTasks(p.id).map((t) => ({ ...t, projectId: p.id, projectName: p.name }))
+    );
+    setTasks(aggregated);
+  };
+
+  useEffect(() => {
+    fetchProjects({})
+      .then((res) => {
+        const list = res.data || [];
+        setProjects(list);
+        if (list.length > 0) setNewTaskProjectId(list[0].id);
+        loadAllTasks(list);
+      })
+      .catch(() => {
+        setProjects([]);
+        setTasks([]);
+      })
+      .finally(() => setLoading(false));
+  }, []);
 
   const openTasks = tasks.filter((t) => !t.completed);
   const completedTasks = tasks.filter((t) => t.completed);
 
-  const toggleTask = (id) => {
-    setTasks(
-      tasks.map((t) => (t.id === id ? { ...t, completed: !t.completed } : t))
+  const toggleTask = (projectId, taskId) => {
+    const updated = loadProjectTasks(projectId).map((t) =>
+      t.id === taskId ? { ...t, completed: !t.completed } : t
     );
+    saveProjectTasks(projectId, updated);
+    loadAllTasks(projects);
   };
 
   const handleAddTask = (e) => {
     e.preventDefault();
-    if (!newTaskTitle.trim()) return;
+    if (!newTaskTitle.trim() || !newTaskProjectId) return;
     const newTask = {
-      id: Date.now(),
+      id: `task_${Date.now()}`,
       title: newTaskTitle.trim(),
-      project: newTaskProject,
-      dueDate: newTaskDueDate || "Soon",
-      urgency: "soon",
+      category: "GENERAL",
       priority: newTaskPriority,
+      urgencyDot: "bg-sky-500",
+      dueDate: newTaskDueDate || "Soon",
       completed: false,
+      createdAt: new Date().toISOString(),
     };
-    setTasks([newTask, ...tasks]);
+    saveProjectTasks(newTaskProjectId, [newTask, ...loadProjectTasks(newTaskProjectId)]);
+    loadAllTasks(projects);
     setNewTaskTitle("");
+    setNewTaskDueDate("");
     setShowAddForm(false);
   };
 
@@ -163,19 +77,9 @@ export default function TasksPage() {
     return (
       !q ||
       t.title.toLowerCase().includes(q) ||
-      t.project.toLowerCase().includes(q)
+      t.projectName?.toLowerCase().includes(q)
     );
   });
-
-  const renderUrgencyDot = (urgency, dueDate) => {
-    let dotColor = "bg-sky-500";
-    if (urgency === "urgent" || dueDate.includes("overdue")) {
-      dotColor = "bg-rose-500";
-    } else if (urgency === "soon") {
-      dotColor = "bg-amber-500";
-    }
-    return <span className={`inline-block w-2 h-2 rounded-full mr-1.5 ${dotColor}`} />;
-  };
 
   return (
     <main className="tt-dashboard-container">
@@ -187,15 +91,28 @@ export default function TasksPage() {
             <strong>{openTasks.length} open</strong> · {completedTasks.length} completed
           </p>
         </div>
-        <button
-          type="button"
-          className="tt-btn-primary tt-new-project-btn"
-          onClick={() => setShowAddForm(!showAddForm)}
-        >
-          <Plus className="w-5 h-5 mr-1.5 stroke-[2.5]" />
-          Add task
-        </button>
+        {projects.length > 0 && (
+          <button
+            type="button"
+            className="tt-btn-primary tt-new-project-btn"
+            onClick={() => setShowAddForm(!showAddForm)}
+          >
+            <Plus className="w-5 h-5 mr-1.5 stroke-[2.5]" />
+            Add task
+          </button>
+        )}
       </header>
+
+      {!loading && projects.length === 0 && (
+        <div className="tt-add-task-card mb-6 text-center py-8">
+          <p className="text-sm text-slate-600 mb-3">
+            You don't have any projects yet — create one to start adding tasks.
+          </p>
+          <Link to="/kickoff" className="tt-btn-primary inline-flex items-center gap-1.5">
+            <Plus className="w-4 h-4" /> Create your first project
+          </Link>
+        </div>
+      )}
 
       {/* Collapsible Add Task Form */}
       {showAddForm && (
@@ -211,14 +128,13 @@ export default function TasksPage() {
               className="tt-input"
             />
             <select
-              value={newTaskProject}
-              onChange={(e) => setNewTaskProject(e.target.value)}
+              value={newTaskProjectId}
+              onChange={(e) => setNewTaskProjectId(e.target.value)}
               className="tt-select"
             >
-              <option value="Kitchen Renovation">Kitchen Renovation</option>
-              <option value="Electrical Panel Upgrade">Electrical Panel Upgrade</option>
-              <option value="Basement Finishing">Basement Finishing</option>
-              <option value="Deck & Landscaping">Deck & Landscaping</option>
+              {projects.map((p) => (
+                <option key={p.id} value={p.id}>{p.name}</option>
+              ))}
             </select>
             <select
               value={newTaskPriority}
@@ -285,14 +201,14 @@ export default function TasksPage() {
         <ul className="divide-y divide-slate-100">
           {filteredOpenTasks.map((t) => (
             <li
-              key={t.id}
+              key={`${t.projectId}-${t.id}`}
               className="p-4 hover:bg-slate-50/80 transition-colors flex items-center justify-between gap-4"
             >
               {/* Left Column: Circular Checkbox */}
               <div className="flex items-center gap-3.5 flex-1 min-w-0">
                 <button
                   type="button"
-                  onClick={() => toggleTask(t.id)}
+                  onClick={() => toggleTask(t.projectId, t.id)}
                   className="w-5 h-5 rounded-full border-2 border-slate-300 hover:border-blue-600 flex items-center justify-center flex-shrink-0 transition-colors"
                   aria-label={`Mark "${t.title}" as complete`}
                 />
@@ -303,22 +219,22 @@ export default function TasksPage() {
                     {t.title}
                   </span>
                   <span className="text-xs text-slate-500 mt-0.5 truncate">
-                    {t.project}
+                    {t.projectName}
                   </span>
                 </div>
               </div>
 
               {/* Right Column: Color-coded Dot + Due Date */}
               <div className="flex items-center text-xs text-slate-500 font-medium flex-shrink-0">
-                {renderUrgencyDot(t.urgency, t.dueDate)}
-                <span className={t.dueDate.includes("overdue") ? "text-rose-600 font-semibold" : ""}>
+                <span className={`inline-block w-2 h-2 rounded-full mr-1.5 ${t.urgencyDot || "bg-sky-500"}`} />
+                <span className={t.dueDate?.includes("overdue") ? "text-rose-600 font-semibold" : ""}>
                   • {t.dueDate}
                 </span>
               </div>
             </li>
           ))}
 
-          {filteredOpenTasks.length === 0 && (
+          {!loading && filteredOpenTasks.length === 0 && projects.length > 0 && (
             <li className="p-8 text-center text-slate-500 text-sm">
               No open tasks found.
             </li>
@@ -334,13 +250,13 @@ export default function TasksPage() {
             <ul className="divide-y divide-slate-100">
               {completedTasks.map((t) => (
                 <li
-                  key={t.id}
+                  key={`${t.projectId}-${t.id}`}
                   className="p-4 flex items-center justify-between gap-4 opacity-60 bg-slate-50/40"
                 >
                   <div className="flex items-center gap-3.5 flex-1 min-w-0">
                     <button
                       type="button"
-                      onClick={() => toggleTask(t.id)}
+                      onClick={() => toggleTask(t.projectId, t.id)}
                       className="w-5 h-5 rounded-full bg-blue-600 border-2 border-blue-600 flex items-center justify-center flex-shrink-0"
                       aria-label={`Mark "${t.title}" as incomplete`}
                     >
@@ -351,7 +267,7 @@ export default function TasksPage() {
                         {t.title}
                       </span>
                       <span className="text-xs text-slate-500 line-through">
-                        {t.project}
+                        {t.projectName}
                       </span>
                     </div>
                   </div>
