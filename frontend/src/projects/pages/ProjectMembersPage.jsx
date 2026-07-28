@@ -216,28 +216,18 @@ export default function ProjectMembersPage() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100 dark:divide-slate-700/80 font-medium text-slate-800 dark:text-slate-200">
-                <tr className="hover:bg-slate-50/60 dark:hover:bg-slate-700/40 transition-colors">
-                  <td className="py-3.5 px-2 font-bold text-slate-900 dark:text-slate-100 flex items-center gap-2">
-                    <Shield className="w-4 h-4 text-blue-600 dark:text-blue-400" />
-                    Creator (Owner)
-                  </td>
-                  <td className="py-3.5 px-2 text-slate-500 dark:text-slate-400">—</td>
-                  <td className="py-3.5 px-2">
-                    <span className="px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-blue-100 dark:bg-blue-900/60 text-blue-800 dark:text-blue-200">
-                      Owner
-                    </span>
-                  </td>
-                  {isOwner && <td className="py-3.5 px-2 text-right text-slate-400">—</td>}
-                </tr>
                 {members.map((m) => (
                   <tr key={m.user_id} className="hover:bg-slate-50/60 dark:hover:bg-slate-700/40 transition-colors">
-                    <td className="py-3.5 px-2 font-semibold text-slate-900 dark:text-slate-100">
+                    <td className="py-3.5 px-2 font-semibold text-slate-900 dark:text-slate-100 flex items-center gap-2">
+                      {m.role === "owner" && <Shield className="w-4 h-4 text-blue-600 dark:text-blue-400" />}
                       {m.username} {m.user_id === user?.id && <span className="text-blue-600 dark:text-blue-400 font-bold">(You)</span>}
                     </td>
                     <td className="py-3.5 px-2 text-slate-500 dark:text-slate-400">{m.email}</td>
                     <td className="py-3.5 px-2">
                       <span className={`px-2.5 py-0.5 rounded-full text-[10px] font-bold capitalize ${
-                        m.role === "editor"
+                        m.role === "owner"
+                          ? "bg-blue-100 dark:bg-blue-900/60 text-blue-800 dark:text-blue-200"
+                          : m.role === "editor"
                           ? "bg-purple-100 dark:bg-purple-900/60 text-purple-800 dark:text-purple-200"
                           : "bg-slate-100 dark:bg-slate-700 text-slate-700 dark:text-slate-300"
                       }`}>
@@ -246,14 +236,18 @@ export default function ProjectMembersPage() {
                     </td>
                     {isOwner && (
                       <td className="py-3.5 px-2 text-right">
-                        <button
-                          type="button"
-                          className="text-xs font-semibold text-rose-600 dark:text-rose-400 hover:underline flex items-center gap-1 ml-auto"
-                          onClick={() => handleRemoveMember(m.user_id, m.username)}
-                          disabled={actionLoading}
-                        >
-                          <UserX className="w-3.5 h-3.5" /> Remove
-                        </button>
+                        {m.role === "owner" ? (
+                          <span className="text-slate-400">—</span>
+                        ) : (
+                          <button
+                            type="button"
+                            className="text-xs font-semibold text-rose-600 dark:text-rose-400 hover:underline flex items-center gap-1 ml-auto"
+                            onClick={() => handleRemoveMember(m.user_id, m.username)}
+                            disabled={actionLoading}
+                          >
+                            <UserX className="w-3.5 h-3.5" /> Remove
+                          </button>
+                        )}
                       </td>
                     )}
                   </tr>

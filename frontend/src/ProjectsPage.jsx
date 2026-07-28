@@ -2,6 +2,8 @@ import React, { useEffect, useState } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { useAuth } from "./context/AuthContext.jsx";
 import { fetchProjects } from "./api.js";
+import { loadProjectTasks } from "./services/taskStorage.js";
+import { parseMoneyNum } from "./utils/parseMoneyNum.js";
 import {
   Plus,
   TrendingUp,
@@ -11,8 +13,6 @@ import {
   Hammer,
   Trees,
   Home,
-  Clock,
-  CheckCircle2,
   Trash2,
   Layers,
   ArrowRight,
@@ -66,23 +66,27 @@ export default function ProjectsPage() {
   };
 
   // Convert backend user projects into matching card structures
-  const formattedUserProjects = userProjects.map((p) => ({
-    id: p.id,
-    isRealBackend: true,
-    name: p.name,
-    category: p.municipality || "Home Project",
-    status: p.is_archived ? "On Hold" : "In Progress",
-    progress: p.progress || 45,
-    tasksDone: p.tasks_done || 4,
-    tasksTotal: p.tasks_total || 8,
-    spent: p.spent || 4500,
-    budget: p.budget || 10000,
-    dueDate: "Active",
-    daysRemaining: "Ongoing",
-    iconType: "home",
-    address: p.address,
-    isArchived: p.is_archived,
-  }));
+  const formattedUserProjects = userProjects.map((p) => {
+    const projectTasks = loadProjectTasks(p.id);
+    const tasksDone = projectTasks.filter((t) => t.completed).length;
+    const tasksTotal = projectTasks.length;
+    return {
+      id: p.id,
+      isRealBackend: true,
+      name: p.name,
+      category: p.municipality || "Home Project",
+      status: p.is_archived ? "On Hold" : "In Progress",
+      progress: tasksTotal > 0 ? Math.round((tasksDone / tasksTotal) * 100) : 0,
+      tasksDone,
+      tasksTotal,
+      budget: parseMoneyNum(p.budget),
+      hasBudget: Boolean(p.budget),
+      createdAt: p.created_at,
+      iconType: "home",
+      address: p.address,
+      isArchived: p.is_archived,
+    };
+  });
 
   // Display strictly real user backend projects from the database
   const displayProjects = formattedUserProjects;
@@ -105,19 +109,8 @@ export default function ProjectsPage() {
     return matchesTab && matchesSearch;
   });
 
-  // Utility helper to safely convert strings or numbers into numeric values
-  const parseMoneyNum = (val) => {
-    if (typeof val === "number") return isNaN(val) ? 0 : val;
-    if (!val) return 0;
-    const num = parseFloat(String(val).replace(/[^0-9.]/g, ""));
-    return isNaN(num) ? 0 : num;
-  };
-
-  // Calculate portfolio total budget and spend from active project list
-  const totalSpent = displayProjects.reduce((sum, p) => sum + parseMoneyNum(p.spent), 0);
-  const totalBudget = displayProjects.reduce((sum, p) => sum + parseMoneyNum(p.budget), 0);
-  const budgetPercentage =
-    totalBudget > 0 ? Math.round((totalSpent / totalBudget) * 100) : 0;
+  // Calculate portfolio total target budget from the project list
+  const totalBudget = displayProjects.reduce((sum, p) => sum + p.budget, 0);
 
   const renderProjectIcon = (type) => {
     switch (type) {
@@ -226,15 +219,8 @@ export default function ProjectsPage() {
             <h3 className="tt-portfolio-title">Portfolio Budget Overview</h3>
           </div>
           <div className="tt-portfolio-amount-text">
-            <strong>${totalSpent.toLocaleString()}</strong> of ${totalBudget.toLocaleString()} spent
+            <strong>${totalBudget.toLocaleString()}</strong> total target budget
           </div>
-        </div>
-
-        <div className="tt-portfolio-bar-bg">
-          <div
-            className="tt-portfolio-bar-fill"
-            style={{ width: `${Math.min(budgetPercentage, 100)}%` }}
-          ></div>
         </div>
       </section>
 
@@ -305,29 +291,23 @@ export default function ProjectsPage() {
                     ></div>
                   </div>
                   <div className="tt-progress-subtext">
-                    {p.tasksDone} of {p.tasksTotal} tasks done
+                    {p.tasksTotal > 0 ? `${p.tasksDone} of ${p.tasksTotal} tasks done` : "No tasks yet"}
                   </div>
                 </div>
 
-                {/* Budget & Due Date Split Row */}
+                {/* Budget & Created Date Split Row */}
                 <div className="tt-grid-card-footer">
                   <div className="tt-card-footer-col">
-                    <span className="tt-footer-label">Budget</span>
+                    <span className="tt-footer-label">Target Budget</span>
                     <span className="tt-footer-value">
-                      ${p.spent.toLocaleString()} / ${p.budget.toLocaleString()}
+                      {p.hasBudget ? `$${p.budget.toLocaleString()}` : "Not set"}
                     </span>
                   </div>
 
                   <div className="tt-card-footer-col text-right">
-                    <span className="tt-footer-label">Due</span>
-                    <span className="tt-footer-value">{p.dueDate}</span>
-                    <span className="tt-footer-subvalue flex items-center justify-end">
-                      {p.daysRemaining === "Done" ? (
-                        <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600 mr-1" />
-                      ) : (
-                        <Clock className="w-3.5 h-3.5 text-slate-400 mr-1" />
-                      )}
-                      {p.daysRemaining}
+                    <span className="tt-footer-label">Created</span>
+                    <span className="tt-footer-value">
+                      {p.createdAt ? new Date(p.createdAt).toLocaleDateString() : "—"}
                     </span>
                   </div>
                 </div>

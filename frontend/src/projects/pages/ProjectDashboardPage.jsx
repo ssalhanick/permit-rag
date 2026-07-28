@@ -8,6 +8,8 @@ import {
   fetchProjectDocuments,
   fetchPermitStrategy,
 } from "../../api.js";
+import { loadProjectTasks, saveProjectTasks } from "../../services/taskStorage.js";
+import { parseMoneyNum } from "../../utils/parseMoneyNum.js";
 import {
   Plus,
   Check,
@@ -40,50 +42,30 @@ export default function ProjectDashboardPage() {
   const [permitStrategy, setPermitStrategy] = useState(null);
   const [selectedDocPreview, setSelectedDocPreview] = useState(null);
 
-  // Grouped task categories for this specific project
-  const [projectTasks, setProjectTasks] = useState([
-    {
-      category: "PROCUREMENT",
-      tasks: [
-        { id: 101, title: "Get three quotes for cabinet install", priority: "High", urgencyDot: "bg-rose-500", dueDate: "2d overdue", completed: false },
-        { id: 102, title: "Order countertop samples", priority: "Medium", urgencyDot: "bg-amber-500", dueDate: "1d", completed: false },
-      ]
-    },
-    {
-      category: "ELECTRICAL",
-      tasks: [
-        { id: 103, title: "Confirm electrician start date", priority: "High", urgencyDot: "bg-amber-500", dueDate: "3d", completed: false },
-      ]
-    },
-    {
-      category: "DESIGN",
-      tasks: [
-        { id: 104, title: "Drywall Patching & Sanding", priority: "Medium", urgencyDot: "bg-rose-500", dueDate: "5d", completed: false },
-      ]
-    },
-    {
-      category: "COMPLETION",
-      tasks: [
-        { id: 105, title: "Schedule Plumbing Rough-in Inspection", priority: "High", urgencyDot: "bg-sky-500", dueDate: "19d", completed: false },
-      ]
-    }
-  ]);
+  // Flat task list for this project, persisted to localStorage (see taskStorage.js)
+  // so it stays in sync with the global Tasks page and the Dashboard widget.
+  const [tasks, setTasks] = useState([]);
+  const openTasks = tasks.filter((t) => !t.completed);
+  const completedTasks = tasks.filter((t) => t.completed);
 
-  const [completedTasks, setCompletedTasks] = useState([
-    { id: 201, title: "Review permit requirements", priority: "High", completed: true },
-    { id: 202, title: "Order tile samples for backsplash", priority: "Medium", completed: true },
-    { id: 203, title: "Disconnect old appliance lines", priority: "High", completed: true },
-    { id: 204, title: "Submit electrical permit application", priority: "High", completed: true }
-  ]);
+  // Open tasks grouped by category for the Tasks tab display
+  const projectTasks = openTasks.reduce((groups, task) => {
+    const existing = groups.find((g) => g.category === task.category);
+    if (existing) {
+      existing.tasks.push(task);
+    } else {
+      groups.push({ category: task.category || "GENERAL", tasks: [task] });
+    }
+    return groups;
+  }, []);
+
+  const persistTasks = (next) => {
+    setTasks(next);
+    saveProjectTasks(projectId, next);
+  };
 
   // Materials & Supplies List for this project
-  const [materials, setMaterials] = useState([
-    { id: "mat-1", name: "12/2 NM-B Wire (250 ft roll)", category: "Electrical", quantity: 2, unitPrice: 145, supplier: "Home Depot", status: "Delivered" },
-    { id: "mat-2", name: "1/2\" Type X Fire-Rated Drywall (4x8)", category: "Building Supplies", quantity: 24, unitPrice: 18.5, supplier: "Lowe's", status: "Purchased" },
-    { id: "mat-3", name: "White Ceramic Subway Tile (3\"x6\")", category: "Finishings", quantity: 15, unitPrice: 28.0, supplier: "Floor & Decor", status: "On Order" },
-    { id: "mat-4", name: "Polymer-Modified Thin-Set Mortar", category: "Finishings", quantity: 4, unitPrice: 34.0, supplier: "Home Depot", status: "Needed" },
-    { id: "mat-5", name: "AFCI/GFCI Dual Function Breaker 20A", category: "Electrical", quantity: 6, unitPrice: 52.0, supplier: "Electrical Supply Direct", status: "Purchased" },
-  ]);
+  const [materials, setMaterials] = useState([]);
 
   const [showAddMaterial, setShowAddMaterial] = useState(false);
   const [newMatName, setNewMatName] = useState("");
@@ -94,49 +76,7 @@ export default function ProjectDashboardPage() {
   const [newMatStatus, setNewMatStatus] = useState("Needed");
 
   // AI LLM Generated Documents for this project
-  const [generatedDocs, setGeneratedDocs] = useState([
-    {
-      id: "gen-doc-1",
-      title: "Step-by-Step Electrical Panel Rough-In Guide",
-      type: "Instructions & Steps",
-      date: "Jul 26, 2026",
-      summary: "Detailed 8-step guide for conduit sizing, wire gauge requirements, breaker box mounting, and neutral bar bonding per 2026 NEC standards.",
-      content: `1. Turn off main power service disconnect prior to opening panel cover.\n2. Mount subpanel securely to wall framing using minimum 1/4" lag screws.\n3. Pull 4-wire feed (L1, L2, Neutral, Ground) through code-approved conduit.\n4. Connect neutral wire directly to insulated neutral bus bar.\n5. Keep grounding wire isolated on grounding bar bonded to enclosure.\n6. Install AFCI/GFCI dual-function breakers for all kitchen and bath branch circuits.\n7. Label all circuit switches clearly inside dead-front panel door.\n8. Request rough-in electrical inspection from municipality prior to drywall cover.`,
-      steps: [
-        "Turn off main power service disconnect prior to opening panel cover",
-        "Mount subpanel securely to wall framing using minimum 1/4 inch lag screws",
-        "Pull 4-wire feed (L1, L2, Neutral, Ground) through code-approved conduit",
-        "Connect neutral wire directly to insulated neutral bus bar",
-        "Keep grounding wire isolated on grounding bar bonded to enclosure",
-        "Install AFCI/GFCI dual-function breakers for kitchen/bath branch circuits",
-        "Label all circuit switches clearly inside dead-front panel door",
-        "Request rough-in electrical inspection prior to drywall cover"
-      ]
-    },
-    {
-      id: "gen-doc-2",
-      title: "Municipal Permit Compliance Inspection Checklist",
-      type: "Checklist",
-      date: "Jul 24, 2026",
-      summary: "City inspector pre-check list covering plumbing clearance, outlet spacing, smoke detector wiring, and structural load verification.",
-      content: `[ ] Plumbing vent stack extends minimum 6" above roofline.\n[ ] Outlets spaced no more than 12 feet apart on continuous wall runs.\n[ ] Hardwired interconnected smoke/CO detectors active on all floors.\n[ ] Structural header beam calculations verified for load-bearing wall removal.\n[ ] Egress window dimensions meet minimum 5.7 sq ft net opening area.`,
-      steps: [
-        "Verify plumbing vent stack extends minimum 6 inches above roofline",
-        "Check outlets spaced no more than 12 feet apart on wall runs",
-        "Test hardwired interconnected smoke/CO detectors on all floors",
-        "Verify structural header beam load calculations with inspector",
-        "Measure egress window dimensions for 5.7 sq ft net opening"
-      ]
-    },
-    {
-      id: "gen-doc-3",
-      title: "Scope of Work & Materials Cost Breakdown",
-      type: "Estimate & Scope",
-      date: "Jul 20, 2026",
-      summary: "AI estimated quantity breakdown for drywall sheets, 12/2 Romex wiring, tile adhesive, and fixture allowances.",
-      content: `• Drywall (1/2" Type X Fire-rated): 48 sheets @ $18.50 = $888.00\n• 12/2 NM-B Wire (250 ft roll): 2 rolls @ $145.00 = $290.00\n• Thinset Mortar & Polymer Grout: $240.00\n• Electrical Box Enclosures & Tamper-Resistant Outlets: $185.00\n• Estimated Material Subtotal: $1,603.00 (excl. sales tax)`,
-    },
-  ]);
+  const [generatedDocs, setGeneratedDocs] = useState([]);
 
   const [showCompleted, setShowCompleted] = useState(false);
   const [newTaskTitle, setNewTaskTitle] = useState("");
@@ -168,16 +108,18 @@ export default function ProjectDashboardPage() {
       .catch(() => setPermitStrategy(null));
   }, [projectId]);
 
-  // Compute tasks metrics dynamically
-  const openTasksCount = projectTasks.reduce((acc, cat) => acc + cat.tasks.length, 0);
-  const totalTasksCount = openTasksCount + completedTasks.length;
-  const progressPercent = totalTasksCount > 0 ? Math.round((completedTasks.length / totalTasksCount) * 100) : (project.progress || 62);
+  useEffect(() => {
+    setTasks(loadProjectTasks(projectId));
+  }, [projectId]);
 
-  // Compute live budget metrics
-  const spentAmount = project.spent || 11470;
-  const budgetTotal = project.budget || 18500;
-  const remainingBudget = Math.max(budgetTotal - spentAmount, 0);
-  const spentPercent = budgetTotal > 0 ? Math.round((spentAmount / budgetTotal) * 100) : 62;
+  // Compute tasks metrics dynamically
+  const openTasksCount = openTasks.length;
+  const totalTasksCount = tasks.length;
+  const progressPercent = totalTasksCount > 0 ? Math.round((completedTasks.length / totalTasksCount) * 100) : 0;
+
+  // Compute live budget metrics (budget is the only real financial field — no expense
+  // tracking exists yet, so there is no honest "spent" figure to show alongside it)
+  const budgetTotal = parseMoneyNum(project.budget);
 
   // Compute materials metrics
   const totalMaterialCost = materials.reduce((acc, m) => acc + m.unitPrice * m.quantity, 0);
@@ -185,46 +127,32 @@ export default function ProjectDashboardPage() {
     .filter((m) => m.status === "Purchased" || m.status === "Delivered")
     .reduce((acc, m) => acc + m.unitPrice * m.quantity, 0);
 
-  const toggleOpenTask = (catIndex, taskId) => {
-    const updated = [...projectTasks];
-    const targetCategory = updated[catIndex];
-    const taskIndex = targetCategory.tasks.findIndex((t) => t.id === taskId);
-    if (taskIndex !== -1) {
-      const [task] = targetCategory.tasks.splice(taskIndex, 1);
-      setCompletedTasks([{ ...task, completed: true }, ...completedTasks]);
-      setProjectTasks(updated);
-    }
+  const toggleOpenTask = (taskId) => {
+    persistTasks(tasks.map((t) => (t.id === taskId ? { ...t, completed: true } : t)));
   };
 
   const toggleCompletedTask = (taskId) => {
-    const taskIndex = completedTasks.findIndex((t) => t.id === taskId);
-    if (taskIndex !== -1) {
-      const [task] = completedTasks.splice(taskIndex, 1);
-      setCompletedTasks([...completedTasks]);
-
-      const updated = [...projectTasks];
-      updated[0].tasks.push({ ...task, completed: false, urgencyDot: "bg-sky-500", dueDate: "Soon" });
-      setProjectTasks(updated);
-    }
+    persistTasks(
+      tasks.map((t) =>
+        t.id === taskId ? { ...t, completed: false, urgencyDot: "bg-sky-500", dueDate: "Soon" } : t
+      )
+    );
   };
 
   const handleAddInlineTask = (e) => {
     e.preventDefault();
     if (!newTaskTitle.trim()) return;
     const newTask = {
-      id: Date.now(),
+      id: `task_${Date.now()}`,
       title: newTaskTitle.trim(),
+      category: newTaskCategory,
       priority: "Medium",
       urgencyDot: "bg-sky-500",
       dueDate: "Soon",
       completed: false,
+      createdAt: new Date().toISOString(),
     };
-    const updated = projectTasks.map((cat) =>
-      cat.category === newTaskCategory
-        ? { ...cat, tasks: [...cat.tasks, newTask] }
-        : cat
-    );
-    setProjectTasks(updated);
+    persistTasks([newTask, ...tasks]);
     setNewTaskTitle("");
     setShowAddInline(false);
   };
@@ -253,21 +181,17 @@ export default function ProjectDashboardPage() {
       return;
     }
     const newTasks = doc.steps.map((stepText, idx) => ({
-      id: Date.now() + idx,
+      id: `task_${Date.now()}_${idx}`,
       title: stepText,
+      category: "AI GENERATED",
       priority: "High",
       urgencyDot: "bg-blue-500",
       dueDate: "AI Generated",
       completed: false,
+      createdAt: new Date().toISOString(),
     }));
 
-    const updated = projectTasks.map((cat) =>
-      cat.category === "PROCUREMENT" || cat.category === "ELECTRICAL"
-        ? { ...cat, tasks: [...cat.tasks, ...newTasks] }
-        : cat
-    );
-
-    setProjectTasks(updated);
+    persistTasks([...tasks, ...newTasks]);
     setActiveTab("tasks");
     alert(`Successfully added ${newTasks.length} AI generated tasks to your project task list!`);
   };
@@ -276,9 +200,6 @@ export default function ProjectDashboardPage() {
   const uploadedFiles = [
     ...documents.map((d) => ({ id: d.id, name: d.doc_id || d.filename || "Building Code Doc", type: d.doc_type || "PDF Document", date: "Uploaded" })),
     ...scans.map((s) => ({ id: s.id, name: `${s.room_label || "Room"} 3D Mesh Scan`, type: "3D Scan File", date: "Scanned" })),
-    { id: "up-1", name: "Approved Building Permit Application.pdf", type: "PDF Document", date: "Jun 12, 2026" },
-    { id: "up-2", name: "Contractor Site Inspection Notes.pdf", type: "PDF Document", date: "Jun 18, 2026" },
-    { id: "up-3", name: "Main Electrical Panel Wiring Diagram.png", type: "Image Attachment", date: "Jul 2, 2026" },
   ];
 
   return (
@@ -304,7 +225,7 @@ export default function ProjectDashboardPage() {
             </span>
           </div>
           <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
-            {project.contractor || "Marta's Remodeling Co."} • Started {project.startDate || "Jun 1, 2026"} • Due {project.dueDate || "Sep 14, 2026"}
+            Created {new Date(project.created_at).toLocaleDateString()}
           </p>
         </div>
 
@@ -344,39 +265,33 @@ export default function ProjectDashboardPage() {
             />
           </div>
           <p className="text-xs text-slate-500 dark:text-slate-300 font-medium">
-            {completedTasks.length} of {totalTasksCount} tasks complete
+            {totalTasksCount > 0 ? `${completedTasks.length} of ${totalTasksCount} tasks complete` : "No tasks yet"}
           </p>
         </div>
 
-        {/* Card 2: Spent */}
+        {/* Card 2: Target Budget (no expense tracking exists yet, so there's no honest "spent" figure to show) */}
         <div className="bg-white dark:bg-slate-800/90 rounded-xl border border-slate-200 dark:border-slate-700 p-5 shadow-sm">
           <div className="text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-1">
-            Spent
+            Target Budget
           </div>
           <div className="text-2xl font-extrabold text-slate-900 dark:text-slate-100">
-            ${spentAmount.toLocaleString()}
+            {project.budget ? `$${budgetTotal.toLocaleString()}` : "Not set"}
           </div>
-          <div className="w-full bg-slate-100 dark:bg-slate-700 rounded-full h-2 my-2 overflow-hidden">
-            <div
-              className="bg-sky-500 h-full rounded-full transition-all duration-300"
-              style={{ width: `${spentPercent}%` }}
-            />
-          </div>
-          <p className="text-xs text-slate-500 dark:text-slate-300 font-medium">
-            of ${budgetTotal.toLocaleString()} budget ({spentPercent}% used)
+          <p className="text-xs text-slate-500 dark:text-slate-300 mt-3 font-medium">
+            Entered during project kickoff
           </p>
         </div>
 
-        {/* Card 3: Remaining */}
+        {/* Card 3: Jurisdiction */}
         <div className="bg-white dark:bg-slate-800/90 rounded-xl border border-slate-200 dark:border-slate-700 p-5 shadow-sm">
           <div className="text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-1">
-            Remaining Budget
+            Jurisdiction
           </div>
-          <div className="text-2xl font-extrabold text-emerald-600 dark:text-emerald-400">
-            ${remainingBudget.toLocaleString()}
+          <div className="text-2xl font-extrabold text-slate-900 dark:text-slate-100">
+            {project.municipality || "Not set"}
           </div>
           <p className="text-xs text-slate-500 dark:text-slate-300 mt-3 font-medium">
-            Project jurisdiction: {project.municipality || "Local"}
+            Used for permit rule lookups
           </p>
         </div>
       </section>
@@ -489,8 +404,15 @@ export default function ProjectDashboardPage() {
             </form>
           )}
 
+          {/* Empty State */}
+          {tasks.length === 0 && (
+            <p className="text-sm text-slate-500 dark:text-slate-400 py-6 text-center">
+              No tasks yet — add your first task to get started.
+            </p>
+          )}
+
           {/* Grouped Category Sections */}
-          {projectTasks.map((cat, catIdx) => (
+          {projectTasks.map((cat) => (
             <div key={cat.category} className="mb-6 last:mb-0">
               <div className="text-xs font-extrabold uppercase tracking-wider text-slate-400 dark:text-slate-400 mb-3">
                 {cat.category}
@@ -505,7 +427,7 @@ export default function ProjectDashboardPage() {
                     <div className="flex items-center gap-3">
                       <button
                         type="button"
-                        onClick={() => toggleOpenTask(catIdx, task.id)}
+                        onClick={() => toggleOpenTask(task.id)}
                         className="w-5 h-5 rounded-full border-2 border-slate-300 dark:border-slate-500 hover:border-blue-600 flex items-center justify-center transition-colors"
                         aria-label={`Complete ${task.title}`}
                       />
@@ -691,6 +613,13 @@ export default function ProjectDashboardPage() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100 dark:divide-slate-700 font-medium text-slate-800 dark:text-slate-200">
+                {materials.length === 0 && (
+                  <tr>
+                    <td colSpan={6} className="py-6 text-center text-slate-500 dark:text-slate-400">
+                      No materials added yet.
+                    </td>
+                  </tr>
+                )}
                 {materials.map((m) => {
                   const total = m.quantity * m.unitPrice;
                   let badgeStyle = "bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-300";
@@ -734,6 +663,12 @@ export default function ProjectDashboardPage() {
             </Link>
           </div>
 
+          {uploadedFiles.length === 0 && (
+            <p className="text-sm text-slate-500 dark:text-slate-400 py-6 text-center">
+              No documents uploaded yet.
+            </p>
+          )}
+
           <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
             {uploadedFiles.map((file) => (
               <div key={file.id} className="p-4 border border-slate-200 dark:border-slate-700 rounded-xl hover:border-blue-400 dark:hover:border-blue-500 transition-colors flex items-start justify-between bg-white dark:bg-slate-900/60">
@@ -775,6 +710,12 @@ export default function ProjectDashboardPage() {
               </p>
             </div>
           </div>
+
+          {generatedDocs.length === 0 && (
+            <p className="text-sm text-slate-500 dark:text-slate-400 py-6 text-center">
+              No generated documents yet.
+            </p>
+          )}
 
           <div className="space-y-4">
             {generatedDocs.map((doc) => (
