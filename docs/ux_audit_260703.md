@@ -6,6 +6,18 @@
 **Test data created:** project "UX Audit Test Project" (`22cd04d1-a1b8-4b8f-b44a-5287ed09c0bc`)
 **Screenshots:** `C:\Users\ssalh\permit_rag_ux_audit\shots\`
 
+> **Status update (2026-07-28 doc health check, code spot-check, not a live
+> re-run):** all 4 P0 blockers are fixed — `register()` now generates a
+> non-email username (`AuthContext.jsx`), `VITE_MAPBOX_TOKEN` is wired into
+> `deploy.yml`, and `terraform/main.tf:616` has a comment citing P0-2 by name
+> explaining the CloudFront routing fix. P1 #9 (dev jargon) and #13 (page
+> title) confirmed fixed; #8 (admin-only upload) and #10 (empty skeleton)
+> likely fixed; #5 (wizard data on project card) superseded by Phase 5's
+> Permit Strategy panel. **Still open:** #7 (raw UUID for Add Member,
+> confirmed in code), #6 (collaborator dedupe, unclear), #18 (`graph_health`
+> ops note, never documented). Not re-checked: #11, #12, #15, #17 (need a
+> live run, not just a code read).
+
 ---
 
 ## Executive summary

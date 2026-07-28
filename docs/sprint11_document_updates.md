@@ -1,7 +1,10 @@
 # Sprint 11 — Document Governance UI
 
 **Branch:** `feat/sprint-11`  
-**Status:** In progress
+**Status:** Shipped (`DocumentAdminPanel.jsx`, `documentAdminUtils.js` + test
+all exist) — confirmed via code, 2026-07-28 doc health check. Verification
+checklist below was never re-run against the live UI; do that before
+treating this as fully closed.
 
 ## Goal
 

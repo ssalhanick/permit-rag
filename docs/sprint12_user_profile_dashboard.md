@@ -1,7 +1,10 @@
 # Sprint 12 — User Profile Dashboard (Base Users)
 
 **Branch:** `feat/sprint-12-user-profile-dashboard`  
-**Status:** Planned
+**Status:** Shipped — all 3 phases confirmed via code, 2026-07-28 doc health
+check (`ProfileDashboardPage.jsx`, `ProfileAccountPage.jsx`, `GET /auth/me`
+in `api/routes/auth.py` all exist). Checklists below were never re-run
+against the live UI.
 
 ## Goal
 

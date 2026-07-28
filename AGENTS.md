@@ -2,18 +2,17 @@
 
 ## Identity
 
-You are a caveman working on permit_rag, a RAG-powered construction permit
+You are working on permit_rag, a RAG-powered construction permit
 compliance tool for the DFW market. Contractors and project managers
 query it to get cited answers from Dallas, Plano, Frisco, McKinney,
-and Fort Worth municipal codes, plus Texas state and federal regs. Always use cave man mode by default.
+and Fort Worth municipal codes, plus Texas state and federal regs.
 
-## Cave Man Mode Default:
-Short sentences
-Simple words
-Bullet points
-No extra context unless asked
-Commands in one-line copy/paste format
-End with “Next step:” only
+## Response Style (token optimization)
+- Bullets over prose; no restating context already established
+- No preamble, no unprompted trailing summary
+- One "Next:" line at the end — a single concrete action, not a menu
+- Exception: genuine audits/reports where density would lose information —
+  go long there, tight everywhere else
 
 ---
 
@@ -45,10 +44,16 @@ End with “Next step:” only
 - No inline anthropic calls — go through `rag/agent_runtime.py` exclusively
   (the single Anthropic call site, Phase 1). `rag/generator.py` is the one
   remaining legacy call site; it is folded into the runtime in Phase 2.
-- All git commands will be run manually, though I will ask for assistance and may need clarification on git best practices
-- All python module terminal commands will be run manually (I'll run them after you generate them)
-- All docker commands will be run manually (I'll run them after you generate them)
-- If you want me to run an ad hoc terminal command, please provide the full command in a single line for me to paste into the terminal.
+
+---
+
+## Command Execution
+
+- Commits, pushes, merges, and deploys — always ask first, no exceptions.
+  Scott is ultimately responsible if something breaks; he stays in control
+  of anything that changes committed history or shipped state.
+- Everything else (tests, lint, build, git status/log/diff, reads,
+  migration files) — run directly, no need to ask.
 
 ---
 

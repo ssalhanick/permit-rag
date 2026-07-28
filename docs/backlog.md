@@ -80,4 +80,8 @@ on Fix 3 (citation regex hardening) being live first.
 
 ---
 
-*Last updated: Sprint 5 start · 2026-06-16*
+*Last updated: Sprint 5 start · 2026-06-16. Re-checked 2026-07-28 doc health
+check: GIS boundary status confirmed still accurate (`db/gis_data/` has only
+a `dallas` folder); hybrid retrieval `RETRIEVAL_HYBRID_ENABLED` default still
+`False` in code, matching the "wait for one more confirmatory run" framing.
+Content below is current, just old — not stale.*

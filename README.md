@@ -51,7 +51,6 @@ py -m pytest tests/test_commerce_takeoff.py tests/test_commerce_product_resolver
 - [ ] Optional: set `OPENAI_API_KEY` (+ SSM) for live generative room images (mock PNG works offline)
 - [ ] **Sign up for [SerpApi](https://serpapi.com/) account** — required for live Home Depot pricing/inventory (see [Commerce / SerpApi](#commerce--serpapi) below); mock catalog works without it for demos
 - [ ] [Sprint 14: 3D Room Capture](docs/sprint_14_3d-room-capture-agnostic-guide.md) — Capacitor plugin, interchange JSON v1.0, on-device metrics → `room_summary` API
-- [ ] [Sprint 11: Document Governance UI](docs/sprint11_document_updates.md) — metadata edit + supersede on `/documents`
 *(The former "Agent Implementation Plan" and "Token Optimization & Cost-Effectiveness Plan" entries are superseded by [docs/agent_architecture.md](docs/agent_architecture.md), which absorbs both. Note it drops the planned `instructor` dependency: the Anthropic SDK now has native structured outputs via `client.messages.parse()`, and `pydantic` is already a dependency.)*
 - [ ] [CMS Admin Dashboard](.gemini\antigravity\brain\acda4bb1-53b2-4cf2-b710-5e93089c1fab\cms_admin_dashboard_plan.md)
 - [ ] [Cognito Groups RBAC](docs/cognito_groups_rbac.md) — Cognito groups as source of truth for `member` / `admin` / `superadmin`; staff bypass for see-everything; keep project_members + ops token
@@ -83,23 +82,7 @@ py -m pytest tests/test_commerce_takeoff.py tests/test_commerce_product_resolver
 - [x] Cognito Auth Migration (Sprint 11) — Replaced custom JWT/Argon2id with Amazon Cognito RS256 JWKS verification, Google SSO, optional TOTP 2FA, lazy RDS user provisioning via `GET /auth/me`
 - [x] Get GIS auto-address bar working (Implemented Mapbox Search Box session_token management for address autocomplete suggestions and geocoding retrievals)
 - [x] Add mobile styles (SGP10: Responsive styling for mobile, tablet, and desktop viewports, scrollable data tables, and WCAG AAA touch target size conformance)
-
----
-
-## Timeline
-
-| Week | Dates | Phase | Deliverables | Status |
-|------|-------|-------|-------------|--------|
-| 1 | May 19–25 | Foundation | Project scaffold, Docker + pgvector, harvester (13 docs), chunker + verification, embedder (nomic-embed-text-v1.5), 10 docs ingested, 7,170 chunks embedded | ✅ Done |
-| 2 | May 26–Jun 1 | Retrieval | `rag/pipeline.py` — dense retrieval + feature-flagged hybrid (dense+BM25 RRF), retrieval quality testing with contractor queries | 🔶 Active |
-| 3 | Jun 2–8 | Generation + API | `rag/generator.py` — Claude-powered answer generation with citations, `api/` — FastAPI endpoints for query + document management | |
-| 4 | Jun 9–15 | Evaluation | `evaluation/` — RAGAs integration (faithfulness, relevancy, precision, recall), build evaluation dataset (30–50 hand-written Q&A pairs) | |
-| 5 | Jun 16–22 | Tuning | Chunk size ablation (500–3000 chars), overlap ablation (0–400), top_k ablation (3–10), hybrid search experiment (HNSW + BM25 RRF) | |
-| 6 | Jun 23–29 | Frontend | `frontend/` — Vite + React chat UI, source citation display, document browser | |
-| 7 | Jun 30–Jul 6 | Audit + Governance | `audit/` — query logging, `ingestion/governance.py` — document lifecycle, supersession, freshness monitoring | |
-| 8 | Jul 7–13 | Integration | End-to-end testing, conflict detection, multi-municipality queries, edge case hardening | |
-| 9 | Jul 14–20 | Production Prep | Deployment config (Supabase or RDS), environment separation, CI/CD, load testing | |
-| 10 | Jul 21–Aug 1 | Polish + Demo | Documentation, demo recording, pitch deck, final RAGAs scores, code cleanup | |
+- [x] [Document Governance UI](docs/sprint11_document_updates.md) — `DocumentAdminPanel.jsx` + `documentAdminUtils.js`: metadata edit + supersede on `/documents` via `X-Admin-Token`. Confirmed shipped via code (2026-07-28 doc health check); live-UI verification checklist in the plan doc still not re-run. _(Not the same "Sprint 11" as the Cognito Auth Migration line above — two different plans reused the sprint number; recorded, not renumbered.)_
 
 ---
 
@@ -201,18 +184,16 @@ Verify it is running:
 docker ps   # should show permit_rag_db as Up
 ```
 
-> **If the volume already exists** and you want to apply new migrations manually:
+> **If the volume already exists** and you want to apply migrations you don't
+> have yet, use the migration runner (prints the target DB and refuses a
+> remote host without confirmation — see `STATE.md` "Migration drift"):
 > ```powershell
-> Get-Content db/migrations/002_chunk_content_hash.sql | docker exec -i permit_rag_db psql -U postgres -d permit_rag
-> Get-Content db/migrations/003_chunk_status.sql       | docker exec -i permit_rag_db psql -U postgres -d permit_rag
-> Get-Content db/migrations/004_source_tier.sql        | docker exec -i permit_rag_db psql -U postgres -d permit_rag
-> Get-Content db/migrations/005_match_chunks_update.sql | docker exec -i permit_rag_db psql -U postgres -d permit_rag
-> Get-Content db/migrations/006_jurisdictions.sql      | docker exec -i permit_rag_db psql -U postgres -d permit_rag
-> Get-Content db/migrations/007_postgis_extension.sql  | docker exec -i permit_rag_db psql -U postgres -d permit_rag
-> Get-Content db/migrations/008_municipal_boundaries_pilot.sql | docker exec -i permit_rag_db psql -U postgres -d permit_rag
-> Get-Content db/migrations/009_purge_audit_log.sql    | docker exec -i permit_rag_db psql -U postgres -d permit_rag
-> Get-Content db/init/02_roles.sql                     | docker exec -i permit_rag_db psql -U postgres -d permit_rag
+> py scripts/apply_migration.py db/migrations/<file>.sql
 > ```
+> Apply them in ascending numeric order (`db/migrations/` is the source of
+> truth for what's current — there is no `schema_migrations` table, so
+> `scripts/check_migrations.py --local` is how you check what's already
+> applied before running anything).
 
 ---
 
@@ -421,7 +402,10 @@ permit_rag/
 │   ├── url_normalize.py # Shared URL/filename identity normalization
 │   └── page_crawler.py # On-demand page link discovery + SSRF guards
 ├── db/
-│   ├── schema.sql      # Postgres + pgvector schema (4 tables)
+│   ├── schema.sql      # Base schema (documents, chunks, jurisdictions,
+│   │                   #   query_log, municipal_boundaries, + governance/
+│   │                   #   audit tables); db/migrations/ layers ~20 more
+│   │                   #   (agents, projects, media, feedback, etc.)
 │   └── client.py       # psycopg3 connection pool + CRUD helpers
 ├── rag/                # Retrieval + generation pipeline (active)
 ├── api/                # FastAPI endpoints (query + documents + admin + health)
@@ -446,17 +430,72 @@ permit_rag/
 
 ## Docs Table of Contents
 
-Project docs in `docs/`:
+Project docs in `docs/`. ⚠ = flagged in the 2026-07-28 doc health check as
+stale/superseded/needing a status pass — not yet resolved.
 
+**Architecture & reference**
 | File | Purpose |
 |---|---|
-| `docs/api.md` | API endpoint usage, auth headers, and runtime config notes |
-| `docs/ux_audit_260703.md` | Production UX audit — P0 blockers, confusion points, fix order (2026-07-03) |
-| `docs/env_secrets_strategy.md` | Plan for migrating hardcoded config → GitHub vars and secrets → SSM |
-| `docs/offboarding_runbook.md` | User offboarding purge procedure (single + bulk) and verification |
-| `docs/postgis_migration_checklist.md` | Sprint 4 GIS/PostGIS rollout checklist (planning-only gates) |
-| `docs/task14ab_execution_checklist.md` | Step-by-step execution/rollback checklist for Task 14A/14B |
-| `docs/sprint4_qa_checklist.md` | Frontend + citation regression QA checklist and sign-off flow |
+| `docs/agent_architecture.md` | Agent roster, phases, cost model, autonomy levels — the design doc |
+| `docs/api.md` | API endpoint usage, auth headers, runtime config notes |
+| `docs/cognito_groups_rbac.md` | Cognito groups as RBAC source of truth (member/admin/superadmin) |
+
+**LangSmith / observability**
+| File | Purpose |
+|---|---|
+| `docs/langsmith_session_tracing.md` | Enabling tracing, request→trace flow, session grouping |
+| `docs/langsmith_prompt_evaluation.md` | Prompt-version tagging + the offline eval harness |
+| `docs/langsmith_quickref.md` | One-screen cheat sheet for both of the above |
+
+**Ops, deploy & secrets**
+| File | Purpose |
+|---|---|
+| `docs/aws_deployment_steps.md` | AWS deployment procedure |
+| `docs/aws_usage.md` | AWS resource usage notes |
+| `docs/env_secrets_strategy.md` | Plan for hardcoded config → GitHub vars/secrets → SSM |
+| `docs/environment_setup.md` | Split env file setup (`.env` vs `.env.local`) |
+| `docs/github_oidc_setup.md` | GitHub OIDC → AWS setup for CI |
+| `docs/offboarding_runbook.md` | User offboarding purge procedure (single + bulk) + verification |
+| `docs/secrets_leak_protocol.md` | What to do if a secret leaks |
+
+**Media Curator (Phase 4, shipped)**
+| File | Purpose |
+|---|---|
+| `docs/media-curator-plan.md` | Canonical overview / north star |
+| `docs/plan_media_curator.md` | B1/B2 implementation detail (curated links, `web_search`) |
+| `docs/plan_media_transcripts.md` | C1/C2 implementation detail (transcripts, how-to answers) |
+
+**Ingestion & room preview**
+| File | Purpose |
+|---|---|
+| `docs/on_demand_url_pull.md` | Admin pull-from-URL: page crawl, checksum diff, ingest |
+| `docs/room_generative_preview.md` | Room preview image generation (OpenAI/Leonardo/mock) |
+
+**Mobile**
+| File | Purpose |
+|---|---|
+| `docs/mobile_phase0_gates.md` | Mobile Phase 0 gate checklist (M0-1…M0-9) |
+| `docs/mobile_internal_beta_checklist.md` | TestFlight / Play internal beta checklist |
+| `docs/mobile_public_store_checklist.md` | Public app store launch checklist |
+| `docs/sprint_13capacitor-implementation-overview.md` | How Capacitor wraps the React app |
+| `docs/sprint_14_3d-room-capture-agnostic-guide.md` | Platform-agnostic 3D room capture design guide |
+
+**Sprint history & checklists**
+| File | Purpose |
+|---|---|
+| `docs/sprint4_qa_checklist.md` | Sprint 4 QA sign-off (closed) |
+| `docs/sprint9_users_projects.md` | ⚠ Sprint 9 auth/projects plan — predates Cognito migration |
+| `docs/sprint11_document_updates.md` | Doc governance UI plan — shipped, live-UI checklist not re-run |
+| `docs/sprint12_p0_prod_checklist.md` | Sprint 12 web prod checklist |
+| `docs/sprint12_user_profile_dashboard.md` | Profile dashboard plan — all 3 phases shipped |
+| `docs/task14ab_execution_checklist.md` | PostGIS + first boundary layer execution checklist (closed) |
+| `docs/postgis_migration_checklist.md` | PostGIS rollout planning checklist (closed) |
+| `docs/ux_audit_260703.md` | Production UX audit — all 4 P0s confirmed fixed; a few P1/P2 still open, see status note in the file |
+
+**Backlog**
+| File | Purpose |
+|---|---|
+| `docs/backlog.md` | Deferred items (GIS expansion, hybrid eval) — old but re-confirmed still current |
 
 ---
 
