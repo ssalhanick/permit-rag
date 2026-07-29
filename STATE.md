@@ -1,13 +1,13 @@
 # permit_rag — State
 
-_Updated: 2026-07-28 — doc health check batch 3: restructured to a compact
-current snapshot per AGENTS.md's own rule ("completed work → journal only,
-remove from STATE.md task queue"). Closed-phase deliverable lists and
-acceptance-gate detail moved out — nothing lost, all of it already lives in
-the journals linked below. Also today: query-history session grouping
-shipped (migration 035, applied prod) and a full docs/README/AGENTS.md health
-check (batches 1-2 done: fixed the 033 deploy-status contradiction, README's
-stale table count and 002-009 migration list, removed dead planning docs)._
+_Updated: 2026-07-28 — full session: QueryPage fixes (markdown rendering,
+scroll-to-top, Enter-to-submit) + query-history session grouping (migration
+035, applied prod) + a 4-batch repo-wide doc health check (README/STATE.md
+contradictions fixed, dead docs removed, STATE.md restructured to a compact
+snapshot per AGENTS.md's own rule, stale sprint statuses verified against
+code) + AGENTS.md response-style/command-execution rules tightened + a
+prompt-formatting fix and RAGAs investigation (`PROMPT_VERSION` v1→v3, see
+Decisions log). Full detail: `journals/session_20260728.md`._
 
 ## Phase
 
@@ -227,7 +227,7 @@ should have been 027. Recorded, not renamed. The dedupe correction is
 | ingestion/transcript | **Media C1.** `fetch_transcript(url)` — YouTube transcript pull (public captions, no API cost) |
 | db.client match_chunks / retrieval | **Media C1:** migration 031 scopes `match_chunks` to `content_class='authority'` in SQL (unchanged 3-arg signature); new `match_how_to_chunks` (diy path) |
 | rag/agent_runtime | Single Anthropic call site. `_dispatch` learns models that reject `temperature` and retries without it |
-| rag/generator | Folded into the runtime. Optional `routed` RoutedPrompt (composed system + persona `max_tokens` + fragment ids); un-routed default unchanged |
+| rag/generator | Folded into the runtime. Optional `routed` RoutedPrompt (composed system + persona `max_tokens` + fragment ids); un-routed default unchanged. **2026-07-28: `PROMPT_VERSION` v1→v3** — rule 7 now requires real markdown lists (was ambiguous "bullet points," rendered as inline `•` in prod); rule 1 forbids a standalone "Limitations" header. `rag/prompts/fragments/base.md` bumped to version 3 in lockstep (shared grounding rules) |
 | rag/design_intent | Folded in Phase 1; contract unchanged |
 | ingestion/metadata_agent | **Phase 3.** Corpus Metadata Validator (#13). Deterministic-first; one structured `run_agent` call; cited proposals; writes nothing (via governance only) |
 | ingestion/governance | **Phase 3:** `apply_metadata_correction` (single corpus writer) + `flag_document_for_review` |
@@ -282,6 +282,7 @@ should have been 027. Recorded, not renamed. The dedupe correction is
 | **Performance Review #24 is batch-triggered, not on the query path** | Import boundary (`api/` can't import `evaluation/`) + cost budgeting (~$0.03/thumbs-down on opus) both point to batch. Trigger is `scripts/review_feedback.py` over the un-reviewed-down-vote queue, never a synchronous cost on the user's request |
 | **Perf Review never silent-blames** | Every review writes an *unconfirmed* `agent_corrections` row; a superadmin confirms attribution. Below `CONFIDENCE_FLOOR=0.6` the row carries no `attributed_agent` — a human assigns blame |
 | **Query sessions are custom, not LangChain** | The `session_id` grouping query-history threads is a plain Postgres column + client-generated UUID, unrelated to LangChain's own memory/session abstractions (not used in this codebase — only LangSmith, for tracing, is). The same `session_id` also tags the LangSmith trace for that thread — see `docs/langsmith_session_tracing.md` |
+| **q4's 0.000 RAGAs relevancy is a known judge blind spot, not a quality bug (2026-07-28)** | `PROMPT_VERSION` v2 fixed a real prod bug (inline `•` bullets instead of markdown — rule 7 was ambiguous) but exposed a same-day, reproducible A/B regression: q4 ("building permit requirements") scored relevancy 1.000 under `v1` and 0.000 under `v2` twice. Root-caused to the model appending an explicit "consult the City of Plano Building Inspection Department directly" redirect when corpus coverage is partial — RAGAs' `answer_relevancy` metric hard-zeroes anything it reads as noncommittal, regardless of faithfulness or context precision (q4 hit 0.933 faithfulness / perfect citations the same run it scored 0 relevancy). `v3` tried suppressing the standalone "Limitations" header (rule 1) — didn't fix it, proving the header was never the mechanism; the redirect sentence itself is what trips the judge. **Not fixing further:** that redirect sentence is the same pattern as the existing AHJ disclaimer (`_AHJ_DISCLAIMER_TEXT`) — intentional, appropriate caution for a compliance app, not a hedge to prompt away. Treated like q6 in the original baseline: measure, don't gate, on this one query's relevancy score. Full investigation: `journals/session_20260728.md` |
 
 ## Canonical validation
 
