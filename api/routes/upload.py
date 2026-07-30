@@ -120,10 +120,16 @@ def _process_upload(
     source_tier: int,
     project_id: UUID | None = None,
     uploaded_by: UUID | None = None,
+    overlay_id: UUID | None = None,
 ) -> None:
     """
     Run in background: insert document row, chunk, and embed.
     Sets document_status = 'active' on success, 'needs_ocr' on failure.
+
+    ``overlay_id`` (migration 038) links this document to a historic/
+    conservation/HOA overlay petition — reused as-is by
+    api/routes/overlays.py's petition endpoint rather than duplicating this
+    chunk/embed orchestration.
     """
     log.info("Background processing started for doc_id=%s project_id=%s uploaded_by=%s", doc_id, project_id, uploaded_by)
     try:
@@ -141,6 +147,7 @@ def _process_upload(
             source_tier=source_tier,
             project_id=project_id,
             uploaded_by=uploaded_by,
+            overlay_id=overlay_id,
         )
         document_uuid = doc_row["id"]
         if project_id:

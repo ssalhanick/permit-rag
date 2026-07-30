@@ -290,6 +290,29 @@ def test_project_municipality_used_when_request_omits_it(stubs: _Calls) -> None:
     assert result.effective_municipality == "frisco"
 
 
+def test_project_municipality_is_canonicalized(stubs: _Calls) -> None:
+    """A hand-typed/legacy project municipality spelling should canonicalize."""
+    registry.register(
+        AgentSpec(
+            name="project_context",
+            callable=lambda p: {"persona": "diy", "municipality": "fort-worth"},
+        ),
+        replace=True,
+    )
+    result = run_query_plan(
+        ManagerRequest(query="q", project_id=str(uuid4())), _deps()
+    )
+    assert result.effective_municipality == "fortworth"
+
+
+def test_request_municipality_is_canonicalized(stubs: _Calls) -> None:
+    """An explicit request municipality takes the same canonicalization pass."""
+    result = run_query_plan(
+        ManagerRequest(query="q", municipality="Fort Worth"), _deps()
+    )
+    assert result.effective_municipality == "fortworth"
+
+
 # ── Media Curator (agent #17) — diy path only ────────────────
 
 _MEDIA_ROW = {

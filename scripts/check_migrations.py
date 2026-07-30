@@ -74,6 +74,30 @@ _PROBES: list[tuple[str, str, str, str | None]] = [
         "AND column_name = 'entity_type' AND is_nullable = 'NO') AS present;",
         None,
     ),
+    (
+        "028_metadata_validation",
+        "sql",
+        "SELECT EXISTS (SELECT 1 FROM pg_enum WHERE enumlabel = 'needs_review') AS present;",
+        None,
+    ),
+    ("029_prompt_fragments", "column", "projects", "experience"),
+    ("030_media_refs", "table", "media_refs", None),
+    ("031_media_transcripts", "table", "media_transcripts", None),
+    ("032_media_channels", "table", "media_channels", None),
+    ("033_answer_feedback", "table", "answer_feedback", None),
+    ("034_ontology_and_bids", "table", "form_templates", None),
+    ("035_query_log_session_id", "column", "query_log", "session_id"),
+    ("036_design_intent_usage_kind", "column", "design_intent_usage", "kind"),
+    (
+        "037_match_chunks_jurisdiction_hierarchy",
+        "sql",
+        "SELECT EXISTS (SELECT 1 FROM pg_proc WHERE proname = 'match_chunks_jurisdiction_hierarchy') AS present;",
+        None,
+    ),
+    ("038_overlays", "table", "overlays", None),
+    ("042_marketplace_listings", "column", "projects", "marketplace_status"),
+    ("043_contractor_profiles", "table", "contractor_profiles", None),
+    ("044_bids_core", "table", "bids", None),
 ]
 
 _TABLE_SQL = """

@@ -13,6 +13,7 @@ from api.routes.contractors import router as contractors_router
 from api.routes.corpus import router as corpus_router
 from api.routes.documents import router as documents_router
 from api.routes.marketplace import router as marketplace_router
+from api.routes.overlays import router as overlays_router
 from api.routes.projects import router as projects_router
 from api.routes.pull import router as pull_router
 from api.routes.query import router as query_router
@@ -28,6 +29,7 @@ __all__ = [
     "corpus_router",
     "documents_router",
     "marketplace_router",
+    "overlays_router",
     "projects_router",
     "pull_router",
     "query_router",

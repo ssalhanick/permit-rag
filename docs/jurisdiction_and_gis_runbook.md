@@ -15,19 +15,26 @@ the DB-target-drift note at the end of this file).
 | Phase | What it fixes | Status |
 |---|---|---|
 | 0 | `res.municipality` bug + address-change re-resolve | ✅ Done — see `api/routes/projects.py`, `tests/test_project_jurisdiction_routes.py` |
-| 1 | Jurisdiction ID canonicalization + local/state/federal hierarchy in retrieval | ⬜ Pending |
-| 2 | Real municipal boundary polygons (Dallas/Plano/Fort Worth + counties/state) | ⬜ Pending |
-| 3 | Deterministic "outside coverage area" warning | ⬜ Pending |
-| 4 | Project-level historic/conservation/HOA document upload + petition system | ⬜ Pending |
-| 5 | Fix false Frisco/McKinney coverage claims in docs/copy | ⬜ Pending |
+| 1 | Jurisdiction ID canonicalization + local/state/federal hierarchy in retrieval | ✅ Code done, migration **not yet applied** — see below |
+| 2 | Real municipal boundary polygons (Dallas/Plano/Fort Worth + counties/state) | ✅ Loader script done, **no real boundaries loaded yet** (needs the corpus machine) |
+| 3 | Deterministic "outside coverage area" warning | ✅ Done |
+| 4 | Project-level historic/conservation/HOA document upload + petition system | ✅ Code done, migration **not yet applied** — see below |
+| 5 | Fix false Frisco/McKinney coverage claims in docs/copy | ✅ Done |
 
-Update this table as each phase lands. Phases depend on each other in one direction
-only — do them in order:
-Phase 1 → Phase 2 (loader must assign boundaries to already-canonical IDs, or it
-recreates the spelling-drift bug one table over) → Phase 3 (coverage check works
-with just Phase 1, gets more accurate as Phase 2 adds cities) → Phase 4 (overlays
-reference the cleaner Phase 1 jurisdiction model). Phase 5 is copy cleanup and can
-trail any phase whose claims it corrects.
+**Implementation status as of this pass**: all application code for Phases 0–5 is
+written and unit-tested on this machine (this machine's DB is empty — no corpus,
+no way to apply a migration or load real boundaries here). 662 tests pass,
+`ruff`/frontend build are clean. **Two things still require the corpus machine
+before any of this is live**: applying migrations `037` and `038`, and actually
+running the Phase 2 loader per city. Do these in order — Phase 1's migration
+before Phase 2's loader (it assigns boundaries to canonical IDs) — and follow each
+phase's verification steps below, especially the mandatory RAGAs re-run after
+migration `037`.
+
+⚠ **Do not push straight to `deployment/sites`** for the Phase 1 migration without
+completing its RAGAs verification first — this repo auto-deploys to AWS on every
+push to that branch (`.github/workflows/deploy.yml`), and `AGENTS.md`'s retrieval
+rule exists precisely to gate this kind of change.
 
 ---
 
@@ -183,7 +190,9 @@ Python call sites to update:
 - `rag/retriever.py` (`retrieve()`, ~L297) — compute the chain immediately before the call: `chain = get_jurisdiction_chain(municipality) if municipality else None`. Leave `retrieve()`'s own `municipality: str | None` parameter untouched — `_apply_non_municipal_authority_guardrails` (~L90-125) keys off that single original string and only fires when `municipality is None`, which Phase 1 doesn't change.
 - Same-phase, same-PR: `search_chunks_bm25`/`_search_chunks_with_tsquery` (`db/client.py` ~L837-911) do their own raw-SQL municipality equality filter — apply the same `= ANY(...)` change so there's no latent trap once `RETRIEVAL_HYBRID_ENABLED` is eventually flipped on.
 
-**Optional, same phase — migration `038_jurisdiction_fk_constraints.sql`**, gated:
+**Optional, still not created — migration `039_jurisdiction_fk_constraints.sql`**
+(038 is now taken by Phase 4's `overlays` table — re-check `ls db/migrations/` for
+the actual next-free number before creating this), gated:
 ```sql
 ALTER TABLE documents ADD CONSTRAINT fk_documents_municipality_jurisdiction FOREIGN KEY (municipality) REFERENCES jurisdictions(id);
 ALTER TABLE projects  ADD CONSTRAINT fk_projects_municipality_jurisdiction  FOREIGN KEY (municipality) REFERENCES jurisdictions(id);
@@ -195,7 +204,7 @@ cleanliness can't be verified from a machine without the corpus).
 
 ```bash
 py scripts/check_migrations.py --local   # confirm current state before starting
-# Orphan check — must return zero rows before applying 038:
+# Orphan check — must return zero rows before applying the optional 039 FK migration:
 #   SELECT DISTINCT municipality FROM documents WHERE municipality NOT IN (SELECT id FROM jurisdictions);
 #   SELECT DISTINCT municipality FROM projects  WHERE municipality NOT IN (SELECT id FROM jurisdictions) AND municipality IS NOT NULL;
 py scripts/apply_migration.py db/migrations/037_match_chunks_jurisdiction_hierarchy.sql
@@ -355,8 +364,8 @@ general system.
 
 ### Implementation
 
-New migration `039_overlays.sql` (renumber if 038 didn't land, or another
-migration landed first — check `ls db/migrations/` at implementation time):
+New migration `038_overlays.sql` (the optional FK-constraints migration from
+Phase 1 was skipped, so 038 was free — see `db/migrations/038_overlays.sql`):
 ```sql
 CREATE TYPE overlay_type AS ENUM ('historic_district', 'conservation_district', 'hoa', 'other');
 CREATE TYPE overlay_status AS ENUM ('petitioned', 'approved', 'rejected');
@@ -439,8 +448,8 @@ physically inside its boundary, not just the one that uploaded them).
 ### Verify (on the corpus machine)
 
 ```bash
-py scripts/apply_migration.py db/migrations/039_overlays.sql
-py -m pytest tests/test_overlays_routes.py tests/test_overlay_retrieval.py -v
+py scripts/apply_migration.py db/migrations/038_overlays.sql
+py -m pytest tests/test_overlays_routes.py tests/test_db_client_overlays.py tests/test_retriever.py -v
 # manual: petition from project A (address inside the target neighborhood) →
 # admin-approve → confirm project B, a DIFFERENT project whose address also
 # falls inside the approved boundary, can now retrieve the approved document.

@@ -21,7 +21,7 @@ Track each city below.
 |------|----------------|-----------------|--------|
 | Dallas | `dallas` | [Dallas Open Data GeoHub](https://gis.dallascityhall.com/sharedmaps/rest/services/basemap/CityBoundary/MapServer) | ✅ Loaded (Sprint 4) |
 | Plano | `plano` | [Plano Open Data](https://data.plano.gov/datasets/city-limits) | ⬜ Pending |
-| Fort Worth | `fort-worth` | [Fort Worth Open Data](https://data.fortworthtexas.gov/datasets/city-limits) | ⬜ Pending |
+| Fort Worth | `fortworth` | [Fort Worth Open Data](https://data.fortworthtexas.gov/datasets/city-limits) | ⬜ Pending |
 | Arlington | `arlington` | [Arlington GIS](https://gis.arlingtontx.gov/) | ⬜ Pending |
 | Frisco | `frisco` | [Frisco Open Data](https://data.frisco.gov/datasets/city-limits) | ⬜ Pending |
 | McKinney | `mckinney` | [McKinney Open Data](https://data.mckinneytexas.gov/) | ⬜ Pending |
@@ -32,6 +32,13 @@ Track each city below.
 
 ### Overlay Districts (future Sprint 6+)
 
+A generic, petition-driven mechanism for this now exists (jurisdiction-accuracy
+Phase 4 — see `docs/jurisdiction_and_gis_runbook.md` and `docs/overlay_petitions.md`):
+the `overlays` table (migration 038) supports any historic district, conservation
+district, or HOA, sourced one petition at a time rather than a bulk city-wide GIS
+import. The rows below are pre-sourced bulk data layers that would seed overlays at
+scale instead of one at a time — still not loaded:
+
 | Layer | Source | Status |
 |-------|--------|--------|
 | FEMA Flood Zones (SFHA) | [FEMA NFHL REST API](https://hazards.fema.gov/arcgis/rest/services/public/NFHL/MapServer) | ⬜ Pending |
@@ -40,12 +47,16 @@ Track each city below.
 
 ### Load Script Notes
 
-The Sprint 5 `scripts/load_gis_boundaries.py` script should be extended (not replaced)
-for each new city. Pattern per city:
-1. Download shapefile or GeoJSON from the open data portal above
-2. Reproject to EPSG:4326 if needed
-3. Insert into `municipal_boundaries` (jurisdiction_id, boundary_name, source_name, source_url, geom)
-4. Validate with point-in-polygon test against a known address
+`scripts/load_gis_boundaries.py` now exists (jurisdiction-accuracy Phase 2 — see
+`docs/jurisdiction_and_gis_runbook.md`). Pattern per city, run on the machine with
+the real database:
+1. `py scripts/load_gis_boundaries.py <jurisdiction_id> --geojson <url-or-path>` (or
+   `--arcgis-query <layer-url>` for an ArcGIS FeatureServer/MapServer source) —
+   both already-WGS84, no reprojection step needed.
+2. `--dry-run` first to confirm feature count/centroid look right.
+3. Re-run without `--dry-run` to upsert into `municipal_boundaries`.
+4. `--validate-address "<a known address in that city>"` to confirm point-in-polygon
+   resolves correctly.
 
 ### Blocking Condition for Google Maps Upgrade
 

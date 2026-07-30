@@ -1,13 +1,27 @@
 # permit_rag — State
 
-_Updated: 2026-07-28 — full session: QueryPage fixes (markdown rendering,
-scroll-to-top, Enter-to-submit) + query-history session grouping (migration
-035, applied prod) + a 4-batch repo-wide doc health check (README/STATE.md
-contradictions fixed, dead docs removed, STATE.md restructured to a compact
-snapshot per AGENTS.md's own rule, stale sprint statuses verified against
-code) + AGENTS.md response-style/command-execution rules tightened + a
-prompt-formatting fix and RAGAs investigation (`PROMPT_VERSION` v1→v3, see
-Decisions log). Full detail: `journals/session_20260728.md`._
+_Updated: 2026-07-30 — jurisdiction accuracy overhaul, all 5 phases coded +
+tested on machine A (662 passing, up from 605; ruff/frontend build clean),
+**migrations 037/038 not yet applied, no real boundaries loaded** (needs
+machine B): Phase 0 (deployed to prod already — see below) fixed the
+`res.municipality`/`res.jurisdiction_id` bug + gave `update_project`
+address-change re-resolution; Phase 1 added `rag/jurisdiction_ids.py`
+canonicalization (fixed a 4th Fort Worth spelling gap in `prompt_router.py`)
++ `get_jurisdiction_chain` + migration 037 (`match_chunks` filter →
+jurisdiction-chain `text[]`, RAGAs re-run still required before this is
+safe to ship); Phase 2 added `scripts/load_gis_boundaries.py` (no real city
+polygons loaded yet); Phase 3 added `rag/coverage.py` +
+`GET /projects/{id}/coverage` + fixed `generator.py`'s hardcoded
+Frisco/McKinney fallback list; Phase 4 added the `overlays` table
+(migration 038) + `api/routes/overlays.py` petition/approve/reject +
+`match_overlay_chunks`, generalizing the Dallas-only historic/conservation
+pilot into a real petition workflow (also fixed a pre-existing duplicate
+`retrieve_with_project` definition in `rag/retriever.py` while touching that
+function); Phase 5 corrected the false Frisco/McKinney coverage claims in
+AGENTS.md/README.md and fixed `docs/backlog.md`'s `fort-worth`→`fortworth`
+spelling. Full plan: `docs/jurisdiction_and_gis_runbook.md`. No journal
+entry written this session — flag for a proper STATE.md/journal close-out
+pass once this lands on machine B._
 
 ## Phase
 
@@ -78,62 +92,21 @@ Full detail: `journals/session_20260726_phase5.md`,
 > duplicate 026 (`026_agent_traces.sql` / `026_design_intent_usage_project_fk.sql`)
 > is recorded, not renamed — both already applied by name on multiple DBs.
 >
-> **Full reservation ledger as of 2026-07-30 (three concurrent plans, NOT
-> actually all on one branch — see the branch-divergence note right below
-> this list before assuming otherwise):** **034** — `034_ontology_and_bids.sql`,
+> **Full reservation ledger as of 2026-07-30:** **034** — `034_ontology_and_bids.sql`,
 > the real Phase 6 deliverable (`form_templates` + `field_mappings`, schema
 > only — the PDF-parsing agent and review dashboard are unbuilt Phase 7
-> work). **037-038 — ALREADY COMMITTED, not merely reserved**, on branch
-> `fixes/jurisdiction-phase-1-5` (commit `886d79d`, 2026-07-30, 3 commits
-> ahead of this branch's own base `a3e0feb`): `037_match_chunks_jurisdiction_hierarchy.sql`
+> work). **037-038 — ALREADY COMMITTED**, on branch
+> `fixes/jurisdiction-phase-1-5`: `037_match_chunks_jurisdiction_hierarchy.sql`
 > (jurisdiction-chain retrieval) and `038_overlays.sql` (historic/conservation/HOA
-> overlays — **not** `038_jurisdiction_fk_constraints.sql` as originally
-> planned in `docs/jurisdiction_and_gis_runbook.md`; that optional
-> FK-constraints migration is now reserved at **039** per that branch's own
-> STATE.md, not yet created). Code-complete with passing tests
-> (`api/routes/overlays.py`, 226 lines; `frontend/src/projects/pages/ProjectPetitionPage.jsx`,
-> 201 lines; `rag/coverage.py`; full test files) but **applied to no
-> database anywhere**. **The document-upload plan's own `039_overlays.sql`
-> is very likely redundant with the already-built `038_overlays.sql` +
-> `api/routes/overlays.py`** — whoever resumes that plan should decide
-> whether to scrap its overlays migration and extend the existing,
-> working implementation (its boundary computation is a simple buffer;
-> the parcel-lookup/union approach was the planned upgrade) rather than
-> build a second, competing overlay system. **040** — document-upload plan,
+> overlays). **039** — reserved for FK constraints. **040** — document-upload plan,
 > `040_document_visibility.sql`. **041** — document-upload plan,
-> `041_user_trust.sql` (nothing else claims 040/041 as of this writing).
+> `041_user_trust.sql`.
 > **042** — contractor marketplace, `042_marketplace_listings.sql`.
 > **043** — contractor marketplace, `043_contractor_profiles.sql` (`contractor_profiles`
-> + `contractor_licenses` — moved off 034 once it was clear that slot was
-> never for this; a contractor account backing one ontology-sourced field
-> is not the same thing as the ontology's own per-form mapping corpus).
+> + `contractor_licenses`).
 > **044** — contractor marketplace, `044_bids_core.sql` (`bids` + `bid_line_items`
-> + `labor_rate_benchmarks` — applied after 043 so foreign keys referencing
-> `contractor_profiles` and `contractor_licenses` resolve).
+> + `labor_rate_benchmarks`).
 > **Next unclaimed number is 045.**
->
-> **Branch divergence, not sequencing — needs a real decision, not just a
-> numbering fix.** `feat/bidding-marketplace` (this branch) has **zero
-> commits** of its own — everything from the contractor-marketplace session
-> is still uncommitted working-tree changes on top of `a3e0feb`.
-> `fixes/jurisdiction-phase-1-5` has 3 real commits ahead of that exact same
-> `a3e0feb` point. These are not "sequential on one branch" as originally
-> assumed — they're two independently-progressed lines from a shared
-> ancestor, and reconciling them is a real git operation, not a bookkeeping
-> exercise. Concretely: (1) both branches heavily edit `STATE.md` — a
-> near-certain textual conflict whenever they're combined; (2) both add new
-> router registrations to `api/main.py`/`api/routes/__init__.py` in
-> adjacent alphabetical positions (`marketplace_router` vs. `overlays_router`,
-> both slotting between `documents_router` and `projects_router`) — a small,
-> easily-resolved conflict, but a real one. Because this branch has no
-> commits yet, **rebasing the marketplace work onto `fixes/jurisdiction-phase-1-5`'s
-> tip** (rather than merging two committed histories later) is on the table
-> and may be the lower-friction path — but that's Scott's call, not
-> something to do unilaterally. Before claiming a new migration number:
-> check this note AND
-> `ls db/migrations/ | sort -V | tail -5` AND grep planning docs for
-> hardcoded numbers — a plan doc claiming a number doesn't show up in the
-> directory listing until its migration file actually exists.
 
 ## Verification — which machine runs what
 
@@ -303,7 +276,7 @@ should have been 027. Recorded, not renamed. The dedupe correction is
 | db | 026/027 trace + autonomy helpers; **Phase 3:** `update_document_metadata_fields`; **Media B1:** `fetch_media_refs`/`insert_media_ref`. **Phase 5:** `upsert_answer_feedback`, `answer_feedback_counts`, `list_downvotes_without_review`, `list_agent_corrections`, `confirm_agent_correction`. **2026-07-28:** `insert_query_log`/`get_user_query_history` learn `session_id` |
 | api/routes/query | HTTP concerns only; injects retrieval + grounding thresholds into the Manager. **Phase 5:** both response paths carry `run_id`; `POST /query/feedback` upserts a vote. **2026-07-28:** `X-Client-Session-Id` now persisted as `query_log.session_id` (previously parsed for tracing only) |
 | evaluation | **Phase 4:** `langsmith_eval.run_pipeline` persona routing; `persona_checks.py`. **Phase 5:** `perf_review.py` (#24), `agent_eval.py` (#23) |
-| tests | **587 passing** (machine A, 2026-07-26) |
+| tests | **662 passing** (machine A, 2026-07-30) — rest of this table not re-verified against jurisdiction-accuracy changes, see 2026-07-30 header |
 
 ## Decisions log
 

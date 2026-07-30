@@ -2,8 +2,9 @@
 
 RAG-powered construction permit compliance tool for the DFW market.
 Contractors and project managers query it to get cited answers from
-Dallas, Plano, Frisco, McKinney, and Fort Worth municipal codes,
-plus Texas state and federal regulations.
+Dallas, Plano, and Fort Worth municipal codes, plus Texas state and
+federal regulations. (Frisco and McKinney are planned but not yet
+covered — see [docs/backlog.md](docs/backlog.md).)
 
 ---
 

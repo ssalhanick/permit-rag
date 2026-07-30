@@ -186,3 +186,35 @@ def test_update_project_address_unchanged_does_not_reresolve() -> None:
         mock_update.assert_called_once()
     finally:
         app.dependency_overrides.clear()
+
+
+def test_project_coverage_route_returns_check_coverage_result() -> None:
+    """GET .../coverage should be a thin, deterministic wrapper over rag.coverage."""
+    from rag.coverage import CoverageResult
+
+    owner_id = uuid4()
+    project_id = uuid4()
+
+    app.dependency_overrides[projects_route.get_current_user] = lambda: _current_user(owner_id)
+    try:
+        with patch.object(projects_route.db_client, "get_project_role", return_value="owner"), \
+             patch.object(
+                 projects_route.db_client, "get_project",
+                 return_value=_project_row(project_id, owner_id, municipality="frisco"),
+             ), \
+             patch(
+                 "rag.coverage.check_coverage",
+                 return_value=CoverageResult("no_documents", "frisco", "We don't yet have frisco..."),
+             ) as mock_check_coverage:
+            resp = client.get(f"/api/projects/{project_id}/coverage")
+
+        assert resp.status_code == 200
+        body = resp.json()
+        assert body["status"] == "no_documents"
+        assert body["municipality"] == "frisco"
+        assert body["is_covered"] is False
+        mock_check_coverage.assert_called_once_with(
+            municipality="frisco", latitude=None, longitude=None,
+        )
+    finally:
+        app.dependency_overrides.clear()

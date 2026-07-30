@@ -148,12 +148,56 @@ def check_022(conn: Any) -> list[str]:
     return actions
 
 
+def check_030(conn: Any) -> list[str]:
+    """Report whether 030's media refs were seeded."""
+    print("── 030_media_refs ───────────────────────────────────────────")
+    if not _table_exists(conn, "media_refs"):
+        print("  not applied to this database")
+        print("    → py scripts/apply_migration.py db/migrations/030_media_refs.sql\n")
+        return []
+
+    row = conn.execute("SELECT count(*) AS total FROM media_refs;").fetchone()
+    total = int(row["total"])
+    print("  applied      : yes")
+    print(f"  media_refs   : {total}")
+    actions: list[str] = []
+    if total == 0:
+        print("\n  ⚠ media_refs table is empty. Seed data is recommended.")
+        actions.append("py scripts/seed_media_refs.py")
+    else:
+        print("\n  ✅ media_refs seeded")
+    print()
+    return actions
+
+
+def check_044(conn: Any) -> list[str]:
+    """Report whether 044's labor rate benchmarks were seeded."""
+    print("── 044_bids_core ────────────────────────────────────────────")
+    if not _table_exists(conn, "labor_rate_benchmarks"):
+        print("  not applied to this database")
+        print("    → py scripts/apply_migration.py db/migrations/044_bids_core.sql\n")
+        return []
+
+    row = conn.execute("SELECT count(*) AS total FROM labor_rate_benchmarks;").fetchone()
+    total = int(row["total"])
+    print("  applied      : yes")
+    print(f"  benchmarks   : {total}")
+    actions: list[str] = []
+    if total == 0:
+        print("\n  ⚠ labor_rate_benchmarks table is empty. Reference benchmarks seed recommended.")
+        actions.append("py scripts/seed_labor_rate_benchmarks.py")
+    else:
+        print("\n  ✅ labor rate benchmarks seeded")
+    print()
+    return actions
+
+
 def main() -> None:
     """Run every content check and print a consolidated action list."""
     _db_target.banner(TARGET)
     _db_target.ensure_reachable(TARGET, get_conn)
     with get_conn() as conn:
-        actions = check_026(conn) + check_022(conn)
+        actions = check_026(conn) + check_022(conn) + check_030(conn) + check_044(conn)
 
     if not actions:
         print("✅ Nothing to do on this database.")

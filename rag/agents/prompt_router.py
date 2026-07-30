@@ -50,9 +50,15 @@ EXPERIENCES: tuple[str, ...] = ("first_timer", "experienced")
 
 # Jurisdiction spellings that reach us (from geocoding, free text) mapped onto
 # the fragment file keys. Anything not here falls through to a normalized slug.
+#
+# "fortworth" (no separator) is the actual corpus-canonical jurisdiction id
+# (db/seeds/jurisdictions.sql) — a genuinely different string from the
+# abbreviated "ftworth" already below, so without this entry it fell through to
+# the no-op slug fallback and never matched fort_worth.md.
 _JURISDICTION_ALIASES: dict[str, str] = {
     "fort worth": "fort_worth",
     "fort-worth": "fort_worth",
+    "fortworth": "fort_worth",
     "ft worth": "fort_worth",
     "ftworth": "fort_worth",
     "texas": "tx",

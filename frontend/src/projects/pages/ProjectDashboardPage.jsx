@@ -7,6 +7,7 @@ import {
   fetchQueryHistory,
   fetchProjectDocuments,
   fetchPermitStrategy,
+  fetchProjectCoverage,
 } from "../../api.js";
 import { loadProjectTasks, saveProjectTasks } from "../../services/taskStorage.js";
 import { parseMoneyNum } from "../../utils/parseMoneyNum.js";
@@ -27,7 +28,8 @@ import {
   Package,
   ShoppingCart,
   Box,
-  ArrowRight
+  ArrowRight,
+  AlertTriangle
 } from "lucide-react";
 
 export default function ProjectDashboardPage() {
@@ -40,6 +42,7 @@ export default function ProjectDashboardPage() {
   const [queries, setQueries] = useState([]);
   const [documents, setDocuments] = useState([]);
   const [permitStrategy, setPermitStrategy] = useState(null);
+  const [coverage, setCoverage] = useState(null);
   const [selectedDocPreview, setSelectedDocPreview] = useState(null);
 
   // Flat task list for this project, persisted to localStorage (see taskStorage.js)
@@ -106,6 +109,12 @@ export default function ProjectDashboardPage() {
     fetchPermitStrategy(projectId)
       .then((res) => setPermitStrategy(res.data || null))
       .catch(() => setPermitStrategy(null));
+  }, [projectId]);
+
+  useEffect(() => {
+    fetchProjectCoverage(projectId)
+      .then((res) => setCoverage(res.data || null))
+      .catch(() => setCoverage(null));
   }, [projectId]);
 
   useEffect(() => {
@@ -247,6 +256,24 @@ export default function ProjectDashboardPage() {
           </button>
         </div>
       </header>
+
+      {coverage && !coverage.is_covered && (
+        <div className="mb-6 flex items-start gap-3 rounded-lg border border-amber-300 bg-amber-50 p-4 text-sm dark:border-amber-700/60 dark:bg-amber-900/20">
+          <AlertTriangle className="w-5 h-5 shrink-0 text-amber-500 mt-0.5" />
+          <div className="flex-1">
+            <p className="font-semibold text-amber-800 dark:text-amber-300">
+              This project may be outside our coverage area
+            </p>
+            <p className="text-amber-700 dark:text-amber-400 mt-0.5">{coverage.message}</p>
+          </div>
+          <Link
+            to={`/projects/${projectId}/petition`}
+            className="tt-btn-secondary text-xs whitespace-nowrap"
+          >
+            Petition this area
+          </Link>
+        </div>
+      )}
 
       {/* ── 3 Summary Metric Cards ── */}
       <section className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
