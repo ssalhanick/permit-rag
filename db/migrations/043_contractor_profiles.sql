@@ -1,4 +1,4 @@
--- db/migrations/044_contractor_profiles.sql
+-- db/migrations/043_contractor_profiles.sql
 -- Contractor identity + licensing (contractor marketplace milestone 1).
 -- ─────────────────────────────────────────────────────────
 -- NOT the Phase 6 "ontology/bids" slot (034) -- that reservation is for the

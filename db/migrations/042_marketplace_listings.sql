@@ -24,7 +24,7 @@
 -- "Migration numbering" note for the full reservation ledger.
 --
 -- awarded_bid_id has no FK yet -- the `bids` table it references doesn't
--- exist until migration 043. The FK is attached there once both tables exist.
+-- exist until migration 044. The FK is attached there once both tables exist.
 
 ALTER TABLE projects
     ADD COLUMN marketplace_status text NOT NULL DEFAULT 'unlisted'

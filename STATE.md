@@ -102,13 +102,14 @@ Full detail: `journals/session_20260726_phase5.md`,
 > build a second, competing overlay system. **040** — document-upload plan,
 > `040_document_visibility.sql`. **041** — document-upload plan,
 > `041_user_trust.sql` (nothing else claims 040/041 as of this writing).
-> **042-043** — contractor marketplace, `042_marketplace_listings.sql` +
-> `043_bids_core.sql` (moved here from 037-038, then again from 039-040,
-> after each collided with one of the other two plans in turn). **044** —
-> contractor marketplace, `044_contractor_profiles.sql` (`contractor_profiles`
+> **042** — contractor marketplace, `042_marketplace_listings.sql`.
+> **043** — contractor marketplace, `043_contractor_profiles.sql` (`contractor_profiles`
 > + `contractor_licenses` — moved off 034 once it was clear that slot was
 > never for this; a contractor account backing one ontology-sourced field
 > is not the same thing as the ontology's own per-form mapping corpus).
+> **044** — contractor marketplace, `044_bids_core.sql` (`bids` + `bid_line_items`
+> + `labor_rate_benchmarks` — applied after 043 so foreign keys referencing
+> `contractor_profiles` and `contractor_licenses` resolve).
 > **Next unclaimed number is 045.**
 >
 > **Branch divergence, not sequencing — needs a real decision, not just a
@@ -344,7 +345,7 @@ should have been 027. Recorded, not renamed. The dedupe correction is
 | **Media migration takes 030** | `text + CHECK` (no enum ALTERs), `UNIQUE (task_key, url)` for idempotent seeding. Media links are *data* that changes without a code deploy, so a table (not files) is right — opposite of the fragment-library call |
 | **Answer feedback is its own table, not `agent_corrections`** | Answer-level thumbs are high-volume/weak-signal; `agent_corrections` is an *attributed correction*. A thumbs-up isn't a correction. `033_answer_feedback` captures the raw vote; a thumbs-down is what Performance Review #24 later reads with the run trace to write the attributed correction |
 | **Phase 5 feedback migration takes 033; Phase 6 → 034** | Phase 5 ships before Phase 6, so `033_answer_feedback` takes it and Phase-6 ontology/bids cascades to 034. The already-deployed `032` file's own comment still reads "cascades to 033" — a deployed migration is never edited, so this note is authoritative over that stale comment |
-| **034 is the ontology per-form mapping corpus, not any contractor-marketplace table (corrected 2026-07-30)** | An earlier pass on `feat/bidding-marketplace` built `034_contractor_profiles.sql`, reasoning that a contractor account backs an ontology-sourced field (`contractor.license_number`, `SourceBinding.PROFILE`) and so "fills" the Phase 6 slot. That conflates *related to* the ontology with *is* the ontology's Phase 6 deliverable — the actual reservation is Field Ontology part 4, the per-form mapping corpus (`form_templates`/`field_mappings`, `docs/agent_architecture.md`), unrelated to contractor accounts. Caught when Scott pushed back directly. Fixed: `034_ontology_and_bids.sql` now holds the real schema (`form_templates` + `field_mappings`, no PDF-parsing agent or review dashboard yet — that's Phase 7); `contractor_profiles`/`contractor_licenses` moved to `044_contractor_profiles.sql` |
+| **034 is the ontology per-form mapping corpus, not any contractor-marketplace table (corrected 2026-07-30)** | An earlier pass on `feat/bidding-marketplace` built `034_contractor_profiles.sql`, reasoning that a contractor account backs an ontology-sourced field (`contractor.license_number`, `SourceBinding.PROFILE`) and so "fills" the Phase 6 slot. That conflates *related to* the ontology with *is* the ontology's Phase 6 deliverable — the actual reservation is Field Ontology part 4, the per-form mapping corpus (`form_templates`/`field_mappings`, `docs/agent_architecture.md`), unrelated to contractor accounts. Caught when Scott pushed back directly. Fixed: `034_ontology_and_bids.sql` now holds the real schema (`form_templates` + `field_mappings`, no PDF-parsing agent or review dashboard yet — that's Phase 7); `contractor_profiles`/`contractor_licenses` moved to `043_contractor_profiles.sql` |
 | **Performance Review #24 is batch-triggered, not on the query path** | Import boundary (`api/` can't import `evaluation/`) + cost budgeting (~$0.03/thumbs-down on opus) both point to batch. Trigger is `scripts/review_feedback.py` over the un-reviewed-down-vote queue, never a synchronous cost on the user's request |
 | **Perf Review never silent-blames** | Every review writes an *unconfirmed* `agent_corrections` row; a superadmin confirms attribution. Below `CONFIDENCE_FLOOR=0.6` the row carries no `attributed_agent` — a human assigns blame |
 | **Query sessions are custom, not LangChain** | The `session_id` grouping query-history threads is a plain Postgres column + client-generated UUID, unrelated to LangChain's own memory/session abstractions (not used in this codebase — only LangSmith, for tracing, is). The same `session_id` also tags the LangSmith trace for that thread — see `docs/langsmith_session_tracing.md` |

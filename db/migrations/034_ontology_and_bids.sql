@@ -26,7 +26,7 @@
 -- (contractor.license_number) meant its backing table fulfilled this
 -- reservation. It doesn't -- that's a different table for a different
 -- feature (the contractor marketplace's own accounts, see
--- 044_contractor_profiles.sql), unrelated to per-form field mapping. Caught
+-- 043_contractor_profiles.sql), unrelated to per-form field mapping. Caught
 -- and corrected; recorded here and in STATE.md so it isn't repeated.
 --
 -- Deliberately NOT built here (Phase 7, a separate and much larger piece):

@@ -1,4 +1,4 @@
--- db/migrations/043_bids_core.sql
+-- db/migrations/044_bids_core.sql
 -- Contractor marketplace milestone 3: structured bids, aligned with the
 -- BidDocument shape the (unbuilt) Bid Evaluator (docs/agent_architecture.md,
 -- agent #16) was already designed around.
@@ -12,7 +12,7 @@
 -- it arrived through this table or a future PDF-upload path.
 --
 -- license_id does double duty for BidDocument's "license #" AND "insurance
--- cert reference" -- contractor_licenses (migration 044) already carries
+-- cert reference" -- contractor_licenses (migration 043) already carries
 -- both, so one FK covers both fields rather than duplicating insurance data
 -- onto every bid.
 --
