@@ -356,6 +356,12 @@ export default function RoomScanPanel({ project, canEdit, libraryMode = false, o
  * @param {{ derived: object, capturedAt?: string, roomLabel?: string }} props
  */
 function RoomScanMetrics({ derived, capturedAt, roomLabel }) {
+  // Scans synced before floor/wall area were split carry wall area under the
+  // old floor_area_sqm name and no wall_area_sqm — keep showing those as walls.
+  const legacy = derived.wall_area_sqm == null;
+  const wallArea = legacy ? derived.floor_area_sqm : derived.wall_area_sqm;
+  const floorArea = legacy ? null : derived.floor_area_sqm;
+
   return (
     <dl className="kickoff-summary room-scan-metrics">
       {roomLabel && (
@@ -378,10 +384,18 @@ function RoomScanMetrics({ derived, capturedAt, roomLabel }) {
         <dt>Max ceiling height</dt>
         <dd>{derived.max_ceiling_height_m} m</dd>
       </div>
-      <div className="kickoff-summary-row">
-        <dt>Wall surface area (est.)</dt>
-        <dd>{derived.floor_area_sqm} m²</dd>
-      </div>
+      {wallArea != null && (
+        <div className="kickoff-summary-row">
+          <dt>Wall surface area (est.)</dt>
+          <dd>{wallArea} m²</dd>
+        </div>
+      )}
+      {floorArea != null && (
+        <div className="kickoff-summary-row">
+          <dt>Floor area{derived.floor_area_source === "wall_footprint" ? " (est.)" : ""}</dt>
+          <dd>{floorArea} m²</dd>
+        </div>
+      )}
       {derived.wall_lengths_m?.length > 0 && (
         <div className="kickoff-summary-row">
           <dt>Wall lengths</dt>

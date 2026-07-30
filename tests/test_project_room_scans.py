@@ -40,8 +40,10 @@ def test_upsert_project_room_scans_mirrors_active_room_summary() -> None:
 
     with patch.object(db_client, "get_conn") as mock_conn:
         conn = mock_conn.return_value.__enter__.return_value
+        # Each upsert returns its row: an empty RETURNING now means the id
+        # belongs to another project and raises.
         conn.execute.return_value.fetchone.side_effect = [
-            None,
+            {"id": structure_id, "room_label": "Whole house"},
             {"id": kitchen_id, "room_label": "Kitchen", "captured_at": captured, "derived": {"wall_count": 4}},
         ]
         conn.execute.return_value.fetchall.return_value = [
@@ -91,6 +93,94 @@ def test_upsert_project_room_scans_mirrors_active_room_summary() -> None:
             if "room_summary" in str(call.args[0])
         ]
         assert update_calls, "expected room_summary mirror update"
+
+
+def test_upsert_user_room_scans_rejects_another_users_scan_id() -> None:
+    """
+    Scan ids come from the client, so an id owned by another user must fail.
+
+    The ON CONFLICT branch is scoped to the caller, so a foreign id updates no
+    row and returns none — that has to raise rather than silently no-op.
+    """
+    with patch.object(db_client, "get_conn") as mock_conn:
+        conn = mock_conn.return_value.__enter__.return_value
+        conn.execute.return_value.fetchone.return_value = None
+
+        with pytest.raises(PermissionError, match="another user's library"):
+            db_client.upsert_user_room_scans(
+                uuid4(),
+                [
+                    {
+                        "id": uuid4(),
+                        "scan_type": "room",
+                        "parent_scan_id": None,
+                        "room_label": "Kitchen",
+                        "section": None,
+                        "structure_label": None,
+                        "captured_at": datetime(2026, 7, 12, tzinfo=UTC),
+                        "derived": {"wall_count": 4},
+                    }
+                ],
+            )
+        conn.commit.assert_not_called()
+
+
+def test_upsert_user_room_scans_upsert_is_scoped_to_caller() -> None:
+    """The ownership predicate must be part of the ON CONFLICT statement."""
+    user_id = uuid4()
+    with patch.object(db_client, "get_conn") as mock_conn:
+        conn = mock_conn.return_value.__enter__.return_value
+        conn.execute.return_value.fetchone.return_value = {"id": uuid4()}
+        conn.execute.return_value.fetchall.return_value = []
+
+        db_client.upsert_user_room_scans(
+            user_id,
+            [
+                {
+                    "id": uuid4(),
+                    "scan_type": "room",
+                    "parent_scan_id": None,
+                    "room_label": "Kitchen",
+                    "section": None,
+                    "structure_label": None,
+                    "captured_at": datetime(2026, 7, 12, tzinfo=UTC),
+                    "derived": {"wall_count": 4},
+                }
+            ],
+        )
+
+    upserts = [
+        call.args[0]
+        for call in conn.execute.call_args_list
+        if "ON CONFLICT" in str(call.args[0])
+    ]
+    assert upserts, "expected an upsert statement"
+    assert "WHERE user_room_scans.user_id" in upserts[0]
+
+
+def test_upsert_project_room_scans_rejects_another_projects_scan_id() -> None:
+    """A project editor must not be able to overwrite another project's row."""
+    with patch.object(db_client, "get_conn") as mock_conn:
+        conn = mock_conn.return_value.__enter__.return_value
+        conn.execute.return_value.fetchone.return_value = None
+
+        with pytest.raises(PermissionError, match="another project"):
+            db_client.upsert_project_room_scans(
+                uuid4(),
+                [
+                    {
+                        "id": uuid4(),
+                        "scan_type": "room",
+                        "parent_scan_id": None,
+                        "room_label": "Kitchen",
+                        "section": None,
+                        "captured_at": datetime(2026, 7, 12, tzinfo=UTC),
+                        "derived": {"wall_count": 4},
+                        "is_active": False,
+                    }
+                ],
+            )
+        conn.commit.assert_not_called()
 
 
 def test_parse_design_intent_rules_tile() -> None:

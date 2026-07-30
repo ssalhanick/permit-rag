@@ -5,32 +5,120 @@
 import { newScanId } from "./scanIds.js";
 
 /**
- * @typedef {{ category: string, dimensions?: { width?: number, height?: number, depth?: number } }} Surface
+ * @typedef {{ category: string, dimensions?: { width?: number, height?: number, depth?: number }, position?: { x?: number, y?: number, z?: number }, transform_matrix?: number[] }} Surface
  */
+
+/**
+ * Planar area of a surface bounding box: the product of its two largest extents.
+ *
+ * RoomPlan surfaces are flat, so one of width/height/depth is the thickness.
+ * Taking the two largest extents gets the face area without depending on which
+ * axis the thickness lands on for a given surface category.
+ *
+ * @param {{ width?: number, height?: number, depth?: number }} [dimensions]
+ * @returns {number}
+ */
+function planarArea(dimensions) {
+  const extents = [dimensions?.width, dimensions?.height, dimensions?.depth]
+    .map((v) => (typeof v === "number" && v > 0 ? v : 0))
+    .sort((a, b) => b - a);
+  return extents[0] * extents[1];
+}
+
+/**
+ * Footprint area from the bounding box of the wall endpoints in the ground plane.
+ *
+ * Fallback for iOS 16 captures, which carry no floor surface. Exact for
+ * rectangular rooms and an over-estimate for L-shaped ones, so callers must
+ * treat it as an estimate — see floor_area_source on deriveRoomMetrics.
+ *
+ * @param {Surface[]} walls
+ * @returns {number | null}
+ */
+function wallFootprintArea(walls) {
+  let minX = Infinity;
+  let maxX = -Infinity;
+  let minZ = Infinity;
+  let maxZ = -Infinity;
+  let usable = 0;
+
+  for (const wall of walls) {
+    const m = wall.transform_matrix;
+    const width = wall.dimensions?.width ?? 0;
+    if (!Array.isArray(m) || m.length < 16 || width <= 0) {
+      continue;
+    }
+    // Column 0 of the transform is the wall's local x axis — its run direction.
+    const half = width / 2;
+    const cx = m[12];
+    const cz = m[14];
+    for (const sign of [-1, 1]) {
+      const x = cx + sign * half * m[0];
+      const z = cz + sign * half * m[2];
+      minX = Math.min(minX, x);
+      maxX = Math.max(maxX, x);
+      minZ = Math.min(minZ, z);
+      maxZ = Math.max(maxZ, z);
+    }
+    usable += 1;
+  }
+
+  if (usable < 3) {
+    return null;
+  }
+  const area = (maxX - minX) * (maxZ - minZ);
+  return area > 0 ? area : null;
+}
 
 /**
  * Compute derived room metrics from interchange-format scan.
  *
+ * floor_area_sqm comes from the captured floor surface when present. When it
+ * cannot be established it is null rather than a wrong number — every consumer
+ * must handle that. wall_area_sqm is the paintable wall face area.
+ *
  * @param {{ surfaces?: Surface[], units?: string }} room
- * @returns {{ floor_area_sqm: number, max_ceiling_height_m: number, wall_count: number, wall_lengths_m: number[] }}
+ * @returns {{ floor_area_sqm: number | null, floor_area_source: string | null, wall_area_sqm: number, max_ceiling_height_m: number, wall_count: number, wall_lengths_m: number[] }}
  */
 export function deriveRoomMetrics(room) {
   const surfaces = room?.surfaces || [];
   const walls = surfaces.filter((s) => s.category === "wall");
-  let floorArea = 0;
+  const floors = surfaces.filter((s) => s.category === "floor");
+
+  let wallArea = 0;
   const wallLengths = [];
   for (const wall of walls) {
     const w = wall.dimensions?.width ?? 0;
     const h = wall.dimensions?.height ?? 0;
-    floorArea += w * h;
+    wallArea += w * h;
     if (w > 0) {
       wallLengths.push(Number(w.toFixed(2)));
     }
   }
   const heights = walls.map((w) => w.dimensions?.height ?? 0);
   const maxHeight = heights.length ? Math.max(...heights) : 0;
+
+  let floorArea = null;
+  let floorAreaSource = null;
+  if (floors.length) {
+    const summed = floors.reduce((total, floor) => total + planarArea(floor.dimensions), 0);
+    if (summed > 0) {
+      floorArea = summed;
+      floorAreaSource = "floor_surface";
+    }
+  }
+  if (floorArea === null) {
+    const footprint = wallFootprintArea(walls);
+    if (footprint !== null) {
+      floorArea = footprint;
+      floorAreaSource = "wall_footprint";
+    }
+  }
+
   return {
-    floor_area_sqm: Number(floorArea.toFixed(2)),
+    floor_area_sqm: floorArea === null ? null : Number(floorArea.toFixed(2)),
+    floor_area_source: floorAreaSource,
+    wall_area_sqm: Number(wallArea.toFixed(2)),
     max_ceiling_height_m: Number(maxHeight.toFixed(2)),
     wall_count: walls.length,
     wall_lengths_m: wallLengths,

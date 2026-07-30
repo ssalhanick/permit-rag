@@ -30,6 +30,7 @@ final class RoomARPresenter: NSObject, UITableViewDelegate, UITableViewDataSourc
     private var nudgeStack: UIStackView? = nil
     private var overlayOpacity: Float = 0.3
     private var overlayImageView: UIImageView? = nil
+    private var onFinished: (() -> Void)?
 
     init(
         call: CAPPluginCall? = nil,
@@ -38,7 +39,8 @@ final class RoomARPresenter: NSObject, UITableViewDelegate, UITableViewDataSourc
         structureId: String,
         roomId: String,
         roomLabel: String,
-        initialSelectedSurfaceId: String? = nil
+        initialSelectedSurfaceId: String? = nil,
+        onFinished: (() -> Void)? = nil
     ) {
         self.call = call
         self.plugin = plugin
@@ -47,6 +49,7 @@ final class RoomARPresenter: NSObject, UITableViewDelegate, UITableViewDataSourc
         self.roomId = roomId
         self.roomLabel = roomLabel
         self.selectedSurfaceId = initialSelectedSurfaceId
+        self.onFinished = onFinished
         super.init()
     }
 
@@ -589,10 +592,29 @@ final class RoomARPresenter: NSObject, UITableViewDelegate, UITableViewDataSourc
         return overlay
     }
 
+    /// Tear down the ARKit session and release the scene.
+    ///
+    /// Without the session pause the camera keeps running after dismissal, and
+    /// without dropping the view and texture cache every AR session stays
+    /// resident for the life of the app. onFinished lets the plugin release its
+    /// own reference, matching RoomCapturePresenter and StructureCapturePresenter.
     @objc private func closeTapped() {
         raycastTimer?.invalidate()
         raycastTimer = nil
-        viewController?.dismiss(animated: true)
+
+        arView?.session.pause()
+        arView?.scene.anchors.removeAll()
+        arView?.removeFromSuperview()
+        arView = nil
+        textureCache.removeAll()
+
+        let vc = viewController
+        viewController = nil
+        let finish = onFinished
+        onFinished = nil
+        vc?.dismiss(animated: true) {
+            finish?()
+        }
     }
 
     @objc private func dictateTapped() {

@@ -93,7 +93,10 @@ def upsert_my_room_scans(
         if "surfaces" in (scan.derived or {}):
             raise HTTPException(status_code=422, detail="Derived summaries must not include surfaces.")
     payload = [scan.model_dump() for scan in body.scans]
-    rows = db_client.upsert_user_room_scans(current_user["user_id"], payload)
+    try:
+        rows = db_client.upsert_user_room_scans(current_user["user_id"], payload)
+    except PermissionError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
     return [dict(row) for row in rows]
 
 

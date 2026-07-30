@@ -484,16 +484,22 @@ def upsert_room_scans(
                 detail="Derived summaries must not include surfaces.",
             )
     payload = [scan.model_dump() for scan in body.scans]
-    db_client.upsert_user_room_scans(current_user["user_id"], payload)
-    db_client.upsert_project_room_scans(project_id, payload)
+    try:
+        db_client.upsert_user_room_scans(current_user["user_id"], payload)
+        db_client.upsert_project_room_scans(project_id, payload)
+    except PermissionError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
     scan_ids = [scan["id"] for scan in payload]
     active = next((s["id"] for s in payload if s.get("is_active")), None)
-    rows = db_client.link_scans_to_project(
-        project_id,
-        current_user["user_id"],
-        scan_ids,
-        active_scan_id=active,
-    )
+    try:
+        rows = db_client.link_scans_to_project(
+            project_id,
+            current_user["user_id"],
+            scan_ids,
+            active_scan_id=active,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
     return [dict(row) for row in rows]
 
 

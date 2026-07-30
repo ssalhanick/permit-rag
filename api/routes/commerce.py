@@ -10,6 +10,7 @@ from uuid import UUID
 from fastapi import APIRouter, Depends, HTTPException
 
 from api.auth import get_current_user
+from api.design_intent_helpers import check_image_cap, record_image_usage
 from api.schemas import (
     MaterialsEstimateResponse,
     ProductSearchRequest,
@@ -30,16 +31,25 @@ CurrentUser = Annotated[dict, Depends(get_current_user)]
 @router.post("/room-preview-image", response_model=RoomPreviewImageResponse)
 def room_preview_image(
     body: RoomPreviewImageRequest,
-    _current_user: CurrentUser,
+    current_user: CurrentUser,
 ) -> dict:
-    """Generate a room redesign preview image for iPhone AR asset_url."""
-    return generate_room_preview_image(
+    """
+    Generate a room redesign preview image for iPhone AR asset_url.
+
+    Metered per user: this bills a paid image provider on every call. Mock
+    results cost nothing, so they are not recorded and do not consume the cap.
+    """
+    check_image_cap(current_user["user_id"])
+    result = generate_room_preview_image(
         utterance=body.utterance,
         overlays=body.overlays,
         room_label=body.room_label,
         source_image_b64=body.source_image_b64,
         tiling=body.tiling,
     )
+    if not result.get("mock"):
+        record_image_usage(current_user["user_id"], model=str(result.get("model", "unknown")))
+    return result
 
 
 @router.post("/products/search", response_model=ProductSearchResponse)

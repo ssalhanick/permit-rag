@@ -34,6 +34,41 @@ def _check_token_cap(user_id: UUID) -> None:
         )
 
 
+def check_image_cap(user_id: UUID) -> None:
+    """
+    Raise HTTP 429 when the user exceeds the monthly room-image generation cap.
+
+    Image generation bills per call against a paid provider, so it is capped by
+    count rather than by tokens like design-intent previews are.
+    """
+    cap = int(os.environ.get("ROOM_IMAGE_MONTHLY_CAP", "50"))
+    if cap <= 0:
+        return
+    used = db_client.count_design_intent_usage(
+        user_id,
+        since=_month_start(),
+        kind="room_image",
+    )
+    if used >= cap:
+        raise HTTPException(
+            status_code=429,
+            detail=f"Room image generation cap reached ({used}/{cap} this month).",
+        )
+
+
+def record_image_usage(user_id: UUID, *, model: str) -> None:
+    """Log one generated room-preview image for cap accounting and audit."""
+    db_client.insert_design_intent_usage(
+        user_id=user_id,
+        project_id=None,
+        room_scan_id=None,
+        input_tokens=0,
+        output_tokens=0,
+        model=model,
+        kind="room_image",
+    )
+
+
 def _resolve_room_scan_row(rows: list[dict[str, Any]], scan_id: UUID) -> dict[str, Any]:
     """Find a room scan row by id or raise 404."""
     row = next((r for r in rows if r["id"] == scan_id), None)

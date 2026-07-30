@@ -81,8 +81,18 @@ def format_project_context_block(context: dict[str, Any] | None) -> str:
             lines.append(f"- Walls detected: {derived['wall_count']}")
         if derived.get("max_ceiling_height_m") is not None:
             lines.append(f"- Max ceiling height (m): {derived['max_ceiling_height_m']}")
-        if derived.get("floor_area_sqm") is not None:
-            lines.append(f"- Floor area (m²): {derived['floor_area_sqm']}")
+        # Scans synced before floor and wall area were split stored wall area
+        # under the floor_area_sqm name. Report those as wall area so the model
+        # never reasons about a floor dimension it was never given.
+        if derived.get("wall_area_sqm") is None:
+            if derived.get("floor_area_sqm") is not None:
+                lines.append(f"- Wall surface area (m²): {derived['floor_area_sqm']}")
+        else:
+            lines.append(f"- Wall surface area (m²): {derived['wall_area_sqm']}")
+            if derived.get("floor_area_sqm") is not None:
+                estimated = derived.get("floor_area_source") == "wall_footprint"
+                note = " (estimated from wall footprint)" if estimated else ""
+                lines.append(f"- Floor area (m²): {derived['floor_area_sqm']}{note}")
         lengths = derived.get("wall_lengths_m") or []
         if lengths:
             lines.append(f"- Wall lengths (m): {', '.join(str(v) for v in lengths)}")

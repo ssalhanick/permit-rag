@@ -28,6 +28,28 @@ def extract_zip_from_address(address: str | None) -> str | None:
     return match.group(1) if match else None
 
 
+def _covered_area_sqm(overlay_type: str, derived: dict[str, Any]) -> float:
+    """
+    Pick the surface area a material actually covers.
+
+    Paint covers walls, tile covers the floor. Scans synced before the two were
+    split carry wall area under the old ``floor_area_sqm`` name and no
+    ``wall_area_sqm`` -- those fall back to it for both types so existing
+    projects keep the estimates they already had.
+
+    Args:
+        overlay_type: paint or tile.
+        derived: Derived scan metrics.
+
+    Returns:
+        Area in square meters, 0 when unavailable.
+    """
+    if derived.get("wall_area_sqm") is None:
+        return float(derived.get("floor_area_sqm") or 0)
+    key = "floor_area_sqm" if overlay_type == "tile" else "wall_area_sqm"
+    return float(derived.get(key) or 0)
+
+
 def estimate_quantity(
     overlay_type: str,
     room_derived: dict[str, Any] | None,
@@ -49,7 +71,7 @@ def estimate_quantity(
     waste = _DEFAULT_WASTE
 
     if overlay_type in ("tile", "paint"):
-        area_sqm = float(derived.get("floor_area_sqm") or 0)
+        area_sqm = _covered_area_sqm(overlay_type, derived)
         if area_sqm <= 0:
             return None
         area_sqft = area_sqm * _SQFT_PER_SQM * (1 + waste)

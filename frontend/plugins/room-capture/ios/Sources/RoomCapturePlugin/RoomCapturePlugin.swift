@@ -137,7 +137,10 @@ public class RoomCapturePlugin: CAPPlugin, CAPBridgedPlugin {
                 structureId: structureId,
                 roomId: roomId,
                 roomLabel: roomLabel,
-                initialSelectedSurfaceId: selectedSurfaceId
+                initialSelectedSurfaceId: selectedSurfaceId,
+                onFinished: { [weak self] in
+                    self?.activeARPresenters.removeValue(forKey: roomId)
+                }
             )
             self.activeARPresenters[roomId] = presenter
             presenter.present(from: viewController)

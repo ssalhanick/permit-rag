@@ -1832,6 +1832,12 @@ def upsert_project_room_scans(
 
     When any room row sets is_active=true, clears other active room flags first.
     Mirrors active room derived to projects.room_summary for backward compatibility.
+
+    Row ids come from the client, so the ON CONFLICT branch is scoped to this
+    project -- an editor on one project cannot overwrite another project's row.
+
+    Raises:
+        PermissionError: When any id already belongs to a different project.
     """
     import json as _json
 
@@ -1870,6 +1876,7 @@ def upsert_project_room_scans(
             derived = EXCLUDED.derived,
             is_active = EXCLUDED.is_active,
             updated_at = now()
+        WHERE project_room_scans.project_id = %(project_id)s
         RETURNING *;
     """
 
@@ -1884,7 +1891,7 @@ def upsert_project_room_scans(
                 (project_id, active_room_id),
             )
         for scan in scans:
-            conn.execute(
+            updated = conn.execute(
                 upsert_sql,
                 {
                     "id": scan["id"],
@@ -1897,7 +1904,13 @@ def upsert_project_room_scans(
                     "derived": _json.dumps(scan.get("derived") or {}),
                     "is_active": bool(scan.get("is_active")),
                 },
-            )
+            ).fetchone()
+            # An ON CONFLICT whose ownership predicate fails updates nothing and
+            # returns nothing — that is the only way to get no row back here.
+            if updated is None:
+                raise PermissionError(
+                    f"Scan id belongs to another project: {scan['id']}"
+                )
         if active_summary is not None:
             conn.execute(
                 """
@@ -1989,7 +2002,15 @@ def upsert_user_room_scans(
     user_id: UUID,
     scans: list[dict[str, Any]],
 ) -> list[dict[str, Any]]:
-    """Upsert derived summaries into the user's scan library."""
+    """
+    Upsert derived summaries into the user's scan library.
+
+    Row ids come from the client, so every write is scoped to the caller: the
+    ON CONFLICT branch only touches rows this user already owns.
+
+    Raises:
+        PermissionError: When any id belongs to a different user's library.
+    """
     import json as _json
 
     if not scans:
@@ -2014,11 +2035,12 @@ def upsert_user_room_scans(
             captured_at = EXCLUDED.captured_at,
             derived = EXCLUDED.derived,
             updated_at = now()
+        WHERE user_room_scans.user_id = %(user_id)s
         RETURNING *;
     """
     with get_conn() as conn:
         for scan in scans:
-            conn.execute(
+            updated = conn.execute(
                 upsert_sql,
                 {
                     "id": scan["id"],
@@ -2031,7 +2053,13 @@ def upsert_user_room_scans(
                     "captured_at": scan["captured_at"],
                     "derived": _json.dumps(scan.get("derived") or {}),
                 },
-            )
+            ).fetchone()
+            # An ON CONFLICT whose ownership predicate fails updates nothing and
+            # returns nothing — that is the only way to get no row back here.
+            if updated is None:
+                raise PermissionError(
+                    f"Scan id belongs to another user's library: {scan['id']}"
+                )
         conn.commit()
     return list_user_room_scans(user_id)
 
@@ -2184,38 +2212,57 @@ def insert_design_intent_usage(
     *,
     user_id: UUID,
     project_id: UUID | None,
-    room_scan_id: UUID,
+    room_scan_id: UUID | None,
     input_tokens: int,
     output_tokens: int,
     model: str,
+    kind: str = "design_intent",
 ) -> dict[str, Any]:
-    """Log one design-intent LLM call for token accounting."""
+    """
+    Log one metered call for accounting.
+
+    Args:
+        kind: design_intent for LLM overlay parses, room_image for generative
+            preview images (migration 036). room_scan_id is None for the latter.
+    """
     sql = """
         INSERT INTO design_intent_usage (
             user_id, project_id, room_scan_id,
-            input_tokens, output_tokens, model
+            input_tokens, output_tokens, model, kind
         )
-        VALUES (%s, %s, %s, %s, %s, %s)
+        VALUES (%s, %s, %s, %s, %s, %s, %s)
         RETURNING *;
     """
     with get_conn() as conn:
         row = conn.execute(
             sql,
-            (user_id, project_id, room_scan_id, input_tokens, output_tokens, model),
+            (user_id, project_id, room_scan_id, input_tokens, output_tokens, model, kind),
         ).fetchone()
         conn.commit()
     return row
 
 
 def sum_design_intent_tokens(user_id: UUID, *, since: datetime) -> int:
-    """Sum input + output tokens for a user since a timestamp."""
+    """Sum input + output tokens for a user's design-intent calls since a timestamp."""
     sql = """
         SELECT COALESCE(SUM(input_tokens + output_tokens), 0) AS total
         FROM design_intent_usage
-        WHERE user_id = %s AND created_at >= %s;
+        WHERE user_id = %s AND created_at >= %s AND kind = 'design_intent';
     """
     with get_conn() as conn:
         row = conn.execute(sql, (user_id, since)).fetchone()
+    return int(row["total"]) if row else 0
+
+
+def count_design_intent_usage(user_id: UUID, *, since: datetime, kind: str) -> int:
+    """Count a user's metered calls of one kind since a timestamp."""
+    sql = """
+        SELECT COUNT(*) AS total
+        FROM design_intent_usage
+        WHERE user_id = %s AND created_at >= %s AND kind = %s;
+    """
+    with get_conn() as conn:
+        row = conn.execute(sql, (user_id, since, kind)).fetchone()
     return int(row["total"]) if row else 0
 
 
