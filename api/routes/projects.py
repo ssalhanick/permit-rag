@@ -16,6 +16,7 @@ from api.schemas import (
     AddMemberRequest,
     AssetSyncAckRequest,
     AssetSyncAckResponse,
+    CoverageResponse,
     CreateProjectRequest,
     DesignIntentRequest,
     DesignIntentResponse,
@@ -67,8 +68,10 @@ def _require_role(
 @router.post("/", response_model=ProjectResponse, status_code=201)
 def create_project(body: CreateProjectRequest, current_user: CurrentUser) -> dict:
     """Create a new project owned by the caller."""
+    from rag.jurisdiction_ids import canonicalize
+
     historic, conservation = None, None
-    municipality = body.municipality
+    municipality = canonicalize(body.municipality)
     latitude = body.latitude
     longitude = body.longitude
 
@@ -207,6 +210,33 @@ def project_permit_strategy(project_id: UUID, current_user: CurrentUser) -> dict
     }
 
 
+@router.get("/{project_id}/coverage", response_model=CoverageResponse)
+def project_coverage(project_id: UUID, current_user: CurrentUser) -> dict:
+    """Deterministic coverage-area check for a project (Phase 3, jurisdiction accuracy).
+
+    Deterministic and non-LLM, same shape as project_permit_strategy above —
+    a table lookup, not a retrieval-quality signal.
+    """
+    _require_role(project_id, current_user["user_id"], {"owner", "editor", "viewer"}, current_user)
+    project = db_client.get_project(project_id)
+    if not project:
+        raise HTTPException(status_code=404, detail="Project not found.")
+
+    from rag.coverage import check_coverage
+
+    result = check_coverage(
+        municipality=project.get("municipality"),
+        latitude=project.get("latitude"),
+        longitude=project.get("longitude"),
+    )
+    return {
+        "status": result.status,
+        "municipality": result.municipality,
+        "message": result.message,
+        "is_covered": result.is_covered,
+    }
+
+
 @router.patch("/{project_id}", response_model=ProjectResponse)
 def update_project(
     project_id: UUID,
@@ -217,6 +247,10 @@ def update_project(
     _require_role(project_id, current_user["user_id"], {"owner", "editor"}, current_user)
 
     update_fields = body.model_dump(exclude_unset=True)
+
+    if update_fields.get("municipality"):
+        from rag.jurisdiction_ids import canonicalize
+        update_fields["municipality"] = canonicalize(update_fields["municipality"])
 
     if update_fields.get("address") and "municipality" not in update_fields:
         from rag.jurisdiction_resolver import resolve_jurisdiction

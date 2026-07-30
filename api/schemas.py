@@ -386,6 +386,48 @@ class PermitStrategyResponse(BaseModel):
     fee_disclaimer: str = Field(description="Reminder that fees are estimates, not a quote.")
 
 
+class CoverageResponse(BaseModel):
+    """Deterministic coverage-area check for a project's resolved jurisdiction/address.
+
+    Distinct from a low-confidence retrieval abstain — this is a factual check
+    (does the resolved municipality have real documents, or does the address
+    fall outside every loaded boundary) rather than a retrieval-quality signal.
+    """
+
+    status: str = Field(description="covered | no_documents | no_boundary_data | unresolved")
+    municipality: str | None = Field(default=None, description="Resolved municipality, if any.")
+    message: str = Field(description="Human-readable explanation, safe to show directly to a user.")
+    is_covered: bool = Field(description="True only when status == 'covered'.")
+
+
+class OverlayResponse(BaseModel):
+    """A historic/conservation-district or HOA overlay petition (migration 038)."""
+
+    id: UUID
+    name: str
+    overlay_type: str = Field(description="historic_district | conservation_district | hoa | other")
+    jurisdiction_id: str | None = None
+    status: str = Field(description="petitioned | approved | rejected")
+    petitioning_project_id: UUID | None = None
+    approved_by: UUID | None = None
+    approved_at: datetime | None = None
+    notes: str | None = None
+    created_at: datetime
+
+
+class ApproveOverlayRequest(BaseModel):
+    """Optional refinement when a staff reviewer approves a petitioned overlay."""
+
+    geojson_polygon: str | None = Field(
+        default=None,
+        description=(
+            "A GeoJSON geometry (as a JSON string) to replace the petitioner's "
+            "default buffer with a refined tight boundary. Omit to approve the "
+            "existing (default-buffer) geometry as-is."
+        ),
+    )
+
+
 class ErrorResponse(BaseModel):
     """Standard error response body."""
 

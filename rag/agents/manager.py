@@ -273,15 +273,18 @@ def _resolve_municipality(state: _PlanState) -> None:
     context is loaded earlier in the plan (wave 1) so a project-scoped query is
     jurisdiction-aware even when the client sends only a project_id.
     """
+    from rag.jurisdiction_ids import canonicalize
+
     request = state.request
-    state.effective_municipality = request.municipality
-    if request.municipality:
+    state.effective_municipality = canonicalize(request.municipality)
+    if state.effective_municipality:
         return
 
     ctx = state.store.get_or_none(state.project_context_ref) or {}
-    # A project can carry an explicit municipality (set at kickoff) — use it as-is.
+    # A project can carry an explicit municipality (set at kickoff) — canonicalize
+    # in case it predates Phase 1 or was hand-typed with inconsistent spelling.
     if ctx.get("municipality"):
-        state.effective_municipality = ctx["municipality"]
+        state.effective_municipality = canonicalize(ctx["municipality"])
         return
 
     address = request.address or ctx.get("address")

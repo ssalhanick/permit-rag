@@ -683,7 +683,7 @@ def generate_kickoff_chat_response(
     return _bound_kickoff_notes(_parse_json_response(result.text))
 
 
-CLARIFICATION_SYSTEM_PROMPT = """\
+_CLARIFICATION_SYSTEM_PROMPT_TEMPLATE = """\
 You are an expert construction permit and building code compliance assistant for the Dallas–Fort Worth metroplex.
 The user asked a question or project request that lacks sufficient specific context or vector similarity in our local ordinance database.
 
@@ -699,7 +699,7 @@ Format your output STRICTLY as a JSON object with this shape:
   "clarifying_options": [
     {
       "label": "Which DFW jurisdiction is your property in?",
-      "choices": ["Dallas", "Plano", "Fort Worth", "Frisco", "McKinney"]
+      "choices": [__CITIES__]
     },
     {
       "label": "Question label...",
@@ -712,6 +712,20 @@ Return ONLY valid JSON. Do not include markdown or extra commentary outside the 
 """
 
 
+def _clarification_system_prompt() -> str:
+    """Build the clarification system prompt with live-accurate covered cities.
+
+    Rebuilt per call (this call path already passes cache_system=False) so the
+    illustrative jurisdiction example can never drift from real coverage the
+    way the old hardcoded 5-city list did — it named Frisco and McKinney,
+    which are seeded jurisdictions but have zero real ingested documents.
+    """
+    from rag.coverage import covered_municipalities
+
+    cities_json = ", ".join(f'"{c}"' for c in covered_municipalities())
+    return _CLARIFICATION_SYSTEM_PROMPT_TEMPLATE.replace("__CITIES__", cities_json)
+
+
 def generate_clarification_fallback(
     query: str,
     *,
@@ -720,6 +734,8 @@ def generate_clarification_fallback(
     """
     Generate dual-mode general guidance and structured clarifying options when RAG abstains.
     """
+    from rag.coverage import covered_municipalities
+
     capabilities = get_provider_capabilities()
     user_prompt = f"User Query: {query}\nTarget Municipality: {municipality or 'Unspecified (DFW area)'}"
 
@@ -732,7 +748,7 @@ def generate_clarification_fallback(
         "clarifying_options": [
             {
                 "label": "Which DFW jurisdiction is your property located in?",
-                "choices": ["Dallas", "Plano", "Fort Worth", "Frisco", "McKinney"]
+                "choices": covered_municipalities(),
             },
             {
                 "label": "What is the primary scope of your project?",
@@ -751,7 +767,7 @@ def generate_clarification_fallback(
             payload = {
                 "model": model,
                 "messages": [
-                    {"role": "system", "content": CLARIFICATION_SYSTEM_PROMPT},
+                    {"role": "system", "content": _clarification_system_prompt()},
                     {"role": "user", "content": user_prompt},
                 ],
                 "stream": False,
@@ -767,7 +783,7 @@ def generate_clarification_fallback(
         elif os.environ.get("ANTHROPIC_API_KEY"):
             result = run_agent(
                 "clarification_fallback",
-                system=CLARIFICATION_SYSTEM_PROMPT,
+                system=_clarification_system_prompt(),
                 messages=[{"role": "user", "content": user_prompt}],
                 tier=Tier.CHEAP,
                 model=os.environ.get("LLM_MODEL", "claude-haiku-4-5-20251001"),

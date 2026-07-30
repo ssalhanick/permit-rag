@@ -64,7 +64,9 @@ def test_apply_procedural_penalty_uses_rrf_score(monkeypatch) -> None:
 @patch("ingestion.embedder.embed_query", return_value=[0.1, 0.2, 0.3])
 @patch("db.client.search_chunks_bm25")
 @patch("db.client.match_chunks")
+@patch("db.client.get_jurisdiction_chain")
 def test_retrieve_dense_only_fallback_uses_match_chunks(
+    mock_get_chain,
     mock_match_chunks,
     mock_search_bm25,
     _mock_embed_query,
@@ -74,6 +76,7 @@ def test_retrieve_dense_only_fallback_uses_match_chunks(
     from rag.retriever import retrieve
 
     monkeypatch.setenv("RETRIEVAL_HYBRID_ENABLED", "false")
+    mock_get_chain.return_value = ["dallas", "dallas-county", "texas", "federal"]
     mock_match_chunks.return_value = [
         {
             "id": "d-1",
@@ -92,27 +95,32 @@ def test_retrieve_dense_only_fallback_uses_match_chunks(
     result = retrieve("permit question", top_k=1, municipality="dallas")
 
     assert result.num_results == 1
+    mock_get_chain.assert_called_once_with("dallas")
     mock_match_chunks.assert_called_once()
     called_top_k = mock_match_chunks.call_args.kwargs["top_k"]
     assert called_top_k == 1
+    assert mock_match_chunks.call_args.kwargs["municipalities"] == mock_get_chain.return_value
     mock_search_bm25.assert_not_called()
 
 
 @patch("ingestion.embedder.embed_query", return_value=[0.1, 0.2, 0.3])
 @patch("db.client.search_chunks_bm25")
 @patch("db.client.match_chunks")
-def test_retrieve_hybrid_passes_municipality_to_bm25(
+@patch("db.client.get_jurisdiction_chain")
+def test_retrieve_hybrid_passes_jurisdiction_chain_to_bm25(
+    mock_get_chain,
     mock_match_chunks,
     mock_search_bm25,
     _mock_embed_query,
     monkeypatch,
 ) -> None:
-    """Hybrid mode should send municipality filter to BM25 branch."""
+    """Hybrid mode should send the expanded jurisdiction chain to the BM25 branch."""
     from rag.retriever import retrieve
 
     monkeypatch.setenv("RETRIEVAL_HYBRID_ENABLED", "true")
     monkeypatch.setenv("RETRIEVAL_DENSE_TOP_N", "5")
     monkeypatch.setenv("RETRIEVAL_BM25_TOP_N", "7")
+    mock_get_chain.return_value = ["plano", "collin-county", "texas", "federal"]
     mock_match_chunks.return_value = []
     mock_search_bm25.return_value = [
         {
@@ -131,9 +139,92 @@ def test_retrieve_hybrid_passes_municipality_to_bm25(
 
     retrieve("plano permit", top_k=3, municipality="plano")
 
+    mock_get_chain.assert_called_once_with("plano")
     mock_search_bm25.assert_called_once()
-    assert mock_search_bm25.call_args.kwargs["municipality"] == "plano"
+    assert mock_search_bm25.call_args.kwargs["municipalities"] == mock_get_chain.return_value
     assert mock_search_bm25.call_args.kwargs["top_k"] == 7
+
+
+@patch("ingestion.embedder.embed_query", return_value=[0.1, 0.2, 0.3])
+@patch("db.client.match_chunks")
+@patch("db.client.get_jurisdiction_chain")
+def test_retrieve_without_municipality_skips_chain_lookup(
+    mock_get_chain,
+    mock_match_chunks,
+    _mock_embed_query,
+    monkeypatch,
+) -> None:
+    """No municipality given should mean no DB round trip for a chain, and no filter."""
+    from rag.retriever import retrieve
+
+    monkeypatch.setenv("RETRIEVAL_HYBRID_ENABLED", "false")
+    mock_match_chunks.return_value = []
+
+    retrieve("what permits do I need", top_k=3)
+
+    mock_get_chain.assert_not_called()
+    assert mock_match_chunks.call_args.kwargs["municipalities"] is None
+
+
+@patch("ingestion.embedder.embed_query", return_value=[0.1, 0.2, 0.3])
+@patch("db.client.get_jurisdiction_chain", return_value=["dallas"])
+@patch("db.client.match_chunks", return_value=[])
+@patch("db.client.get_project")
+@patch("rag.mini_rag.retrieve_project_chunks", return_value=[])
+@patch("rag.mini_rag.retrieve_overlay_chunks")
+def test_retrieve_with_project_merges_overlay_chunks(
+    mock_overlay,
+    _mock_project_chunks,
+    mock_get_project,
+    _mock_match_chunks,
+    _mock_chain,
+    _mock_embed,
+) -> None:
+    """An approved overlay's chunks should surface for any project inside its
+    boundary, merged in alongside the project's own tier 2/3 chunks."""
+    from uuid import uuid4
+
+    from rag.retriever import retrieve_with_project
+
+    project_id = str(uuid4())
+    mock_get_project.return_value = {"latitude": 32.8, "longitude": -96.78}
+    mock_overlay.return_value = [
+        {"id": "overlay-chunk-1", "source_tier": 3, "similarity": 0.9, "doc_id": "swiss-ave"}
+    ]
+
+    result = retrieve_with_project("historic district rules", project_id=project_id, top_k=5)
+
+    mock_overlay.assert_called_once_with(
+        "historic district rules", latitude=32.8, longitude=-96.78, top_k=3, min_similarity=0.0,
+    )
+    assert any(c["doc_id"] == "swiss-ave" for c in result.chunks)
+
+
+@patch("ingestion.embedder.embed_query", return_value=[0.1, 0.2, 0.3])
+@patch("db.client.get_jurisdiction_chain", return_value=["dallas"])
+@patch("db.client.match_chunks", return_value=[])
+@patch("db.client.get_project")
+@patch("rag.mini_rag.retrieve_project_chunks", return_value=[])
+@patch("rag.mini_rag.retrieve_overlay_chunks")
+def test_retrieve_with_project_skips_overlay_lookup_without_coordinates(
+    mock_overlay,
+    _mock_project_chunks,
+    mock_get_project,
+    _mock_match_chunks,
+    _mock_chain,
+    _mock_embed,
+) -> None:
+    """A project with no lat/lng on file shouldn't attempt an overlay lookup at all."""
+    from uuid import uuid4
+
+    from rag.retriever import retrieve_with_project
+
+    project_id = str(uuid4())
+    mock_get_project.return_value = {"latitude": None, "longitude": None}
+
+    retrieve_with_project("some query", project_id=project_id, top_k=5)
+
+    mock_overlay.assert_not_called()
 
 
 def test_non_muni_guardrail_boosts_state_for_texas_query(monkeypatch) -> None:

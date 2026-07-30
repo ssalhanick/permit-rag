@@ -1,13 +1,27 @@
 # permit_rag — State
 
-_Updated: 2026-07-28 — full session: QueryPage fixes (markdown rendering,
-scroll-to-top, Enter-to-submit) + query-history session grouping (migration
-035, applied prod) + a 4-batch repo-wide doc health check (README/STATE.md
-contradictions fixed, dead docs removed, STATE.md restructured to a compact
-snapshot per AGENTS.md's own rule, stale sprint statuses verified against
-code) + AGENTS.md response-style/command-execution rules tightened + a
-prompt-formatting fix and RAGAs investigation (`PROMPT_VERSION` v1→v3, see
-Decisions log). Full detail: `journals/session_20260728.md`._
+_Updated: 2026-07-30 — jurisdiction accuracy overhaul, all 5 phases coded +
+tested on machine A (662 passing, up from 605; ruff/frontend build clean),
+**migrations 037/038 not yet applied, no real boundaries loaded** (needs
+machine B): Phase 0 (deployed to prod already — see below) fixed the
+`res.municipality`/`res.jurisdiction_id` bug + gave `update_project`
+address-change re-resolution; Phase 1 added `rag/jurisdiction_ids.py`
+canonicalization (fixed a 4th Fort Worth spelling gap in `prompt_router.py`)
++ `get_jurisdiction_chain` + migration 037 (`match_chunks` filter →
+jurisdiction-chain `text[]`, RAGAs re-run still required before this is
+safe to ship); Phase 2 added `scripts/load_gis_boundaries.py` (no real city
+polygons loaded yet); Phase 3 added `rag/coverage.py` +
+`GET /projects/{id}/coverage` + fixed `generator.py`'s hardcoded
+Frisco/McKinney fallback list; Phase 4 added the `overlays` table
+(migration 038) + `api/routes/overlays.py` petition/approve/reject +
+`match_overlay_chunks`, generalizing the Dallas-only historic/conservation
+pilot into a real petition workflow (also fixed a pre-existing duplicate
+`retrieve_with_project` definition in `rag/retriever.py` while touching that
+function); Phase 5 corrected the false Frisco/McKinney coverage claims in
+AGENTS.md/README.md and fixed `docs/backlog.md`'s `fort-worth`→`fortworth`
+spelling. Full plan: `docs/jurisdiction_and_gis_runbook.md`. No journal
+entry written this session — flag for a proper STATE.md/journal close-out
+pass once this lands on machine B._
 
 ## Phase
 
@@ -69,6 +83,16 @@ Full detail: `journals/session_20260726_phase5.md`,
 > 2026-07-28). 027 is `027_agent_action_item_dedupe`; the duplicate 026
 > (`026_agent_traces.sql` / `026_design_intent_usage_project_fk.sql`) is
 > recorded, not renamed — both already applied by name on multiple DBs.
+> **036** (`design_intent_usage_kind`, room-scan work, 2026-07-29) — check
+> its own prod-apply status separately, not tracked in this note's history.
+> **Jurisdiction accuracy → 037** (`match_chunks` filter → jurisdiction-chain
+> `text[]`; **RAGAs MUST be re-run immediately after applying**, per
+> AGENTS.md) **+ 038** (`overlays` table — historic/conservation/HOA
+> petitions). **Neither applied anywhere yet** — code-complete on machine A
+> only as of 2026-07-30; see `docs/jurisdiction_and_gis_runbook.md`. A future
+> optional FK-constraints migration for `documents.municipality`/
+> `projects.municipality` → `jurisdictions.id` is reserved at **039**, not
+> yet created.
 
 ## Verification — which machine runs what
 
@@ -237,7 +261,7 @@ should have been 027. Recorded, not renamed. The dedupe correction is
 | db | 026/027 trace + autonomy helpers; **Phase 3:** `update_document_metadata_fields`; **Media B1:** `fetch_media_refs`/`insert_media_ref`. **Phase 5:** `upsert_answer_feedback`, `answer_feedback_counts`, `list_downvotes_without_review`, `list_agent_corrections`, `confirm_agent_correction`. **2026-07-28:** `insert_query_log`/`get_user_query_history` learn `session_id` |
 | api/routes/query | HTTP concerns only; injects retrieval + grounding thresholds into the Manager. **Phase 5:** both response paths carry `run_id`; `POST /query/feedback` upserts a vote. **2026-07-28:** `X-Client-Session-Id` now persisted as `query_log.session_id` (previously parsed for tracing only) |
 | evaluation | **Phase 4:** `langsmith_eval.run_pipeline` persona routing; `persona_checks.py`. **Phase 5:** `perf_review.py` (#24), `agent_eval.py` (#23) |
-| tests | **587 passing** (machine A, 2026-07-26) |
+| tests | **662 passing** (machine A, 2026-07-30) — rest of this table not re-verified against jurisdiction-accuracy changes, see 2026-07-30 header |
 
 ## Decisions log
 

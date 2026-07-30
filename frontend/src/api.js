@@ -231,6 +231,11 @@ export async function fetchPermitStrategy(projectId) {
   return await requestJson(`/projects/${projectId}/permit-strategy`);
 }
 
+// Coverage-area check (jurisdiction accuracy Phase 3): deterministic, non-LLM.
+export async function fetchProjectCoverage(projectId) {
+  return await requestJson(`/projects/${projectId}/coverage`);
+}
+
 export async function postRoomPreviewImage(payload) {
   return await requestJson("/commerce/room-preview-image", {
     method: "POST",

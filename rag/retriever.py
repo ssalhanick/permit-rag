@@ -282,7 +282,7 @@ def retrieve(
     Returns:
         RetrievalResult with ranked chunks and diagnostics.
     """
-    from db.client import match_chunks, search_chunks_bm25
+    from db.client import get_jurisdiction_chain, match_chunks, search_chunks_bm25
     from ingestion.embedder import embed_query
 
     t0 = time.perf_counter()
@@ -294,17 +294,22 @@ def retrieve(
     dense_top_n = max(top_k, _env_int("RETRIEVAL_DENSE_TOP_N", 20))
     bm25_top_n = max(top_k, _env_int("RETRIEVAL_BM25_TOP_N", 20))
 
+    # Expand a single municipality into its local->county->state->federal chain
+    # (migration 037) so a city-scoped query also matches county/state/federal
+    # documents instead of excluding them via strict equality.
+    municipalities = get_jurisdiction_chain(municipality) if municipality else None
+
     dense_chunks = match_chunks(
         query_vec,
         top_k=dense_top_n if hybrid_enabled else top_k,
-        municipality=municipality,
+        municipalities=municipalities,
         min_similarity=min_similarity,
     )
     if hybrid_enabled:
         bm25_chunks = search_chunks_bm25(
             query,
             top_k=bm25_top_n,
-            municipality=municipality,
+            municipalities=municipalities,
         )
         chunks = _fuse_with_rrf(dense_chunks, bm25_chunks, top_k=top_k)
     else:
@@ -389,6 +394,11 @@ def retrieve_with_project(
     """
     Retrieve corpus chunks and merge project mini-RAG when project_id is set.
 
+    Also merges in any APPROVED overlay (historic/conservation district, HOA —
+    migration 038) whose boundary contains the project's lat/lng, so an
+    approved overlay's documents surface for this project even if this
+    project never petitioned it itself.
+
     Args:
         query: User question.
         project_id: Optional project UUID string for tier 2/3 scope.
@@ -401,7 +411,11 @@ def retrieve_with_project(
     """
     from uuid import UUID
 
-    from rag.mini_rag import merge_corpus_and_project, retrieve_project_chunks
+    from rag.mini_rag import (
+        merge_corpus_and_project,
+        retrieve_overlay_chunks,
+        retrieve_project_chunks,
+    )
 
     result = retrieve(
         query,
@@ -416,61 +430,32 @@ def retrieve_with_project(
     except ValueError:
         log.warning("Invalid project_id for mini-RAG: %s", project_id)
         return result
+
     project_chunks = retrieve_project_chunks(
         query,
         pid,
         top_k=max(3, top_k // 2),
         min_similarity=min_similarity,
     )
-    merged = merge_corpus_and_project(result.chunks, project_chunks, top_k=top_k)
-    result.chunks = merged
-    return result
 
+    from db.client import get_project
 
-def retrieve_with_project(
-    query: str,
-    *,
-    project_id: str | None = None,
-    top_k: int = 5,
-    municipality: str | None = None,
-    min_similarity: float = 0.0,
-) -> RetrievalResult:
-    """
-    Retrieve corpus chunks and merge project mini-RAG when project_id is set.
+    project = get_project(pid)
+    overlay_chunks: list[dict[str, Any]] = []
+    if project and project.get("latitude") is not None and project.get("longitude") is not None:
+        try:
+            overlay_chunks = retrieve_overlay_chunks(
+                query,
+                latitude=project["latitude"],
+                longitude=project["longitude"],
+                top_k=max(3, top_k // 2),
+                min_similarity=min_similarity,
+            )
+        except Exception as exc:
+            log.warning("Overlay retrieval failed for project_id=%s: %s", pid, exc)
 
-    Args:
-        query: User question.
-        project_id: Optional project UUID string for tier 2/3 scope.
-        top_k: Max merged chunks.
-        municipality: Optional municipality filter for corpus tier.
-        min_similarity: Similarity floor.
-
-    Returns:
-        RetrievalResult with merged chunks.
-    """
-    from uuid import UUID
-
-    from rag.mini_rag import merge_corpus_and_project, retrieve_project_chunks
-
-    result = retrieve(
-        query,
-        top_k=top_k,
-        municipality=municipality,
-        min_similarity=min_similarity,
+    merged = merge_corpus_and_project(
+        result.chunks, project_chunks + overlay_chunks, top_k=top_k
     )
-    if not project_id:
-        return result
-    try:
-        pid = UUID(project_id)
-    except ValueError:
-        log.warning("Invalid project_id for mini-RAG: %s", project_id)
-        return result
-    project_chunks = retrieve_project_chunks(
-        query,
-        pid,
-        top_k=max(3, top_k // 2),
-        min_similarity=min_similarity,
-    )
-    merged = merge_corpus_and_project(result.chunks, project_chunks, top_k=top_k)
     result.chunks = merged
     return result

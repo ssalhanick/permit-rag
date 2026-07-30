@@ -1,5 +1,10 @@
 # PostGIS Migration Checklist (Planning Only)
 
+> **Superseded**: this was Sprint 4 pre-work. PostGIS is enabled and
+> `municipal_boundaries` has existed since migrations 007/008 — the checklist
+> below documents what was considered before that shipped, not an open task.
+> See `docs/jurisdiction_and_gis_runbook.md` for current, active GIS work.
+
 Purpose:
 - Prepare safe path to GIS features
 - Do not execute risky DB change in this step

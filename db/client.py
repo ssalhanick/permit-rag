@@ -97,6 +97,33 @@ def list_jurisdictions(
         ).fetchall()
 
 
+def get_jurisdiction_chain(jurisdiction_id: str) -> list[str]:
+    """
+    Walk `jurisdictions.parent_id` up from jurisdiction_id to its root.
+
+    e.g. "dallas" -> ["dallas", "dallas-county", "texas", "federal"]. Depth is
+    bounded at 10 to guard against a cyclic parent_id; the table has ~15 rows
+    today so this is a single, sub-millisecond round trip.
+
+    Returns just [jurisdiction_id] if it has no row (unknown id) — callers that
+    filter retrieval by this chain should still see at least an exact-match
+    filter rather than silently degrading to "no filter at all".
+    """
+    sql = """
+        WITH RECURSIVE chain AS (
+            SELECT id, parent_id, 1 AS depth FROM jurisdictions WHERE id = %(start)s
+            UNION ALL
+            SELECT j.id, j.parent_id, chain.depth + 1
+            FROM jurisdictions j JOIN chain ON j.id = chain.parent_id
+            WHERE chain.depth < 10
+        )
+        SELECT id FROM chain ORDER BY depth;
+    """
+    with get_conn() as conn:
+        rows = conn.execute(sql, {"start": jurisdiction_id}).fetchall()
+    return [r["id"] for r in rows] if rows else [jurisdiction_id]
+
+
 # ════════════════════════════════════════════════
 #  DOCUMENTS
 # ════════════════════════════════════════════════
@@ -121,6 +148,7 @@ def insert_document(
     project_id: UUID | None = None,
     uploaded_by: UUID | None = None,
     content_class: str = "authority",  # migration 031: 'authority' | 'how_to'
+    overlay_id: UUID | None = None,  # migration 038: linked overlay petition, if any
 ) -> dict[str, Any]:
     """
     Insert a document row. Returns the full row as a dict.
@@ -138,7 +166,7 @@ def insert_document(
             doc_type, subject_tags, effective_date, document_status,
             is_current, retrieval_weight, review_due,
             checksum_sha256, source_etag, local_path, source_tier,
-            project_id, uploaded_by, content_class
+            project_id, uploaded_by, content_class, overlay_id
         ) VALUES (
             %(doc_id)s, %(source_url)s, %(municipality)s,
             %(authority_level)s::authority_level,
@@ -147,7 +175,8 @@ def insert_document(
             %(effective_date)s, %(document_status)s::document_status,
             %(is_current)s, %(retrieval_weight)s, %(review_due)s,
             %(checksum_sha256)s, %(source_etag)s, %(local_path)s,
-            %(source_tier)s, %(project_id)s, %(uploaded_by)s, %(content_class)s
+            %(source_tier)s, %(project_id)s, %(uploaded_by)s, %(content_class)s,
+            %(overlay_id)s
         )
         ON CONFLICT (doc_id) DO UPDATE SET
             source_url       = EXCLUDED.source_url,
@@ -166,7 +195,8 @@ def insert_document(
             source_tier      = EXCLUDED.source_tier,
             project_id       = EXCLUDED.project_id,
             uploaded_by      = EXCLUDED.uploaded_by,
-            content_class    = EXCLUDED.content_class
+            content_class    = EXCLUDED.content_class,
+            overlay_id       = EXCLUDED.overlay_id
         RETURNING *;
     """
     params = {
@@ -188,6 +218,7 @@ def insert_document(
         "project_id": project_id,
         "uploaded_by": uploaded_by,
         "content_class": content_class,
+        "overlay_id": overlay_id,
     }
     with get_conn() as conn:
         row = conn.execute(sql, params).fetchone()
@@ -249,6 +280,201 @@ def list_documents(
 
     with get_conn() as conn:
         return conn.execute(sql, params).fetchall()
+
+
+def list_covered_municipalities() -> list[dict[str, Any]]:
+    """City-level jurisdictions with >=1 active, current, authority-class document.
+
+    Joined against `jurisdictions` for a display `name` (falls back to the raw
+    id if a document's municipality has no jurisdictions row yet). Restricted
+    to `level = 'city'` — county/state/federal municipality values exist in
+    `documents` too, but "which city is your project in" listings shouldn't
+    include them. Used by rag.coverage to tell "real coverage" apart from
+    jurisdictions that are seeded/advertised but have no retrievable content.
+    """
+    sql = """
+        SELECT DISTINCT d.municipality AS id, COALESCE(j.name, d.municipality) AS name
+        FROM documents d
+        LEFT JOIN jurisdictions j ON j.id = d.municipality
+        WHERE d.document_status = 'active' AND d.is_current = true
+          AND d.content_class = 'authority'
+          AND (j.id IS NULL OR j.level = 'city')
+        ORDER BY name;
+    """
+    with get_conn() as conn:
+        rows = conn.execute(sql).fetchall()
+    return [{"id": r["id"], "name": r["name"]} for r in rows]
+
+
+def match_overlay_chunks(
+    query_embedding: list[float],
+    *,
+    latitude: float,
+    longitude: float,
+    top_k: int = 5,
+    min_similarity: float = 0.0,
+) -> list[dict[str, Any]]:
+    """
+    Dense search over documents linked to an APPROVED overlay whose geometry
+    contains (latitude, longitude) — migration 038.
+
+    This is what makes a petitioned historic/conservation-district or HOA
+    document surface for ANY project physically inside its tight boundary, not
+    just the project that originally petitioned it.
+    """
+    sql = """
+        SELECT
+            c.id, c.document_id, d.doc_id, c.content, c.chunk_index,
+            d.municipality, d.authority_level, d.doc_type, d.document_status,
+            c.status AS chunk_status, d.source_tier, d.ingested_at,
+            d.retrieval_weight,
+            1 - (c.embedding <=> %(query_embedding)s::vector) AS similarity
+        FROM chunks c
+        JOIN documents d ON d.id = c.document_id
+        JOIN overlays o ON o.id = d.overlay_id
+        WHERE o.status = 'approved'
+          AND o.geom IS NOT NULL
+          AND ST_Contains(o.geom, ST_SetSRID(ST_MakePoint(%(lng)s, %(lat)s), 4326))
+          AND d.document_status = 'active' AND d.is_current = true
+          AND c.status = 'active'
+        ORDER BY c.embedding <=> %(query_embedding)s::vector
+        LIMIT %(top_k)s;
+    """
+    params = {
+        "query_embedding": str(query_embedding),
+        "lat": latitude,
+        "lng": longitude,
+        "top_k": top_k,
+    }
+    with get_conn() as conn:
+        rows = conn.execute(sql, params).fetchall()
+    if min_similarity > 0.0:
+        rows = [r for r in rows if r["similarity"] >= min_similarity]
+    return rows
+
+
+# ════════════════════════════════════════════════
+#  OVERLAYS (migration 038) — historic/conservation/HOA petitions
+# ════════════════════════════════════════════════
+
+
+def create_overlay_petition(
+    *,
+    name: str,
+    overlay_type: str,
+    jurisdiction_id: str | None,
+    petitioned_by: UUID | None,
+    petitioning_project_id: UUID,
+    latitude: float,
+    longitude: float,
+    buffer_meters: float = 200.0,
+    notes: str | None = None,
+) -> dict[str, Any]:
+    """
+    Create a 'petitioned' overlay with a coarse default geometry.
+
+    The default geometry is a circular buffer (in real meters, via a
+    geography cast) around the petitioning project's point — a v1 petitioner
+    isn't expected to hand-draw a precise polygon. Staff can replace it with a
+    refined boundary at/before approval (see approve_overlay).
+    """
+    sql = """
+        INSERT INTO overlays (
+            name, overlay_type, jurisdiction_id, geom, status,
+            petitioned_by, petitioning_project_id, notes
+        ) VALUES (
+            %(name)s, %(overlay_type)s::overlay_type, %(jurisdiction_id)s,
+            ST_Multi(ST_Buffer(
+                ST_SetSRID(ST_MakePoint(%(lng)s, %(lat)s), 4326)::geography,
+                %(buffer_meters)s
+            )::geometry),
+            'petitioned', %(petitioned_by)s, %(petitioning_project_id)s, %(notes)s
+        )
+        RETURNING *;
+    """
+    params = {
+        "name": name,
+        "overlay_type": overlay_type,
+        "jurisdiction_id": jurisdiction_id,
+        "lat": latitude,
+        "lng": longitude,
+        "buffer_meters": buffer_meters,
+        "petitioned_by": petitioned_by,
+        "petitioning_project_id": petitioning_project_id,
+        "notes": notes,
+    }
+    with get_conn() as conn:
+        row = conn.execute(sql, params).fetchone()
+        conn.commit()
+    log.info("Created overlay petition: %s (%s) for project=%s", row["id"], name, petitioning_project_id)
+    return row
+
+
+def get_overlay(overlay_id: UUID) -> dict[str, Any] | None:
+    """Fetch a single overlay row by id."""
+    sql = "SELECT * FROM overlays WHERE id = %s;"
+    with get_conn() as conn:
+        return conn.execute(sql, (overlay_id,)).fetchone()
+
+
+def list_pending_overlay_petitions() -> list[dict[str, Any]]:
+    """List overlays awaiting staff review, oldest first."""
+    sql = "SELECT * FROM overlays WHERE status = 'petitioned' ORDER BY created_at ASC;"
+    with get_conn() as conn:
+        return conn.execute(sql).fetchall()
+
+
+def approve_overlay(
+    overlay_id: UUID,
+    *,
+    approved_by: UUID | None,
+    geojson_polygon: str | None = None,
+) -> dict[str, Any] | None:
+    """
+    Approve a petitioned overlay, making its documents retrievable project-wide.
+
+    If ``geojson_polygon`` (a GeoJSON geometry as a JSON string) is given, it
+    replaces the petitioner's default buffer with a refined "tight boundary"
+    before approving. Otherwise the existing geometry (the default buffer, if
+    never refined) stands as the approved boundary.
+    """
+    if geojson_polygon:
+        sql = """
+            UPDATE overlays
+            SET status = 'approved', approved_by = %(approved_by)s, approved_at = now(),
+                geom = ST_Multi(ST_SetSRID(ST_GeomFromGeoJSON(%(geojson)s), 4326))
+            WHERE id = %(overlay_id)s
+            RETURNING *;
+        """
+        params = {"overlay_id": overlay_id, "approved_by": approved_by, "geojson": geojson_polygon}
+    else:
+        sql = """
+            UPDATE overlays
+            SET status = 'approved', approved_by = %(approved_by)s, approved_at = now()
+            WHERE id = %(overlay_id)s
+            RETURNING *;
+        """
+        params = {"overlay_id": overlay_id, "approved_by": approved_by}
+    with get_conn() as conn:
+        row = conn.execute(sql, params).fetchone()
+        conn.commit()
+    if row:
+        log.info("Approved overlay %s by %s", overlay_id, approved_by)
+    return row
+
+
+def reject_overlay(overlay_id: UUID, *, approved_by: UUID | None) -> dict[str, Any] | None:
+    """Reject a petitioned overlay. Reuses approved_by/approved_at as the reviewer/review-time fields."""
+    sql = """
+        UPDATE overlays
+        SET status = 'rejected', approved_by = %(approved_by)s, approved_at = now()
+        WHERE id = %(overlay_id)s
+        RETURNING *;
+    """
+    with get_conn() as conn:
+        row = conn.execute(sql, {"overlay_id": overlay_id, "approved_by": approved_by}).fetchone()
+        conn.commit()
+    return row
 
 
 def get_document_status_counts(
@@ -604,7 +830,7 @@ def match_chunks(
     query_embedding: list[float],
     *,
     top_k: int = 5,
-    municipality: str | None = None,
+    municipalities: list[str] | None = None,
     min_similarity: float = 0.0,
 ) -> list[dict[str, Any]]:
     """
@@ -612,14 +838,19 @@ def match_chunks(
 
     Calls the pgvector cosine-distance search defined in db/schema.sql. As of
     migration 031 the SQL function is scoped to ``content_class = 'authority'`` —
-    how-to video transcripts are excluded from compliance retrieval **in SQL**, so
-    this signature is unchanged and no caller passes a class. Returns up to *top_k*
-    chunks ordered by source_tier ASC then descending similarity.
+    how-to video transcripts are excluded from compliance retrieval **in SQL**.
+    As of migration 037, ``filter_municipality`` is a jurisdiction chain
+    (``text[]``) rather than a single string, so a city-scoped query also
+    matches its county/state/federal documents instead of excluding them.
+    Returns up to *top_k* chunks ordered by source_tier ASC then descending
+    similarity.
 
     Args:
         query_embedding: 768-dim float vector (nomic-embed-text query).
         top_k: Maximum number of chunks to return.
-        municipality: Optional filter (e.g. "dallas", "plano").
+        municipalities: Optional jurisdiction chain to filter by, e.g.
+            ``["dallas", "dallas-county", "texas", "federal"]``. Pass None for
+            no filter.
         min_similarity: Discard results below this cosine similarity.
 
     Returns:
@@ -638,7 +869,7 @@ def match_chunks(
     params = {
         "query_embedding": str(query_embedding),
         "match_count": top_k,
-        "filter_municipality": municipality,
+        "filter_municipality": municipalities,
     }
     with get_conn() as conn:
         rows = conn.execute(sql, params).fetchall()
@@ -648,8 +879,8 @@ def match_chunks(
         rows = [r for r in rows if r["similarity"] >= min_similarity]
 
     log.info(
-        "match_chunks: %d results (top_k=%d, municipality=%s)",
-        len(rows), top_k, municipality,
+        "match_chunks: %d results (top_k=%d, municipalities=%s)",
+        len(rows), top_k, municipalities,
     )
     return rows
 
@@ -838,7 +1069,7 @@ def _search_chunks_with_tsquery(
     query_text: str,
     *,
     top_k: int,
-    municipality: str | None,
+    municipalities: list[str] | None,
     tsquery_func: str,
 ) -> list[dict[str, Any]]:
     """Run lexical chunk search using the provided tsquery parser."""
@@ -865,13 +1096,13 @@ def _search_chunks_with_tsquery(
           AND d.is_current = true
           AND c.status = 'active'
           AND c.search_vector @@ {tsquery_func}('english', %(query_text)s)
-          AND (%(municipality)s::text IS NULL OR d.municipality = %(municipality)s::text)
+          AND (%(municipalities)s::text[] IS NULL OR d.municipality = ANY(%(municipalities)s::text[]))
         ORDER BY similarity DESC, c.chunk_index ASC
         LIMIT %(top_k)s;
     """
     params = {
         "query_text": query_text,
-        "municipality": municipality,
+        "municipalities": municipalities,
         "top_k": top_k,
     }
     with get_conn() as conn:
@@ -882,31 +1113,34 @@ def search_chunks_bm25(
     query_text: str,
     *,
     top_k: int = 5,
-    municipality: str | None = None,
+    municipalities: list[str] | None = None,
 ) -> list[dict[str, Any]]:
     """
     Lexical retrieval using chunks.search_vector with BM25-style ranking.
 
     Returns the same row shape as match_chunks(), where similarity maps to
-    ts_rank_cd score for compatibility with downstream ranking.
+    ts_rank_cd score for compatibility with downstream ranking. `municipalities`
+    is a jurisdiction chain (see match_chunks) rather than a single string, so
+    hybrid retrieval stays consistent with the dense path once
+    RETRIEVAL_HYBRID_ENABLED is turned on.
     """
     try:
         rows = _search_chunks_with_tsquery(
             query_text,
             top_k=top_k,
-            municipality=municipality,
+            municipalities=municipalities,
             tsquery_func="websearch_to_tsquery",
         )
     except psycopg.Error:
         rows = _search_chunks_with_tsquery(
             query_text,
             top_k=top_k,
-            municipality=municipality,
+            municipalities=municipalities,
             tsquery_func="plainto_tsquery",
         )
     log.info(
-        "search_chunks_bm25: %d results (top_k=%d, municipality=%s)",
-        len(rows), top_k, municipality,
+        "search_chunks_bm25: %d results (top_k=%d, municipalities=%s)",
+        len(rows), top_k, municipalities,
     )
     return rows
 

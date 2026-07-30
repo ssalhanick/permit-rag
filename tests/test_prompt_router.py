@@ -89,6 +89,16 @@ def test_fort_worth_alias_maps_to_fragment() -> None:
     assert any(i.startswith("jurisdiction:fort_worth@") for i in routed.fragment_ids)
 
 
+def test_fortworth_corpus_spelling_maps_to_fragment() -> None:
+    """Regression guard: 'fortworth' (no separator) is the real seeded jurisdiction
+    id (db/seeds/jurisdictions.sql) — a different string from 'ftworth', which was
+    already aliased. Before this alias existed, this spelling fell through to the
+    no-op slug fallback and never matched fort_worth.md."""
+    routed = route(persona="research", jurisdiction="fortworth")
+    assert any(i.startswith("jurisdiction:fort_worth@") for i in routed.fragment_ids)
+    assert "jurisdiction:fortworth" not in routed.missing
+
+
 def test_missing_fragment_is_recorded_not_fatal() -> None:
     routed = route(persona="research", jurisdiction="Nowhereville")
     assert "jurisdiction:nowhereville" in routed.missing

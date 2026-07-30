@@ -226,3 +226,29 @@ def municipality_from_address(address: str) -> str | None:
         return None
     resolution = resolve_jurisdiction(address)
     return resolution.jurisdiction_id
+
+
+# ── Client-supplied jurisdiction validation ───────────────────
+
+
+def validate_jurisdiction_id(raw: str | None) -> tuple[str | None, str | None]:
+    """
+    Canonicalize a client-supplied municipality spelling and confirm it's known.
+
+    Returns (jurisdiction_id, None) once canonicalized, if that id has a row in
+    `jurisdictions` — or (None, error) if not. Does NOT reject an unrecognized
+    id as invalid: db/seeds/jurisdictions.sql's own comment lists several DFW
+    cities as legitimate future jurisdictions ("add when corpus documents are
+    ingested"), so creating a project for one of those today is expected, not
+    a bad request. Callers decide what to do with an unknown result — e.g.
+    rag.coverage turns it into a user-facing "outside coverage" signal.
+    """
+    from db.client import get_jurisdiction
+    from rag.jurisdiction_ids import canonicalize
+
+    candidate = canonicalize(raw)
+    if candidate is None:
+        return None, "no municipality provided"
+    if get_jurisdiction(candidate) is None:
+        return None, f"unknown jurisdiction: {candidate!r}"
+    return candidate, None

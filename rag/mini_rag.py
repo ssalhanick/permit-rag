@@ -44,6 +44,33 @@ def retrieve_project_chunks(
     )
 
 
+def retrieve_overlay_chunks(
+    query: str,
+    *,
+    latitude: float,
+    longitude: float,
+    top_k: int = 5,
+    min_similarity: float = 0.0,
+) -> list[dict[str, Any]]:
+    """
+    Embed query and retrieve chunks from any APPROVED overlay (historic/
+    conservation district, HOA) whose boundary contains (latitude, longitude)
+    — migration 038. Runs for any project physically inside the boundary, not
+    just the project that petitioned the overlay.
+    """
+    from db.client import match_overlay_chunks
+    from ingestion.embedder import embed_query
+
+    query_vec = embed_query(query)
+    return match_overlay_chunks(
+        query_vec,
+        latitude=latitude,
+        longitude=longitude,
+        top_k=top_k,
+        min_similarity=min_similarity,
+    )
+
+
 def merge_corpus_and_project(
     corpus_chunks: list[dict[str, Any]],
     project_chunks: list[dict[str, Any]],

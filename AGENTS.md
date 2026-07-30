@@ -4,8 +4,11 @@
 
 You are working on permit_rag, a RAG-powered construction permit
 compliance tool for the DFW market. Contractors and project managers
-query it to get cited answers from Dallas, Plano, Frisco, McKinney,
-and Fort Worth municipal codes, plus Texas state and federal regs.
+query it to get cited answers from Dallas, Plano, and Fort Worth
+municipal codes, plus Texas state and federal regs. (Frisco and
+McKinney are seeded jurisdictions with no real ingested documents yet
+— see docs/backlog.md — do not describe them as covered until that
+changes.)
 
 ## Response Style (token optimization)
 - Bullets over prose; no restating context already established
