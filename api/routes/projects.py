@@ -76,14 +76,15 @@ def create_project(body: CreateProjectRequest, current_user: CurrentUser) -> dic
         from rag.jurisdiction_resolver import resolve_jurisdiction
         try:
             res = resolve_jurisdiction(body.address)
-            if res.municipality:
-                municipality = res.municipality
+            if res.jurisdiction_id:
+                municipality = res.jurisdiction_id
             if res.geocode:
                 latitude = res.geocode.lat
                 longitude = res.geocode.lng
-        except Exception as e:
-            import logging
-            logging.getLogger(__name__).warning("create_project: Failed to auto-resolve jurisdiction for %r: %s", body.address, e)
+        except Exception:
+            log.exception(
+                "create_project: Failed to auto-resolve jurisdiction for %r", body.address
+            )
 
     if latitude is not None and longitude is not None:
         from rag.gis import lookup_jurisdiction_overlays
@@ -216,6 +217,21 @@ def update_project(
     _require_role(project_id, current_user["user_id"], {"owner", "editor"}, current_user)
 
     update_fields = body.model_dump(exclude_unset=True)
+
+    if update_fields.get("address") and "municipality" not in update_fields:
+        from rag.jurisdiction_resolver import resolve_jurisdiction
+        try:
+            res = resolve_jurisdiction(update_fields["address"])
+            if res.jurisdiction_id:
+                update_fields["municipality"] = res.jurisdiction_id
+            if res.geocode:
+                update_fields.setdefault("latitude", res.geocode.lat)
+                update_fields.setdefault("longitude", res.geocode.lng)
+        except Exception:
+            log.exception(
+                "update_project: Failed to auto-resolve jurisdiction for "
+                "project_id=%s address=%r", project_id, update_fields["address"],
+            )
 
     db_params = {}
     for field in [
