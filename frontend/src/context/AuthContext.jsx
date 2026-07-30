@@ -490,6 +490,22 @@ export function AuthProvider({ children }) {
     return () => cleanup();
   }, [handleOAuthCallback]);
 
+  // ── Refresh profile (e.g. after creating a contractor profile) ─
+
+  const refreshUser = useCallback(async () => {
+    const idToken = localStorage.getItem("access_token");
+    if (!idToken) {
+      return null;
+    }
+    try {
+      const profile = await _fetchMe(idToken);
+      setUser(profile);
+      return profile;
+    } catch {
+      return null;
+    }
+  }, []);
+
   // ── Logout ────────────────────────────────────────────────────
 
   const logout = useCallback(() => {
@@ -520,6 +536,7 @@ export function AuthProvider({ children }) {
         loginWithGoogle,
         loginWithApple,
         handleOAuthCallback,
+        refreshUser,
         logout,
       }}
     >

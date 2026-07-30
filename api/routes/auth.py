@@ -46,6 +46,7 @@ def get_me(current_user: Annotated[dict, Depends(get_current_user)]) -> UserMeRe
         cognito_sub=user["cognito_sub"],
         created_at=user["created_at"],
         active_project_id=user.get("active_project_id"),
+        has_contractor_profile=db_client.contractor_profile_exists(user["id"]),
     )
 
 
@@ -73,6 +74,7 @@ def set_active_project(
         cognito_sub=user["cognito_sub"],
         created_at=user["created_at"],
         active_project_id=user.get("active_project_id"),
+        has_contractor_profile=db_client.contractor_profile_exists(user["id"]),
     )
 
 

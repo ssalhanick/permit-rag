@@ -65,6 +65,9 @@ rag/        →  may import: db/, audit/, standard library only
 rag/agents/ →  may import: rag/, db/, audit/, standard library only
 commerce/   →  may import: db/, standard library only
 forms/      →  may import: db/, standard library only
+bids/       →  may import: db/, commerce/, rag/agent_runtime (the single Anthropic
+                call site, for the LLM-assisted novel-red-flag pass only), standard
+                library only
 api/        →  may import: rag/, commerce/, db/, audit/, standard library only
 audit/      →  may import: db/, standard library only
 evaluation/ →  may import: rag/, db/, standard library only

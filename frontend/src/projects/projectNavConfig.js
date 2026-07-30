@@ -11,6 +11,7 @@ export function getProjectNavItems(projectId) {
   return [
     { label: "Dashboard", path: `${base}/dashboard`, end: true },
     { label: "Room Scans", path: `${base}/scans` },
+    { label: "Bidding", path: `${base}/bidding` },
     { label: "Query History", path: `${base}/queries` },
     { label: "Documents", path: `${base}/documents` },
     { label: "Members", path: `${base}/members` },
@@ -22,6 +23,7 @@ export function getProjectNavItems(projectId) {
 export const PROJECT_PAGE_TITLES = {
   dashboard: "Project Dashboard",
   scans: "Room Scans",
+  bidding: "Bidding",
   queries: "Query History",
   documents: "Documents",
   members: "Members",

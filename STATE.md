@@ -64,11 +64,75 @@ Full detail: `journals/session_20260726_phase5.md`,
 > **Migration numbering.** Phase 3 → **028** (prod). Phase 4 → **029** (prod +
 > machine B). Media Curator → **030** + **031** (prod + machine B) + **032**
 > (channel crawl, prod). Phase 5 → **033** (`answer_feedback`, applied prod
-> 2026-07-26). **Phase 6 (ontology/bids) reserved at 034** (unshipped).
-> **Query-session grouping → 035** (`query_log.session_id`, applied prod
-> 2026-07-28). 027 is `027_agent_action_item_dedupe`; the duplicate 026
-> (`026_agent_traces.sql` / `026_design_intent_usage_project_fk.sql`) is
-> recorded, not renamed — both already applied by name on multiple DBs.
+> 2026-07-26). **Phase 6 (ontology/bids) reserved at 034** (unshipped) — see
+> `docs/agent_architecture.md`'s "What the Field Ontology actually is": parts
+> 1-3+7 are the already-shipped ontology *core* (`forms/ontology.py`, no
+> migration, Phase 5); part 4 (the per-form mapping corpus —
+> `form_templates`/`field_mappings`) plus whatever the Bid Evaluator's
+> PDF-upload extraction needs is what 034 actually holds. **It is not a slot
+> for any table that merely backs an ontology-sourced field** — a mistake
+> made once on this branch and corrected (see below). **Query-session
+> grouping → 035** (`query_log.session_id`, applied prod 2026-07-28).
+> **Room-image metering → 036** (`design_intent_usage.kind`, applied prod,
+> see room-scan session). 027 is `027_agent_action_item_dedupe`; the
+> duplicate 026 (`026_agent_traces.sql` / `026_design_intent_usage_project_fk.sql`)
+> is recorded, not renamed — both already applied by name on multiple DBs.
+>
+> **Full reservation ledger as of 2026-07-30 (three concurrent plans, NOT
+> actually all on one branch — see the branch-divergence note right below
+> this list before assuming otherwise):** **034** — `034_ontology_and_bids.sql`,
+> the real Phase 6 deliverable (`form_templates` + `field_mappings`, schema
+> only — the PDF-parsing agent and review dashboard are unbuilt Phase 7
+> work). **037-038 — ALREADY COMMITTED, not merely reserved**, on branch
+> `fixes/jurisdiction-phase-1-5` (commit `886d79d`, 2026-07-30, 3 commits
+> ahead of this branch's own base `a3e0feb`): `037_match_chunks_jurisdiction_hierarchy.sql`
+> (jurisdiction-chain retrieval) and `038_overlays.sql` (historic/conservation/HOA
+> overlays — **not** `038_jurisdiction_fk_constraints.sql` as originally
+> planned in `docs/jurisdiction_and_gis_runbook.md`; that optional
+> FK-constraints migration is now reserved at **039** per that branch's own
+> STATE.md, not yet created). Code-complete with passing tests
+> (`api/routes/overlays.py`, 226 lines; `frontend/src/projects/pages/ProjectPetitionPage.jsx`,
+> 201 lines; `rag/coverage.py`; full test files) but **applied to no
+> database anywhere**. **The document-upload plan's own `039_overlays.sql`
+> is very likely redundant with the already-built `038_overlays.sql` +
+> `api/routes/overlays.py`** — whoever resumes that plan should decide
+> whether to scrap its overlays migration and extend the existing,
+> working implementation (its boundary computation is a simple buffer;
+> the parcel-lookup/union approach was the planned upgrade) rather than
+> build a second, competing overlay system. **040** — document-upload plan,
+> `040_document_visibility.sql`. **041** — document-upload plan,
+> `041_user_trust.sql` (nothing else claims 040/041 as of this writing).
+> **042-043** — contractor marketplace, `042_marketplace_listings.sql` +
+> `043_bids_core.sql` (moved here from 037-038, then again from 039-040,
+> after each collided with one of the other two plans in turn). **044** —
+> contractor marketplace, `044_contractor_profiles.sql` (`contractor_profiles`
+> + `contractor_licenses` — moved off 034 once it was clear that slot was
+> never for this; a contractor account backing one ontology-sourced field
+> is not the same thing as the ontology's own per-form mapping corpus).
+> **Next unclaimed number is 045.**
+>
+> **Branch divergence, not sequencing — needs a real decision, not just a
+> numbering fix.** `feat/bidding-marketplace` (this branch) has **zero
+> commits** of its own — everything from the contractor-marketplace session
+> is still uncommitted working-tree changes on top of `a3e0feb`.
+> `fixes/jurisdiction-phase-1-5` has 3 real commits ahead of that exact same
+> `a3e0feb` point. These are not "sequential on one branch" as originally
+> assumed — they're two independently-progressed lines from a shared
+> ancestor, and reconciling them is a real git operation, not a bookkeeping
+> exercise. Concretely: (1) both branches heavily edit `STATE.md` — a
+> near-certain textual conflict whenever they're combined; (2) both add new
+> router registrations to `api/main.py`/`api/routes/__init__.py` in
+> adjacent alphabetical positions (`marketplace_router` vs. `overlays_router`,
+> both slotting between `documents_router` and `projects_router`) — a small,
+> easily-resolved conflict, but a real one. Because this branch has no
+> commits yet, **rebasing the marketplace work onto `fixes/jurisdiction-phase-1-5`'s
+> tip** (rather than merging two committed histories later) is on the table
+> and may be the lower-friction path — but that's Scott's call, not
+> something to do unilaterally. Before claiming a new migration number:
+> check this note AND
+> `ls db/migrations/ | sort -V | tail -5` AND grep planning docs for
+> hardcoded numbers — a plan doc claiming a number doesn't show up in the
+> directory listing until its migration file actually exists.
 
 ## Verification — which machine runs what
 
@@ -152,7 +216,8 @@ AGENTS.md "completed work → journal only."_
 2. **Pre-existing, not phase-blocking:** q6 (building height) + q1
    (electrical) faithfulness; the `NLI inference failed ('type')` classifier
    warning (falls back to keyword rules, non-fatal).
-3. **Doc health check batch 4 (2026-07-28) — closed.** Sprint 11 (doc
+3. **Bidding marketplace, jurisdiction runbook, document uploads — sequenced on one shared branch (2026-07-30).** `feat/bidding-marketplace` is code-complete (contractor profiles/licensing, marketplace browse/listing, structured bids + Bid Evaluator reuse — see `bids/`, `commerce/connectors/`, migrations `042`-`044`) **plus the actual Phase 6 ontology deliverable, `034_ontology_and_bids.sql`** (`form_templates`/`field_mappings` schema, per `docs/agent_architecture.md` — the PDF-parsing agent and review dashboard are still unbuilt Phase 7 work). 681 tests passing (75 new, mocked — no live DB/browser walkthrough yet, this machine's DB is empty). Agreed sequencing: this branch stays put and is not merged/replaced — jurisdiction runbook work (`docs/jurisdiction_and_gis_runbook.md`) continues next **on this same branch**, then document-uploads work after that — a **separate plan Scott is actively revising** as of 2026-07-30 (not runbook Phase 4's overlay/petition system); its own plan doc/asset is forthcoming, not yet in this repo. Whoever picks up jurisdiction next: migrations **037-038 are still free**, confirmed in the numbering note above — no renumbering needed.
+4. **Doc health check batch 4 (2026-07-28) — closed.** Sprint 11 (doc
    governance UI) and Sprint 12 (profile dashboard) confirmed shipped via
    code; `docs/backlog.md` re-confirmed still current; `docs/ux_audit_260703.md`
    spot-checked — all 4 P0s fixed. **Remainder, code-verified but not
@@ -279,6 +344,7 @@ should have been 027. Recorded, not renamed. The dedupe correction is
 | **Media migration takes 030** | `text + CHECK` (no enum ALTERs), `UNIQUE (task_key, url)` for idempotent seeding. Media links are *data* that changes without a code deploy, so a table (not files) is right — opposite of the fragment-library call |
 | **Answer feedback is its own table, not `agent_corrections`** | Answer-level thumbs are high-volume/weak-signal; `agent_corrections` is an *attributed correction*. A thumbs-up isn't a correction. `033_answer_feedback` captures the raw vote; a thumbs-down is what Performance Review #24 later reads with the run trace to write the attributed correction |
 | **Phase 5 feedback migration takes 033; Phase 6 → 034** | Phase 5 ships before Phase 6, so `033_answer_feedback` takes it and Phase-6 ontology/bids cascades to 034. The already-deployed `032` file's own comment still reads "cascades to 033" — a deployed migration is never edited, so this note is authoritative over that stale comment |
+| **034 is the ontology per-form mapping corpus, not any contractor-marketplace table (corrected 2026-07-30)** | An earlier pass on `feat/bidding-marketplace` built `034_contractor_profiles.sql`, reasoning that a contractor account backs an ontology-sourced field (`contractor.license_number`, `SourceBinding.PROFILE`) and so "fills" the Phase 6 slot. That conflates *related to* the ontology with *is* the ontology's Phase 6 deliverable — the actual reservation is Field Ontology part 4, the per-form mapping corpus (`form_templates`/`field_mappings`, `docs/agent_architecture.md`), unrelated to contractor accounts. Caught when Scott pushed back directly. Fixed: `034_ontology_and_bids.sql` now holds the real schema (`form_templates` + `field_mappings`, no PDF-parsing agent or review dashboard yet — that's Phase 7); `contractor_profiles`/`contractor_licenses` moved to `044_contractor_profiles.sql` |
 | **Performance Review #24 is batch-triggered, not on the query path** | Import boundary (`api/` can't import `evaluation/`) + cost budgeting (~$0.03/thumbs-down on opus) both point to batch. Trigger is `scripts/review_feedback.py` over the un-reviewed-down-vote queue, never a synchronous cost on the user's request |
 | **Perf Review never silent-blames** | Every review writes an *unconfirmed* `agent_corrections` row; a superadmin confirms attribution. Below `CONFIDENCE_FLOOR=0.6` the row carries no `attributed_agent` — a human assigns blame |
 | **Query sessions are custom, not LangChain** | The `session_id` grouping query-history threads is a plain Postgres column + client-generated UUID, unrelated to LangChain's own memory/session abstractions (not used in this codebase — only LangSmith, for tracing, is). The same `session_id` also tags the LangSmith trace for that thread — see `docs/langsmith_session_tracing.md` |

@@ -15,7 +15,8 @@ import {
   Layers,
   ChevronDown,
   LogIn,
-  ArrowRight
+  ArrowRight,
+  HardHat
 } from "lucide-react";
 import LogoSVG from "./components/LogoSVG.jsx";
 import ProjectSwitcher from "./components/ProjectSwitcher.jsx";
@@ -190,6 +191,15 @@ export default function Nav() {
                   >
                     <Layers className="w-4 h-4 text-slate-400" />
                     Room Scan Library
+                  </NavLink>
+
+                  <NavLink
+                    to={user.has_contractor_profile ? "/contractor/dashboard" : "/contractor/onboarding"}
+                    className="tt-dropdown-link"
+                    onClick={closeMenu}
+                  >
+                    <HardHat className="w-4 h-4 text-slate-400" />
+                    {user.has_contractor_profile ? "Contractor Dashboard" : "Become a Contractor"}
                   </NavLink>
 
                   {/* Superadmin Menu Items */}

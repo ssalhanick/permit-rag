@@ -32,9 +32,12 @@ from api.routes import (
     admin_router,
     agents_admin_router,
     auth_router,
+    bids_router,
     commerce_router,
+    contractors_router,
     corpus_router,
     documents_router,
+    marketplace_router,
     projects_router,
     pull_router,
     query_router,
@@ -67,6 +70,16 @@ def _register_di_agents() -> None:
             parallel_safe=True,  # documents validate independently
             metrics=("metadata_field_precision", "date_extraction_accuracy",
                      "false_flag_rate"),
+        ),
+        replace=True,
+    )
+    register(
+        AgentSpec(
+            name="bid_evaluator",
+            callable=lazy("bids.evaluator", "evaluate_bid"),
+            tier=Tier.MID,
+            parallel_safe=True,  # bids evaluate independently
+            metrics=("field_accuracy", "red_flag_precision_recall", "price_mape"),
         ),
         replace=True,
     )
@@ -177,6 +190,9 @@ api_router.include_router(pull_router)
 api_router.include_router(auth_router)
 api_router.include_router(projects_router)
 api_router.include_router(commerce_router)
+api_router.include_router(contractors_router)
+api_router.include_router(marketplace_router)
+api_router.include_router(bids_router)
 api_router.include_router(corpus_router)
 app.include_router(api_router)
 

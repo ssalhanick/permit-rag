@@ -69,6 +69,41 @@ def record_image_usage(user_id: UUID, *, model: str) -> None:
     )
 
 
+def check_bid_evaluation_cap(user_id: UUID) -> None:
+    """
+    Raise HTTP 429 when the user exceeds the monthly bid-evaluation cap.
+
+    The evaluator's LLM-assisted novel-flag pass bills per call like room-image
+    generation does, so it's capped by count rather than by tokens.
+    """
+    cap = int(os.environ.get("BID_EVALUATION_MONTHLY_CAP", "200"))
+    if cap <= 0:
+        return
+    used = db_client.count_design_intent_usage(
+        user_id,
+        since=_month_start(),
+        kind="bid_evaluation",
+    )
+    if used >= cap:
+        raise HTTPException(
+            status_code=429,
+            detail=f"Bid evaluation cap reached ({used}/{cap} this month).",
+        )
+
+
+def record_bid_evaluation_usage(user_id: UUID, *, model: str, project_id: UUID | None = None) -> None:
+    """Log one bid-evaluation LLM pass for cap accounting and audit."""
+    db_client.insert_design_intent_usage(
+        user_id=user_id,
+        project_id=project_id,
+        room_scan_id=None,
+        input_tokens=0,
+        output_tokens=0,
+        model=model,
+        kind="bid_evaluation",
+    )
+
+
 def _resolve_room_scan_row(rows: list[dict[str, Any]], scan_id: UUID) -> dict[str, Any]:
     """Find a room scan row by id or raise 404."""
     row = next((r for r in rows if r["id"] == scan_id), None)

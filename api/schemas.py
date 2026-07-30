@@ -572,6 +572,11 @@ class SetProjectStatusRequest(BaseModel):
     is_archived: bool
 
 
+class SetMarketplaceStatusRequest(BaseModel):
+    """Payload to open/close a project for contractor bidding."""
+    marketplace_status: str = Field(..., pattern=r"^(unlisted|open|awarded|closed)$")
+
+
 class ProjectResponse(BaseModel):
     """Project representation response."""
     id: UUID
@@ -598,6 +603,10 @@ class ProjectResponse(BaseModel):
     custom_system_prompt: str | None = None
     experience: str | None = None
     project_notes: str | None = None
+    marketplace_status: str = "unlisted"
+    listed_at: datetime | None = None
+    bidding_closes_at: datetime | None = None
+    awarded_bid_id: UUID | None = None
 
 
 class KickoffChatMessage(BaseModel):
@@ -791,6 +800,112 @@ class MaterialsEstimateResponse(BaseModel):
     disclaimer: str = "Estimate only — confirm quantities and prices in store."
 
 
+class BidLineItemRequest(BaseModel):
+    """One line item within a bid submission."""
+    description: str = Field(..., min_length=1, max_length=300)
+    quantity: float = Field(..., gt=0)
+    unit: str = Field(..., min_length=1, max_length=20)
+    unit_price: float = Field(..., ge=0)
+    labor_amount: float = Field(default=0, ge=0)
+    material_amount: float = Field(default=0, ge=0)
+    labor_hours: float | None = Field(default=None, ge=0)
+    canonical_work_item: str | None = None
+
+
+class CreateBidRequest(BaseModel):
+    """Payload to submit a structured bid on an open project — shaped to match
+    the BidDocument schema the Bid Evaluator (docs/agent_architecture.md) was
+    designed around."""
+    license_id: UUID
+    line_items: list[BidLineItemRequest] = Field(..., min_length=1)
+    allowances: list[dict] = Field(default_factory=list, description="[{description, amount}]")
+    exclusions: list[dict] = Field(default_factory=list, description="[{description}]")
+    payment_schedule: list[dict] = Field(default_factory=list, description="[{milestone, percent|amount, trigger}]")
+    permit_responsibility: str | None = Field(default=None, pattern=r"^(contractor|homeowner)$")
+    timeline_start: date | None = None
+    timeline_end: date | None = None
+    timeline_notes: str | None = Field(default=None, max_length=500)
+    warranty_text: str | None = Field(default=None, max_length=1000)
+    warranty_years: float | None = Field(default=None, ge=0, le=50)
+    change_order_terms: str | None = Field(default=None, max_length=1000)
+    lien_waiver_included: bool = False
+    materials_source: str = Field(
+        default="unspecified",
+        pattern=r"^(unspecified|homeowner_supplied|contractor_supplied_manual|contractor_supplied_connector)$",
+    )
+    materials_source_connector: str | None = None
+    materials_source_notes: str | None = Field(default=None, max_length=500)
+    notes: str | None = Field(default=None, max_length=2000)
+
+
+class BidLineItemResponse(BaseModel):
+    """One line item as stored."""
+    id: UUID
+    description: str
+    quantity: float
+    unit: str
+    unit_price: float
+    labor_amount: float
+    material_amount: float
+    labor_hours: float | None = None
+    canonical_work_item: str | None = None
+
+
+class BidEvaluationResponse(BaseModel):
+    """The Bid Evaluator's scored output for one bid — completeness, red
+    flags (deterministic + LLM-assisted novel flags), and price-reasonableness
+    per line item. Estimates only; see disclaimer."""
+    completeness_score: float
+    missing_clauses: list[str]
+    red_flags: list[dict]
+    price_assessments: list[dict]
+    llm_flags: list[dict]
+    disclaimer: str
+
+
+class BidResponse(BaseModel):
+    """A contractor's bid on a project."""
+    id: UUID
+    project_id: UUID
+    contractor_profile_id: UUID
+    contractor_business_name: str | None = None
+    license_id: UUID
+    status: str
+    total_price: float
+    labor_total: float | None = None
+    material_total: float | None = None
+    allowances: list[dict] = Field(default_factory=list)
+    exclusions: list[dict] = Field(default_factory=list)
+    payment_schedule: list[dict] = Field(default_factory=list)
+    permit_responsibility: str | None = None
+    timeline_start: date | None = None
+    timeline_end: date | None = None
+    timeline_notes: str | None = None
+    warranty_text: str | None = None
+    warranty_years: float | None = None
+    change_order_terms: str | None = None
+    lien_waiver_included: bool
+    materials_source: str
+    materials_source_connector: str | None = None
+    materials_source_notes: str | None = None
+    notes: str | None = None
+    submitted_at: datetime | None = None
+    decided_at: datetime | None = None
+    created_at: datetime
+    updated_at: datetime
+    line_items: list[BidLineItemResponse] = Field(default_factory=list)
+    evaluation: BidEvaluationResponse | None = None
+
+
+class MarketplaceListingResponse(BaseModel):
+    """A single open project as seen by a browsing contractor — the project's
+    own fields plus the room-scan-derived scope and priced materials estimate,
+    so a bid can be grounded in the same data the homeowner already captured."""
+    project: ProjectResponse
+    room_scan_summary: dict | None = Field(default=None, description="derived metrics from the active room scan, if any")
+    materials_estimate: MaterialsEstimateResponse | None = None
+
+
 class ProjectMemberResponse(BaseModel):
     """Project member details response."""
     user_id: UUID
@@ -816,6 +931,85 @@ class ShareDocumentRequest(BaseModel):
     document_id: UUID = Field(..., description="UUID of the document to share")
 
 
+class CreateContractorProfileRequest(BaseModel):
+    """Payload to create the caller's contractor profile."""
+    business_name: str = Field(..., min_length=1, max_length=200)
+    contact_name: str | None = Field(default=None, max_length=120)
+    phone: str | None = Field(default=None, max_length=40)
+    trades: list[str] | None = Field(default=None, description="Trade categories, e.g. Electrical, Plumbing")
+    service_municipalities: list[str] | None = Field(default=None, description="Municipalities served")
+    bio: str | None = Field(default=None, max_length=2000)
+    years_in_business: int | None = Field(default=None, ge=0, le=150)
+
+
+class UpdateContractorProfileRequest(BaseModel):
+    """Partial update payload for the caller's contractor profile."""
+    business_name: str | None = Field(default=None, min_length=1, max_length=200)
+    contact_name: str | None = Field(default=None, max_length=120)
+    phone: str | None = Field(default=None, max_length=40)
+    trades: list[str] | None = None
+    service_municipalities: list[str] | None = None
+    bio: str | None = Field(default=None, max_length=2000)
+    years_in_business: int | None = Field(default=None, ge=0, le=150)
+    is_active: bool | None = None
+
+
+class ContractorProfileResponse(BaseModel):
+    """Contractor profile representation response."""
+    id: UUID
+    user_id: UUID
+    business_name: str
+    contact_name: str | None = None
+    phone: str | None = None
+    trades: list[str] = Field(default_factory=list)
+    service_municipalities: list[str] = Field(default_factory=list)
+    bio: str | None = None
+    years_in_business: int | None = None
+    is_active: bool
+    created_at: datetime
+    updated_at: datetime
+
+
+class CreateContractorLicenseRequest(BaseModel):
+    """Payload to add a license/insurance record."""
+    trade: str = Field(..., min_length=1, max_length=80)
+    license_number: str = Field(..., min_length=1, max_length=40)
+    expiration_date: date
+    issuing_authority: str | None = Field(default=None, max_length=200)
+    insurance_provider: str | None = Field(default=None, max_length=200)
+    insurance_policy_number: str | None = Field(default=None, max_length=100)
+    insurance_coverage_amount: float | None = Field(default=None, ge=0)
+    insurance_expiration_date: date | None = None
+
+
+class UpdateContractorLicenseRequest(BaseModel):
+    """Partial update payload for a license/insurance record."""
+    trade: str | None = Field(default=None, min_length=1, max_length=80)
+    license_number: str | None = Field(default=None, min_length=1, max_length=40)
+    expiration_date: date | None = None
+    issuing_authority: str | None = Field(default=None, max_length=200)
+    insurance_provider: str | None = Field(default=None, max_length=200)
+    insurance_policy_number: str | None = Field(default=None, max_length=100)
+    insurance_coverage_amount: float | None = Field(default=None, ge=0)
+    insurance_expiration_date: date | None = None
+
+
+class ContractorLicenseResponse(BaseModel):
+    """License/insurance record response."""
+    id: UUID
+    contractor_profile_id: UUID
+    trade: str
+    license_number: str
+    issuing_authority: str | None = None
+    expiration_date: date
+    insurance_provider: str | None = None
+    insurance_policy_number: str | None = None
+    insurance_coverage_amount: float | None = None
+    insurance_expiration_date: date | None = None
+    created_at: datetime
+    updated_at: datetime
+
+
 class UserMeResponse(BaseModel):
     """Response for GET /auth/me — current user profile."""
     id: UUID
@@ -825,6 +1019,7 @@ class UserMeResponse(BaseModel):
     cognito_sub: str
     created_at: datetime
     active_project_id: UUID | None = None
+    has_contractor_profile: bool = False
 
 
 class SetActiveProjectRequest(BaseModel):

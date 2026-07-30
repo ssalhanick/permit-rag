@@ -27,6 +27,7 @@ from api.schemas import (
     ProjectResponse,
     RoomScanResponse,
     RoomSummaryRequest,
+    SetMarketplaceStatusRequest,
     SetProjectStatusRequest,
     ShareDocumentRequest,
     TransferOwnershipRequest,
@@ -277,6 +278,34 @@ def set_project_status(
     """Toggle the ongoing/archived filter tag (owner only). Non-destructive."""
     _require_role(project_id, current_user["user_id"], {"owner"}, current_user)
     updated = db_client.set_project_archived(project_id, body.is_archived)
+    if not updated:
+        raise HTTPException(status_code=404, detail="Project not found.")
+    return dict(updated)
+
+
+@router.patch("/{project_id}/marketplace-status", response_model=ProjectResponse)
+def set_marketplace_status(
+    project_id: UUID,
+    body: SetMarketplaceStatusRequest,
+    current_user: CurrentUser,
+) -> dict:
+    """Open or close a project for contractor bidding (owner only).
+
+    Not gated on permit status — any project can be listed. Awarding a bid
+    (which also flips this to 'awarded') happens through POST
+    /projects/{project_id}/bids/{bid_id}/award instead, not here.
+    """
+    _require_role(project_id, current_user["user_id"], {"owner"}, current_user)
+    if body.marketplace_status == "awarded":
+        raise HTTPException(
+            status_code=422,
+            detail="Use the bid award endpoint to move a project to 'awarded'.",
+        )
+    if body.marketplace_status == "closed":
+        # Closing without an award must not leave bids stranded in 'submitted'.
+        updated = db_client.close_bidding_without_award(project_id)
+    else:
+        updated = db_client.set_project_marketplace_status(project_id, body.marketplace_status)
     if not updated:
         raise HTTPException(status_code=404, detail="Project not found.")
     return dict(updated)

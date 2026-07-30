@@ -1,0 +1,86 @@
+[
+  {
+    "trade": "Plumbing",
+    "region": "DFW",
+    "low_hourly_rate": 75,
+    "high_hourly_rate": 150,
+    "source": "Regional contractor rate survey (2026) — estimate only, not authoritative; a licensed RSMeans feed is recommended before production pricing decisions."
+  },
+  {
+    "trade": "Electrical",
+    "region": "DFW",
+    "low_hourly_rate": 75,
+    "high_hourly_rate": 150,
+    "source": "Regional contractor rate survey (2026) — estimate only, not authoritative; a licensed RSMeans feed is recommended before production pricing decisions."
+  },
+  {
+    "trade": "HVAC / Mechanical",
+    "region": "DFW",
+    "low_hourly_rate": 75,
+    "high_hourly_rate": 150,
+    "source": "Regional contractor rate survey (2026) — estimate only, not authoritative; a licensed RSMeans feed is recommended before production pricing decisions."
+  },
+  {
+    "trade": "Structural / Framing",
+    "region": "DFW",
+    "low_hourly_rate": 55,
+    "high_hourly_rate": 95,
+    "source": "Regional contractor rate survey (2026) — estimate only, not authoritative; a licensed RSMeans feed is recommended before production pricing decisions."
+  },
+  {
+    "trade": "Roofing",
+    "region": "DFW",
+    "low_hourly_rate": 50,
+    "high_hourly_rate": 90,
+    "source": "Regional contractor rate survey (2026) — estimate only, not authoritative; a licensed RSMeans feed is recommended before production pricing decisions."
+  },
+  {
+    "trade": "Deck / Patio Build",
+    "region": "DFW",
+    "low_hourly_rate": 50,
+    "high_hourly_rate": 85,
+    "source": "Regional contractor rate survey (2026) — estimate only, not authoritative; a licensed RSMeans feed is recommended before production pricing decisions."
+  },
+  {
+    "trade": "Pool / Spa",
+    "region": "DFW",
+    "low_hourly_rate": 65,
+    "high_hourly_rate": 120,
+    "source": "Regional contractor rate survey (2026) — estimate only, not authoritative; a licensed RSMeans feed is recommended before production pricing decisions."
+  },
+  {
+    "trade": "Demolition",
+    "region": "DFW",
+    "low_hourly_rate": 40,
+    "high_hourly_rate": 75,
+    "source": "Regional contractor rate survey (2026) — estimate only, not authoritative; a licensed RSMeans feed is recommended before production pricing decisions."
+  },
+  {
+    "trade": "Windows / Doors",
+    "region": "DFW",
+    "low_hourly_rate": 50,
+    "high_hourly_rate": 90,
+    "source": "Regional contractor rate survey (2026) — estimate only, not authoritative; a licensed RSMeans feed is recommended before production pricing decisions."
+  },
+  {
+    "trade": "Paint / Drywall",
+    "region": "DFW",
+    "low_hourly_rate": 40,
+    "high_hourly_rate": 70,
+    "source": "Regional contractor rate survey (2026) — estimate only, not authoritative; a licensed RSMeans feed is recommended before production pricing decisions."
+  },
+  {
+    "trade": "Flooring",
+    "region": "DFW",
+    "low_hourly_rate": 45,
+    "high_hourly_rate": 80,
+    "source": "Regional contractor rate survey (2026) — estimate only, not authoritative; a licensed RSMeans feed is recommended before production pricing decisions."
+  },
+  {
+    "trade": "Tile / Backsplash",
+    "region": "DFW",
+    "low_hourly_rate": 50,
+    "high_hourly_rate": 90,
+    "source": "Regional contractor rate survey (2026) — estimate only, not authoritative; a licensed RSMeans feed is recommended before production pricing decisions."
+  }
+]

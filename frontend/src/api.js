@@ -412,6 +412,100 @@ export async function fetchProjectDocuments(projectId) {
   return await requestJson(`/projects/${projectId}/documents`);
 }
 
+// ── Contractor Endpoints ─────────────────────────────────────
+
+export async function fetchContractorProfile() {
+  return await requestJson("/contractors/profile");
+}
+
+export async function createContractorProfile(payload) {
+  return await requestJson("/contractors/profile", {
+    method: "POST",
+    body: payload,
+  });
+}
+
+export async function updateContractorProfile(payload) {
+  return await requestJson("/contractors/profile", {
+    method: "PATCH",
+    body: payload,
+  });
+}
+
+export async function fetchContractorLicenses() {
+  return await requestJson("/contractors/licenses");
+}
+
+export async function createContractorLicense(payload) {
+  return await requestJson("/contractors/licenses", {
+    method: "POST",
+    body: payload,
+  });
+}
+
+export async function updateContractorLicense(licenseId, payload) {
+  return await requestJson(`/contractors/licenses/${licenseId}`, {
+    method: "PATCH",
+    body: payload,
+  });
+}
+
+export async function deleteContractorLicense(licenseId) {
+  return await requestJson(`/contractors/licenses/${licenseId}`, {
+    method: "DELETE",
+  });
+}
+
+// ── Marketplace Endpoints ─────────────────────────────────────
+
+export async function setProjectMarketplaceStatus(projectId, marketplaceStatus) {
+  return await requestJson(`/projects/${projectId}/marketplace-status`, {
+    method: "PATCH",
+    body: { marketplace_status: marketplaceStatus },
+  });
+}
+
+export async function fetchMarketplaceProjects({ trade, municipality } = {}) {
+  const params = new URLSearchParams();
+  if (trade) params.set("trade", trade);
+  if (municipality) params.set("municipality", municipality);
+  const query = params.toString();
+  return await requestJson(`/marketplace/projects${query ? `?${query}` : ""}`);
+}
+
+export async function fetchMarketplaceProjectDetail(projectId) {
+  return await requestJson(`/marketplace/projects/${projectId}`);
+}
+
+// ── Bid Endpoints ──────────────────────────────────────────────
+
+export async function submitBid(projectId, payload) {
+  return await requestJson(`/projects/${projectId}/bids`, {
+    method: "POST",
+    body: payload,
+  });
+}
+
+export async function fetchProjectBids(projectId) {
+  return await requestJson(`/projects/${projectId}/bids`);
+}
+
+export async function fetchBid(bidId) {
+  return await requestJson(`/bids/${bidId}`);
+}
+
+export async function withdrawBid(bidId) {
+  return await requestJson(`/bids/${bidId}/withdraw`, { method: "POST" });
+}
+
+export async function awardBid(projectId, bidId) {
+  return await requestJson(`/projects/${projectId}/bids/${bidId}/award`, { method: "POST" });
+}
+
+export async function fetchMyBids() {
+  return await requestJson("/bids/mine");
+}
+
 // ── Query History Endpoints ─────────────────────────────────
 
 export async function fetchQueryHistory(projectId) {

@@ -23,12 +23,20 @@ import ProjectLayout from "./projects/ProjectLayout.jsx";
 import { ProjectProvider } from "./projects/ProjectContext.jsx";
 import ProjectDashboardPage from "./projects/pages/ProjectDashboardPage.jsx";
 import ProjectScansPage from "./projects/pages/ProjectScansPage.jsx";
+import ProjectBiddingPage from "./projects/pages/ProjectBiddingPage.jsx";
 import ProjectQueriesPage from "./projects/pages/ProjectQueriesPage.jsx";
 import ProjectDocumentsPage from "./projects/pages/ProjectDocumentsPage.jsx";
 import ProjectMembersPage from "./projects/pages/ProjectMembersPage.jsx";
 import ProjectSettingsPage from "./projects/pages/ProjectSettingsPage.jsx";
 import ProjectTrashPage from "./projects/pages/ProjectTrashPage.jsx";
 import ProtectedRoute from "./components/ProtectedRoute.jsx";
+import ContractorRoute from "./components/ContractorRoute.jsx";
+import { ContractorProvider } from "./contractors/ContractorContext.jsx";
+import ContractorLayout from "./contractors/ContractorLayout.jsx";
+import ContractorOnboardingPage from "./contractors/pages/ContractorOnboardingPage.jsx";
+import ContractorLicensesPage from "./contractors/pages/ContractorLicensesPage.jsx";
+import ContractorDashboardPage from "./contractors/pages/ContractorDashboardPage.jsx";
+import MarketplaceListingDetailPage from "./contractors/pages/MarketplaceListingDetailPage.jsx";
 import SuperadminRoute from "./admin/SuperadminRoute.jsx";
 import AgentDashboardPage from "./admin/AgentDashboardPage.jsx";
 import NotFoundPage from "./components/NotFoundPage.jsx";
@@ -127,6 +135,7 @@ ReactDOM.createRoot(document.getElementById("root")).render(
             <Route index element={<Navigate to="dashboard" replace />} />
             <Route path="dashboard" element={<ProjectDashboardPage />} />
             <Route path="scans" element={<ProjectScansPage />} />
+            <Route path="bidding" element={<ProjectBiddingPage />} />
             <Route path="scans/:scanId/design" element={<RoomDesignPage />} />
             <Route path="queries" element={<ProjectQueriesPage />} />
             <Route path="documents" element={<ProjectDocumentsPage />} />
@@ -170,6 +179,40 @@ ReactDOM.createRoot(document.getElementById("root")).render(
             element={
               <ProtectedRoute>
                 <ProjectKickoffPage />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/contractor/onboarding"
+            element={
+              <ProtectedRoute>
+                <ContractorOnboardingPage />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/contractor"
+            element={
+              <ProtectedRoute>
+                <ContractorRoute>
+                  <ContractorProvider>
+                    <ContractorLayout />
+                  </ContractorProvider>
+                </ContractorRoute>
+              </ProtectedRoute>
+            }
+          >
+            <Route index element={<Navigate to="dashboard" replace />} />
+            <Route path="dashboard" element={<ContractorDashboardPage />} />
+            <Route path="licenses" element={<ContractorLicensesPage />} />
+          </Route>
+          <Route
+            path="/marketplace/:projectId"
+            element={
+              <ProtectedRoute>
+                <ContractorRoute>
+                  <MarketplaceListingDetailPage />
+                </ContractorRoute>
               </ProtectedRoute>
             }
           />

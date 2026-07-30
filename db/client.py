@@ -1496,6 +1496,48 @@ def set_project_archived(project_id: UUID, is_archived: bool) -> dict[str, Any] 
     return row
 
 
+def set_project_marketplace_status(project_id: UUID, status: str) -> dict[str, Any] | None:
+    """Open/close a project for contractor bidding. Opening stamps listed_at once."""
+    if status == "open":
+        sql = """
+            UPDATE projects
+            SET marketplace_status = %s, listed_at = COALESCE(listed_at, now())
+            WHERE id = %s
+            RETURNING *;
+        """
+    else:
+        sql = "UPDATE projects SET marketplace_status = %s WHERE id = %s RETURNING *;"
+    with get_conn() as conn:
+        row = conn.execute(sql, (status, project_id)).fetchone()
+        conn.commit()
+    return row
+
+
+def list_marketplace_projects(
+    *,
+    trade: str | None = None,
+    municipality: str | None = None,
+) -> list[dict[str, Any]]:
+    """Open listings for the contractor browse/filter view, newest-listed first."""
+    where = ["marketplace_status = 'open'", "deleted_at IS NULL"]
+    params: dict[str, Any] = {}
+    if trade:
+        where.append("work_types @> %(trade)s::jsonb")
+        import json as _json
+
+        params["trade"] = _json.dumps([trade])
+    if municipality:
+        where.append("municipality = %(municipality)s")
+        params["municipality"] = municipality
+    sql = f"""
+        SELECT * FROM projects
+        WHERE {' AND '.join(where)}
+        ORDER BY listed_at DESC NULLS LAST;
+    """
+    with get_conn() as conn:
+        return conn.execute(sql, params).fetchall()
+
+
 def soft_delete_project(project_id: UUID) -> dict[str, Any] | None:
     """Hide project behind the trash view; room scans and documents are untouched."""
     sql = "UPDATE projects SET deleted_at = now() WHERE id = %s AND deleted_at IS NULL RETURNING *;"
@@ -3046,4 +3088,479 @@ def delete_placeholder_media_refs() -> int:
         removed = cur.rowcount
         conn.commit()
     return removed
+
+
+# ════════════════════════════════════════════════
+#  CONTRACTOR PROFILES + LICENSES  (migration 044)
+# ════════════════════════════════════════════════
+
+def create_contractor_profile(
+    *,
+    user_id: UUID,
+    business_name: str,
+    contact_name: str | None = None,
+    phone: str | None = None,
+    trades: list[str] | None = None,
+    service_municipalities: list[str] | None = None,
+    bio: str | None = None,
+    years_in_business: int | None = None,
+) -> dict[str, Any]:
+    """Create a contractor profile for an existing user (one per user)."""
+    sql = """
+        INSERT INTO contractor_profiles (
+            user_id, business_name, contact_name, phone,
+            trades, service_municipalities, bio, years_in_business
+        )
+        VALUES (
+            %(user_id)s, %(business_name)s, %(contact_name)s, %(phone)s,
+            %(trades)s, %(service_municipalities)s, %(bio)s, %(years_in_business)s
+        )
+        RETURNING *;
+    """
+    with get_conn() as conn:
+        row = conn.execute(sql, {
+            "user_id": user_id,
+            "business_name": business_name,
+            "contact_name": contact_name,
+            "phone": phone,
+            "trades": trades or [],
+            "service_municipalities": service_municipalities or [],
+            "bio": bio,
+            "years_in_business": years_in_business,
+        }).fetchone()
+        conn.commit()
+    log.info("Created contractor profile for user_id=%s", user_id)
+    return row
+
+
+def get_contractor_profile_by_user(user_id: UUID) -> dict[str, Any] | None:
+    """Fetch the caller's own contractor profile, if any."""
+    sql = "SELECT * FROM contractor_profiles WHERE user_id = %s;"
+    with get_conn() as conn:
+        return conn.execute(sql, (user_id,)).fetchone()
+
+
+def get_contractor_profile(contractor_profile_id: UUID) -> dict[str, Any] | None:
+    """Fetch a contractor profile by its own id."""
+    sql = "SELECT * FROM contractor_profiles WHERE id = %s;"
+    with get_conn() as conn:
+        return conn.execute(sql, (contractor_profile_id,)).fetchone()
+
+
+def contractor_profile_exists(user_id: UUID) -> bool:
+    """True if the user has already created a contractor profile."""
+    sql = "SELECT 1 FROM contractor_profiles WHERE user_id = %s;"
+    with get_conn() as conn:
+        return conn.execute(sql, (user_id,)).fetchone() is not None
+
+
+def update_contractor_profile(
+    user_id: UUID,
+    *,
+    business_name: str | None = None,
+    contact_name: str | None = None,
+    phone: str | None = None,
+    trades: list[str] | None = None,
+    service_municipalities: list[str] | None = None,
+    bio: str | None = None,
+    years_in_business: int | None = None,
+    is_active: bool | None = None,
+) -> dict[str, Any] | None:
+    """Update mutable contractor-profile fields, keyed by user_id (1:1)."""
+    assignments: list[str] = []
+    params: dict[str, Any] = {"user_id": user_id}
+    if business_name is not None:
+        assignments.append("business_name = %(business_name)s")
+        params["business_name"] = business_name
+    if contact_name is not None:
+        assignments.append("contact_name = %(contact_name)s")
+        params["contact_name"] = contact_name
+    if phone is not None:
+        assignments.append("phone = %(phone)s")
+        params["phone"] = phone
+    if trades is not None:
+        assignments.append("trades = %(trades)s")
+        params["trades"] = trades
+    if service_municipalities is not None:
+        assignments.append("service_municipalities = %(service_municipalities)s")
+        params["service_municipalities"] = service_municipalities
+    if bio is not None:
+        assignments.append("bio = %(bio)s")
+        params["bio"] = bio
+    if years_in_business is not None:
+        assignments.append("years_in_business = %(years_in_business)s")
+        params["years_in_business"] = years_in_business
+    if is_active is not None:
+        assignments.append("is_active = %(is_active)s")
+        params["is_active"] = is_active
+    if not assignments:
+        return get_contractor_profile_by_user(user_id)
+    sql = f"UPDATE contractor_profiles SET {', '.join(assignments)} WHERE user_id = %(user_id)s RETURNING *;"
+    with get_conn() as conn:
+        row = conn.execute(sql, params).fetchone()
+        conn.commit()
+    return row
+
+
+def create_contractor_license(
+    *,
+    contractor_profile_id: UUID,
+    trade: str,
+    license_number: str,
+    expiration_date: date,
+    issuing_authority: str | None = None,
+    insurance_provider: str | None = None,
+    insurance_policy_number: str | None = None,
+    insurance_coverage_amount: float | None = None,
+    insurance_expiration_date: date | None = None,
+) -> dict[str, Any]:
+    """Add a license/insurance record to a contractor profile."""
+    sql = """
+        INSERT INTO contractor_licenses (
+            contractor_profile_id, trade, license_number, expiration_date,
+            issuing_authority, insurance_provider, insurance_policy_number,
+            insurance_coverage_amount, insurance_expiration_date
+        )
+        VALUES (
+            %(contractor_profile_id)s, %(trade)s, %(license_number)s, %(expiration_date)s,
+            %(issuing_authority)s, %(insurance_provider)s, %(insurance_policy_number)s,
+            %(insurance_coverage_amount)s, %(insurance_expiration_date)s
+        )
+        RETURNING *;
+    """
+    with get_conn() as conn:
+        row = conn.execute(sql, {
+            "contractor_profile_id": contractor_profile_id,
+            "trade": trade,
+            "license_number": license_number,
+            "expiration_date": expiration_date,
+            "issuing_authority": issuing_authority,
+            "insurance_provider": insurance_provider,
+            "insurance_policy_number": insurance_policy_number,
+            "insurance_coverage_amount": insurance_coverage_amount,
+            "insurance_expiration_date": insurance_expiration_date,
+        }).fetchone()
+        conn.commit()
+    return row
+
+
+def list_contractor_licenses(contractor_profile_id: UUID) -> list[dict[str, Any]]:
+    """All license records for a contractor profile, most-recently-added first."""
+    sql = """
+        SELECT * FROM contractor_licenses
+        WHERE contractor_profile_id = %s
+        ORDER BY created_at DESC;
+    """
+    with get_conn() as conn:
+        return conn.execute(sql, (contractor_profile_id,)).fetchall()
+
+
+def get_contractor_license(license_id: UUID) -> dict[str, Any] | None:
+    """Fetch a single license record by id."""
+    sql = "SELECT * FROM contractor_licenses WHERE id = %s;"
+    with get_conn() as conn:
+        return conn.execute(sql, (license_id,)).fetchone()
+
+
+def update_contractor_license(
+    license_id: UUID,
+    *,
+    trade: str | None = None,
+    license_number: str | None = None,
+    expiration_date: date | None = None,
+    issuing_authority: str | None = None,
+    insurance_provider: str | None = None,
+    insurance_policy_number: str | None = None,
+    insurance_coverage_amount: float | None = None,
+    insurance_expiration_date: date | None = None,
+) -> dict[str, Any] | None:
+    """Update mutable fields on a license record."""
+    assignments: list[str] = []
+    params: dict[str, Any] = {"id": license_id}
+    for field, value in (
+        ("trade", trade),
+        ("license_number", license_number),
+        ("expiration_date", expiration_date),
+        ("issuing_authority", issuing_authority),
+        ("insurance_provider", insurance_provider),
+        ("insurance_policy_number", insurance_policy_number),
+        ("insurance_coverage_amount", insurance_coverage_amount),
+        ("insurance_expiration_date", insurance_expiration_date),
+    ):
+        if value is not None:
+            assignments.append(f"{field} = %({field})s")
+            params[field] = value
+    if not assignments:
+        return get_contractor_license(license_id)
+    sql = f"UPDATE contractor_licenses SET {', '.join(assignments)} WHERE id = %(id)s RETURNING *;"
+    with get_conn() as conn:
+        row = conn.execute(sql, params).fetchone()
+        conn.commit()
+    return row
+
+
+def delete_contractor_license(license_id: UUID) -> bool:
+    """Remove a license record."""
+    sql = "DELETE FROM contractor_licenses WHERE id = %s;"
+    with get_conn() as conn:
+        cur = conn.execute(sql, (license_id,))
+        conn.commit()
+    return cur.rowcount > 0
+
+
+def has_valid_license(contractor_profile_id: UUID) -> bool:
+    """True if the contractor has at least one non-expired license on file."""
+    sql = """
+        SELECT 1 FROM contractor_licenses
+        WHERE contractor_profile_id = %s AND expiration_date >= CURRENT_DATE
+        LIMIT 1;
+    """
+    with get_conn() as conn:
+        return conn.execute(sql, (contractor_profile_id,)).fetchone() is not None
+
+
+# ════════════════════════════════════════════════
+#  LABOR RATE BENCHMARKS  (migration 038)
+# ════════════════════════════════════════════════
+
+def list_labor_rate_benchmarks(trade: str | None = None) -> list[dict[str, Any]]:
+    """Seeded hourly-rate ranges, optionally filtered to one trade."""
+    if trade:
+        sql = "SELECT * FROM labor_rate_benchmarks WHERE trade = %s ORDER BY trade;"
+        with get_conn() as conn:
+            return conn.execute(sql, (trade,)).fetchall()
+    sql = "SELECT * FROM labor_rate_benchmarks ORDER BY trade;"
+    with get_conn() as conn:
+        return conn.execute(sql).fetchall()
+
+
+def get_labor_rate_benchmark(trade: str, region: str = "DFW") -> dict[str, Any] | None:
+    """A single trade/region benchmark row, or None if unseeded."""
+    sql = "SELECT * FROM labor_rate_benchmarks WHERE trade = %s AND region = %s;"
+    with get_conn() as conn:
+        return conn.execute(sql, (trade, region)).fetchone()
+
+
+def insert_labor_rate_benchmark(
+    *,
+    trade: str,
+    region: str = "DFW",
+    low_hourly_rate: float,
+    high_hourly_rate: float,
+    source: str,
+    effective_date: date | None = None,
+) -> dict[str, Any] | None:
+    """Insert one benchmark row (seed script). Deduped on (trade, region)."""
+    sql = """
+        INSERT INTO labor_rate_benchmarks
+            (trade, region, low_hourly_rate, high_hourly_rate, source, effective_date)
+        VALUES
+            (%(trade)s, %(region)s, %(low_hourly_rate)s, %(high_hourly_rate)s, %(source)s, %(effective_date)s)
+        ON CONFLICT (trade, region) DO NOTHING
+        RETURNING *;
+    """
+    with get_conn() as conn:
+        row = conn.execute(sql, {
+            "trade": trade,
+            "region": region,
+            "low_hourly_rate": low_hourly_rate,
+            "high_hourly_rate": high_hourly_rate,
+            "source": source,
+            "effective_date": effective_date,
+        }).fetchone()
+        conn.commit()
+    return row
+
+
+# ════════════════════════════════════════════════
+#  BIDS  (migration 038)
+# ════════════════════════════════════════════════
+
+def create_bid(
+    *,
+    project_id: UUID,
+    contractor_profile_id: UUID,
+    license_id: UUID,
+    total_price: float,
+    line_items: list[dict[str, Any]],
+    labor_total: float | None = None,
+    material_total: float | None = None,
+    allowances: list[dict[str, Any]] | None = None,
+    exclusions: list[dict[str, Any]] | None = None,
+    payment_schedule: list[dict[str, Any]] | None = None,
+    permit_responsibility: str | None = None,
+    timeline_start: date | None = None,
+    timeline_end: date | None = None,
+    timeline_notes: str | None = None,
+    warranty_text: str | None = None,
+    warranty_years: float | None = None,
+    change_order_terms: str | None = None,
+    lien_waiver_included: bool = False,
+    materials_source: str = "unspecified",
+    materials_source_connector: str | None = None,
+    materials_source_notes: str | None = None,
+    notes: str | None = None,
+) -> dict[str, Any]:
+    """Create a bid header + its line items in one transaction.
+
+    total_price/labor_total/material_total are trusted from the caller (the
+    service layer computes them from line_items — see bids/service.py), not
+    recomputed here; this function is pure persistence.
+    """
+    import json as _json
+
+    sql_bid = """
+        INSERT INTO bids (
+            project_id, contractor_profile_id, license_id, total_price,
+            labor_total, material_total, allowances, exclusions, payment_schedule,
+            permit_responsibility, timeline_start, timeline_end, timeline_notes,
+            warranty_text, warranty_years, change_order_terms, lien_waiver_included,
+            materials_source, materials_source_connector, materials_source_notes,
+            notes, submitted_at
+        )
+        VALUES (
+            %(project_id)s, %(contractor_profile_id)s, %(license_id)s, %(total_price)s,
+            %(labor_total)s, %(material_total)s, %(allowances)s::jsonb, %(exclusions)s::jsonb, %(payment_schedule)s::jsonb,
+            %(permit_responsibility)s, %(timeline_start)s, %(timeline_end)s, %(timeline_notes)s,
+            %(warranty_text)s, %(warranty_years)s, %(change_order_terms)s, %(lien_waiver_included)s,
+            %(materials_source)s, %(materials_source_connector)s, %(materials_source_notes)s,
+            %(notes)s, now()
+        )
+        RETURNING *;
+    """
+    sql_line = """
+        INSERT INTO bid_line_items (
+            bid_id, line_index, description, quantity, unit, unit_price,
+            labor_amount, material_amount, labor_hours, canonical_work_item
+        )
+        VALUES (
+            %(bid_id)s, %(line_index)s, %(description)s, %(quantity)s, %(unit)s, %(unit_price)s,
+            %(labor_amount)s, %(material_amount)s, %(labor_hours)s, %(canonical_work_item)s
+        );
+    """
+    with get_conn() as conn:
+        bid = conn.execute(sql_bid, {
+            "project_id": project_id,
+            "contractor_profile_id": contractor_profile_id,
+            "license_id": license_id,
+            "total_price": total_price,
+            "labor_total": labor_total,
+            "material_total": material_total,
+            "allowances": _json.dumps(allowances or []),
+            "exclusions": _json.dumps(exclusions or []),
+            "payment_schedule": _json.dumps(payment_schedule or []),
+            "permit_responsibility": permit_responsibility,
+            "timeline_start": timeline_start,
+            "timeline_end": timeline_end,
+            "timeline_notes": timeline_notes,
+            "warranty_text": warranty_text,
+            "warranty_years": warranty_years,
+            "change_order_terms": change_order_terms,
+            "lien_waiver_included": lien_waiver_included,
+            "materials_source": materials_source,
+            "materials_source_connector": materials_source_connector,
+            "materials_source_notes": materials_source_notes,
+            "notes": notes,
+        }).fetchone()
+        for idx, item in enumerate(line_items):
+            conn.execute(sql_line, {
+                "bid_id": bid["id"],
+                "line_index": idx,
+                "description": item["description"],
+                "quantity": item["quantity"],
+                "unit": item["unit"],
+                "unit_price": item["unit_price"],
+                "labor_amount": item.get("labor_amount", 0),
+                "material_amount": item.get("material_amount", 0),
+                "labor_hours": item.get("labor_hours"),
+                "canonical_work_item": item.get("canonical_work_item"),
+            })
+        conn.commit()
+    log.info("Created bid %s on project=%s contractor=%s", bid["id"], project_id, contractor_profile_id)
+    return bid
+
+
+def list_bids_for_project(project_id: UUID) -> list[dict[str, Any]]:
+    """All bids on a project, newest first — homeowner/staff view."""
+    sql = "SELECT * FROM bids WHERE project_id = %s ORDER BY created_at DESC;"
+    with get_conn() as conn:
+        return conn.execute(sql, (project_id,)).fetchall()
+
+
+def list_bids_for_contractor(contractor_profile_id: UUID) -> list[dict[str, Any]]:
+    """A contractor's own bid history, newest first."""
+    sql = "SELECT * FROM bids WHERE contractor_profile_id = %s ORDER BY created_at DESC;"
+    with get_conn() as conn:
+        return conn.execute(sql, (contractor_profile_id,)).fetchall()
+
+
+def get_bid(bid_id: UUID) -> dict[str, Any] | None:
+    """Fetch a bid header by id."""
+    sql = "SELECT * FROM bids WHERE id = %s;"
+    with get_conn() as conn:
+        return conn.execute(sql, (bid_id,)).fetchone()
+
+
+def list_bid_line_items(bid_id: UUID) -> list[dict[str, Any]]:
+    """A bid's line items in submission order."""
+    sql = "SELECT * FROM bid_line_items WHERE bid_id = %s ORDER BY line_index;"
+    with get_conn() as conn:
+        return conn.execute(sql, (bid_id,)).fetchall()
+
+
+def withdraw_bid(bid_id: UUID) -> dict[str, Any] | None:
+    """Contractor withdraws their own submitted bid. No-op (returns None) if
+    the bid isn't currently 'submitted' (already withdrawn/declined/awarded)."""
+    sql = """
+        UPDATE bids SET status = 'withdrawn', decided_at = now()
+        WHERE id = %s AND status = 'submitted'
+        RETURNING *;
+    """
+    with get_conn() as conn:
+        row = conn.execute(sql, (bid_id,)).fetchone()
+        conn.commit()
+    return row
+
+
+def award_bid(project_id: UUID, bid_id: UUID) -> dict[str, Any] | None:
+    """Award one bid: it -> awarded, every other submitted bid on the project
+    -> declined, project marketplace_status -> awarded. One transaction,
+    modeled on transfer_project_ownership's "multiple statements, one commit"."""
+    with get_conn() as conn:
+        bid = conn.execute(
+            "UPDATE bids SET status = 'awarded', decided_at = now() WHERE id = %s AND project_id = %s RETURNING *;",
+            (bid_id, project_id),
+        ).fetchone()
+        if not bid:
+            return None
+        conn.execute(
+            """
+            UPDATE bids SET status = 'declined', decided_at = now()
+            WHERE project_id = %s AND id != %s AND status = 'submitted';
+            """,
+            (project_id, bid_id),
+        )
+        conn.execute(
+            "UPDATE projects SET marketplace_status = 'awarded', awarded_bid_id = %s WHERE id = %s;",
+            (bid_id, project_id),
+        )
+        conn.commit()
+    return bid
+
+
+def close_bidding_without_award(project_id: UUID) -> dict[str, Any] | None:
+    """Close bidding on a project without awarding anyone; declines every
+    outstanding submitted bid so none are left stranded in 'submitted' on a
+    project that's no longer accepting decisions."""
+    with get_conn() as conn:
+        conn.execute(
+            "UPDATE bids SET status = 'declined', decided_at = now() WHERE project_id = %s AND status = 'submitted';",
+            (project_id,),
+        )
+        row = conn.execute(
+            "UPDATE projects SET marketplace_status = 'closed' WHERE id = %s RETURNING *;",
+            (project_id,),
+        ).fetchone()
+        conn.commit()
+    return row
 
