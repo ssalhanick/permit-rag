@@ -1,6 +1,19 @@
 import React, { useCallback, useEffect, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import { Directory, Encoding, Filesystem } from "@capacitor/filesystem";
+import {
+  AlertTriangle,
+  ArrowLeft,
+  CheckCircle,
+  Download,
+  Eye,
+  GitBranch,
+  Mic,
+  Save,
+  Scan,
+  Sparkles,
+  Wand2,
+} from "lucide-react";
 import { fetchProjectRoomScans, fetchUserRoomScans } from "../../api.js";
 import OverlayProductList from "../../components/OverlayProductList.jsx";
 import RoomFloorPlanMap from "../../components/RoomFloorPlanMap.jsx";
@@ -407,127 +420,199 @@ export default function RoomDesignPage({ libraryMode = false }) {
     : null;
 
   return (
-    <div className="room-design-page">
-      <section className="panel">
-        <p className="muted">
-          <Link to={backLink}>← Back to scans</Link>
-        </p>
-        <h2>Design — {scanRow?.room_label || "Room"}</h2>
-        <p className="muted">
-          Preview calls the cloud model. Save stores the last preview on this device only.
-        </p>
+    <div className="max-w-4xl mx-auto p-4 sm:p-6 space-y-6">
+      <nav className="text-xs font-semibold text-slate-500 dark:text-slate-400 flex items-center gap-1.5">
+        <Link
+          to={backLink}
+          className="hover:text-blue-600 dark:hover:text-blue-400 transition-colors flex items-center gap-1"
+        >
+          <ArrowLeft className="w-3.5 h-3.5" />
+          Back to scans
+        </Link>
+      </nav>
 
-        {error && <div className="error-box">{error}</div>}
-        {message && <div className="profile-flash profile-flash--success">{message}</div>}
+      <div className="flex items-center gap-3">
+        <div className="w-10 h-10 rounded-xl bg-blue-50 dark:bg-blue-950/80 text-blue-600 dark:text-blue-400 flex items-center justify-center flex-shrink-0 border border-blue-200/60 dark:border-blue-800/60">
+          <Wand2 className="w-5 h-5" />
+        </div>
+        <div>
+          <h1 className="text-2xl font-extrabold text-slate-900 dark:text-slate-100 tracking-tight">
+            Design — {scanRow?.room_label || "Room"}
+          </h1>
+          <p className="text-xs text-slate-500 dark:text-slate-300 mt-0.5">
+            Preview calls the cloud model. Save stores the last preview on this device only.
+          </p>
+        </div>
+      </div>
 
+      {error && (
+        <div className="p-4 bg-red-50 dark:bg-red-950/50 border border-red-200 dark:border-red-800 text-red-800 dark:text-red-200 rounded-xl text-xs font-semibold flex items-center gap-2">
+          <AlertTriangle className="w-4 h-4 text-red-600 dark:text-red-400 flex-shrink-0" />
+          <span>{error}</span>
+        </div>
+      )}
+      {message && (
+        <div className="p-4 bg-emerald-50 dark:bg-emerald-950/50 border border-emerald-200 dark:border-emerald-800 text-emerald-800 dark:text-emerald-200 rounded-xl text-xs font-semibold flex items-center gap-2">
+          <CheckCircle className="w-4 h-4 text-emerald-600 dark:text-emerald-400 flex-shrink-0" />
+          <span>{message}</span>
+        </div>
+      )}
+
+      <div className="bg-white dark:bg-slate-800/90 rounded-2xl border border-slate-200 dark:border-slate-700 p-6 sm:p-8 shadow-sm">
         <RoomFloorPlanMap
           surfaces={capture?.surfaces}
           selectedSurfaceId={selectedSurfaceId}
           onSelectSurface={setSelectedSurfaceId}
         />
+      </div>
 
+      <div className="bg-white dark:bg-slate-800/90 rounded-2xl border border-slate-200 dark:border-slate-700 p-6 sm:p-8 shadow-sm space-y-4">
         <textarea
-          className="room-design-input room-design-textarea"
+          className="w-full box-border rounded-xl border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 p-3 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/30 focus:border-blue-500"
           rows={3}
           placeholder='e.g. "white subway tile on backsplash wall"'
           value={utterance}
           onChange={(e) => setUtterance(e.target.value)}
         />
 
-        <div className="room-scan-actions">
-          <button type="button" className="primary-button" onClick={handlePreview} disabled={busy}>
+        <div className="flex flex-wrap items-center gap-2">
+          <button
+            type="button"
+            className="tt-btn-primary flex items-center gap-1.5 text-xs px-4 py-2.5 rounded-xl"
+            onClick={handlePreview}
+            disabled={busy}
+          >
+            <Eye className="w-3.5 h-3.5" />
             {busy ? "Working…" : "Preview"}
           </button>
           <button
             type="button"
-            className="secondary-button"
+            className="tt-btn-secondary flex items-center gap-1.5 text-xs px-4 py-2.5 rounded-xl"
             onClick={handleSave}
             disabled={busy || !preview}
           >
+            <Save className="w-3.5 h-3.5" />
             Save
           </button>
           <button
             type="button"
-            className="secondary-button"
+            className="tt-btn-secondary flex items-center gap-1.5 text-xs px-4 py-2.5 rounded-xl"
             onClick={handleGenerateImage}
             disabled={busy || !preview}
           >
+            <Sparkles className="w-3.5 h-3.5" />
             Generate image
           </button>
           {isNativePlatform() && (
-            <button type="button" className="secondary-button" onClick={handleMic} disabled={busy}>
+            <button
+              type="button"
+              className="tt-btn-secondary flex items-center gap-1.5 text-xs px-4 py-2.5 rounded-xl"
+              onClick={handleMic}
+              disabled={busy}
+            >
+              <Mic className="w-3.5 h-3.5" />
               Mic
             </button>
           )}
           {isNativePlatform() && (
-            <button type="button" className="secondary-button" onClick={handleOpenAR}>
+            <button
+              type="button"
+              className="tt-btn-secondary flex items-center gap-1.5 text-xs px-4 py-2.5 rounded-xl"
+              onClick={handleOpenAR}
+            >
+              <Scan className="w-3.5 h-3.5" />
               {selectedSurfaceId ? "Open AR here" : "Open AR"}
             </button>
           )}
-          <button type="button" className="secondary-button" onClick={handleExportDxf} disabled={busy}>
+          <button
+            type="button"
+            className="tt-btn-secondary flex items-center gap-1.5 text-xs px-4 py-2.5 rounded-xl"
+            onClick={handleExportDxf}
+            disabled={busy}
+          >
+            <Download className="w-3.5 h-3.5" />
             Export DXF
           </button>
         </div>
 
         {tokenTotal != null && (
-          <p className="muted room-design-token-usage">
+          <p className="text-xs text-slate-400 dark:text-slate-500">
             Last preview: {tokenTotal} tokens ({preview.usage.model})
           </p>
         )}
+      </div>
 
-        {preview && (
-          <>
-            <p className="room-design-explanation">{preview.explanation}</p>
-            {generatedPreviewSrc && (
-              <figure className="room-design-generated">
-                <img src={generatedPreviewSrc} alt="Generated room redesign preview" />
-                <figcaption className="muted">
-                  Generative preview — also pushed to AR as asset texture when native.
-                </figcaption>
-              </figure>
-            )}
-            <OverlayProductList overlays={preview.overlays} />
-          </>
-        )}
+      {preview && (
+        <div className="bg-white dark:bg-slate-800/90 rounded-2xl border border-slate-200 dark:border-slate-700 p-6 sm:p-8 shadow-sm space-y-4">
+          <p className="text-sm text-slate-700 dark:text-slate-200 leading-relaxed">{preview.explanation}</p>
+          {generatedPreviewSrc && (
+            <figure className="space-y-2">
+              <img
+                src={generatedPreviewSrc}
+                alt="Generated room redesign preview"
+                className="w-full rounded-xl border border-slate-200 dark:border-slate-700"
+              />
+              <figcaption className="text-xs text-slate-400 dark:text-slate-500">
+                Generative preview — also pushed to AR as asset texture when native.
+              </figcaption>
+            </figure>
+          )}
+          <OverlayProductList overlays={preview.overlays} />
+        </div>
+      )}
 
-        {revisions.length > 0 && (
-          <section className="room-design-history" aria-label="Revision history">
-            <h3>Saved revisions</h3>
-            <ul className="room-design-history-list">
-              {revisions.map((rev) => (
+      {revisions.length > 0 && (
+        <div
+          className="bg-white dark:bg-slate-800/90 rounded-2xl border border-slate-200 dark:border-slate-700 p-6 sm:p-8 shadow-sm"
+          aria-label="Revision history"
+        >
+          <h3 className="text-base font-bold text-slate-900 dark:text-slate-100 mb-4 flex items-center gap-2">
+            <GitBranch className="w-4 h-4 text-blue-600 dark:text-blue-400" />
+            Saved revisions
+          </h3>
+          <ul className="space-y-2">
+            {revisions.map((rev) => {
+              const isActive = rev.id === history?.active_revision_id;
+              return (
                 <li
                   key={rev.id}
-                  className={rev.id === history?.active_revision_id ? "active-revision" : ""}
+                  className={`flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 p-3 rounded-xl border ${
+                    isActive
+                      ? "border-blue-300 dark:border-blue-700 bg-blue-50 dark:bg-blue-950/40"
+                      : "border-slate-200 dark:border-slate-700"
+                  }`}
                 >
-                  <div className="room-design-history-meta">
-                    <strong>{rev.utterance?.slice(0, 60) || "Revision"}</strong>
-                    <span className="muted">
+                  <div>
+                    <strong className="block text-sm text-slate-900 dark:text-slate-100">
+                      {rev.utterance?.slice(0, 60) || "Revision"}
+                    </strong>
+                    <span className="text-xs text-slate-400 dark:text-slate-500">
                       {new Date(rev.created_at).toLocaleString()}
-                      {rev.id === history?.active_revision_id ? " · active" : ""}
+                      {isActive ? " · active" : ""}
                     </span>
                   </div>
-                  <div className="room-scan-actions">
+                  <div className="flex items-center gap-3 text-xs font-semibold">
                     <button
                       type="button"
-                      className="link-button"
+                      className="text-blue-600 dark:text-blue-400 hover:underline"
                       onClick={() => handleActivateRevision(rev.id)}
                     >
                       Set active
                     </button>
                     <button
                       type="button"
-                      className="link-button"
+                      className="text-blue-600 dark:text-blue-400 hover:underline"
                       onClick={() => handleBranch(rev.id)}
                     >
                       Branch
                     </button>
                   </div>
                 </li>
-              ))}
-            </ul>
-          </section>
-        )}
-      </section>
+              );
+            })}
+          </ul>
+        </div>
+      )}
     </div>
   );
 }

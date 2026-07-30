@@ -1224,6 +1224,7 @@ def create_project(
     budget: str | None = None,
     persona: str | None = None,
     custom_system_prompt: str | None = None,
+    project_notes: str | None = None,
 ) -> dict[str, Any]:
     """Create a project and auto-enroll the owner in one transaction."""
     import json as _json
@@ -1232,12 +1233,14 @@ def create_project(
         INSERT INTO projects (
             name, owner_user_id, description, municipality,
             address, latitude, longitude, historic_district, conservation_district,
-            spaces, work_types, materials, recommended_permits, budget, persona, custom_system_prompt
+            spaces, work_types, materials, recommended_permits, budget, persona, custom_system_prompt,
+            project_notes
         )
         VALUES (
             %(name)s, %(owner_user_id)s, %(description)s, %(municipality)s,
             %(address)s, %(latitude)s, %(longitude)s, %(historic_district)s, %(conservation_district)s,
-            %(spaces)s, %(work_types)s, %(materials)s, %(recommended_permits)s, %(budget)s, %(persona)s, %(custom_system_prompt)s
+            %(spaces)s, %(work_types)s, %(materials)s, %(recommended_permits)s, %(budget)s, %(persona)s, %(custom_system_prompt)s,
+            %(project_notes)s
         )
         RETURNING *;
     """
@@ -1263,6 +1266,7 @@ def create_project(
             "budget": budget,
             "persona": persona,
             "custom_system_prompt": custom_system_prompt,
+            "project_notes": project_notes,
         }).fetchone()
         conn.execute(sql_member, {"project_id": row["id"], "user_id": owner_user_id})
         conn.commit()

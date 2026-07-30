@@ -47,8 +47,29 @@ const BLANK_WIZARD = {
   budget: "",
   persona: "",
   customSystemPrompt: "",
-  doRoomScan: false,
+  comments: "",
+  // null = not yet chosen. The room-scan step requires an explicit true/false
+  // before Next will advance — see wizardNext's "roomScan" case.
+  doRoomScan: null,
 };
+
+/**
+ * Case-insensitive de-dupe that keeps the first-seen casing.
+ *
+ * @param {string[]} values
+ * @returns {string[]}
+ */
+function dedupeLabels(values) {
+  const seen = new Set();
+  const result = [];
+  for (const value of values) {
+    const key = value.trim().toLowerCase();
+    if (!key || seen.has(key)) continue;
+    seen.add(key);
+    result.push(value.trim());
+  }
+  return result;
+}
 
 // ── Sub-components ────────────────────────────────────────────
 
@@ -83,6 +104,87 @@ function WizardProgress({ current, total }) {
 }
 
 /**
+ * A boxed textarea with a mic button that appends dictated speech.
+ * Shared by CheckboxGrid's "Other" field and the closing comments step.
+ */
+function VoiceTextarea({ id, label, value, onChange, placeholder, rows = 2, maxLength }) {
+  const [listening, setListening] = useState(false);
+  const [voiceError, setVoiceError] = useState("");
+
+  const handleMic = async () => {
+    setListening(true);
+    setVoiceError("");
+    try {
+      const { startSpeechRecognition } = await import("./services/roomCapture.js");
+      const res = await startSpeechRecognition();
+      if (res.transcript) {
+        onChange(value.trim() ? `${value.trim()}, ${res.transcript}` : res.transcript);
+      } else if (res.error && res.error !== "No speech detected") {
+        setVoiceError(
+          res.error === "not-allowed" || res.error === "permission-denied"
+            ? "Microphone access denied. Enable it in your browser or device settings."
+            : res.error,
+        );
+      }
+    } catch (err) {
+      setVoiceError(err.message || "Voice input failed.");
+    } finally {
+      setListening(false);
+    }
+  };
+
+  return (
+    <div className="kickoff-other-field">
+      {label && (
+        <label htmlFor={id} className="kickoff-other-label">
+          {label}
+        </label>
+      )}
+      <div className="kickoff-voice-input-box">
+        <textarea
+          id={id}
+          className="kickoff-other-input kickoff-other-textarea"
+          rows={rows}
+          placeholder={placeholder}
+          value={value}
+          onChange={(e) => onChange(e.target.value)}
+          maxLength={maxLength}
+        />
+        <button
+          type="button"
+          className="kickoff-mic-button"
+          onClick={handleMic}
+          disabled={listening}
+          aria-label="Dictate with voice"
+          title="Dictate with voice"
+        >
+          {listening ? "…" : "🎙"}
+        </button>
+      </div>
+      {voiceError && <p className="kickoff-voice-error">{voiceError}</p>}
+    </div>
+  );
+}
+
+/**
+ * Close (×) button — exits the whole kickoff/intake flow from any step.
+ */
+function KickoffCloseButton({ onClick, disabled }) {
+  return (
+    <button
+      type="button"
+      className="kickoff-close-button"
+      onClick={onClick}
+      disabled={disabled}
+      aria-label="Exit project setup"
+      title="Exit project setup"
+    >
+      ×
+    </button>
+  );
+}
+
+/**
  * A grid of checkboxes with an optional free-text "Other" field.
  */
 function CheckboxGrid({ options, selected, onChange, otherValue, onOtherChange, otherLabel = "Other" }) {
@@ -109,20 +211,14 @@ function CheckboxGrid({ options, selected, onChange, otherValue, onOtherChange, 
         </label>
       ))}
       {onOtherChange && (
-        <div className="kickoff-other-field">
-          <label htmlFor={inputId} className="kickoff-other-label">
-            {otherLabel}
-          </label>
-          <input
-            id={inputId}
-            type="text"
-            className="kickoff-other-input"
-            placeholder="Describe anything else…"
-            value={otherValue}
-            onChange={(e) => onOtherChange(e.target.value)}
-            maxLength={200}
-          />
-        </div>
+        <VoiceTextarea
+          id={inputId}
+          label={otherLabel}
+          value={otherValue}
+          onChange={onOtherChange}
+          placeholder="Describe anything else…"
+          maxLength={200}
+        />
       )}
     </div>
   );
@@ -161,12 +257,15 @@ export default function ProjectKickoffPage() {
     }
     list.push(
       { key: "name", question: "What would you like to call this project?" },
+      { key: "comments", question: "Anything else we should know about this project?" },
       { key: "confirm", question: "Here's what we found — does this look right?" }
     );
     return list;
   }, [hasLidar]);
 
-  // Check LiDAR capability on mount
+  // Check LiDAR capability on mount. This only decides whether the roomScan
+  // step is offered at all — it must never pre-select an answer on the
+  // user's behalf, or Yes ends up chosen before they've seen the step.
   useEffect(() => {
     let active = true;
     (async () => {
@@ -175,9 +274,6 @@ export default function ProjectKickoffPage() {
         const available = await isRoomCaptureAvailable();
         if (active) {
           setHasLidar(available);
-          if (available) {
-            setWizard((w) => ({ ...w, doRoomScan: true }));
-          }
         }
       } catch {
         if (active) setHasLidar(false);
@@ -392,7 +488,7 @@ export default function ProjectKickoffPage() {
   const allWorkTypes = useMemo(() => {
     const base = [...wizard.workTypes];
     if (wizard.otherWorkTypes.trim()) base.push(wizard.otherWorkTypes.trim());
-    return base;
+    return dedupeLabels(base);
   }, [wizard.workTypes, wizard.otherWorkTypes]);
 
   const recommendedPermits = useMemo(
@@ -438,6 +534,20 @@ export default function ProjectKickoffPage() {
       setError("Please enter your estimated project budget.");
       return;
     }
+    if (currentStep?.key === "roomScan" && wizard.doRoomScan === null) {
+      setError("Please choose whether you'd like to perform a 3D scan.");
+      return;
+    }
+    if (wizardStep < steps.length) {
+      setWizardStep((s) => s + 1);
+    }
+  };
+
+  // Skip advances past only the current step — unlike skip() below, it never
+  // leaves the intake flow. Bypasses this step's validation on purpose: that
+  // is the point of skipping.
+  const wizardSkip = () => {
+    setError("");
     if (wizardStep < steps.length) {
       setWizardStep((s) => s + 1);
     }
@@ -486,6 +596,7 @@ export default function ProjectKickoffPage() {
       budget: wizard.budget || undefined,
       persona: wizard.persona || undefined,
       custom_system_prompt: wizard.customSystemPrompt || undefined,
+      project_notes: wizard.comments.trim() || undefined,
     };
 
     try {
@@ -561,6 +672,7 @@ export default function ProjectKickoffPage() {
     return (
       <main className="page kickoff-page">
         <section className="panel kickoff-panel">
+          <KickoffCloseButton onClick={skip} />
           <h1 className="kickoff-heading">{returnTo === "/projects" ? "Project setup" : "Welcome back."}</h1>
           <p className="muted kickoff-subheading">
             {returnTo === "/projects"
@@ -616,6 +728,7 @@ export default function ProjectKickoffPage() {
     return (
       <main className="page kickoff-page">
         <section className="panel kickoff-panel">
+          <KickoffCloseButton onClick={skip} />
           <button
             type="button"
             className="text-button kickoff-back-link"
@@ -665,6 +778,7 @@ export default function ProjectKickoffPage() {
     return (
       <main className="page kickoff-page">
         <section className="panel kickoff-panel">
+          <KickoffCloseButton onClick={skip} disabled={submitting} />
           <button
             type="button"
             className="text-button kickoff-back-link"
@@ -738,6 +852,7 @@ export default function ProjectKickoffPage() {
   return (
     <main className="page kickoff-page">
       <section className="panel kickoff-panel">
+        <KickoffCloseButton onClick={skip} disabled={submitting} />
         <WizardProgress current={wizardStep} total={steps.length} />
 
         <ChatBubble text={step?.question || ""} />
@@ -777,6 +892,7 @@ export default function ProjectKickoffPage() {
               <input
                 id="wizard-name"
                 type="text"
+                className="kickoff-text-input"
                 value={wizard.name}
                 onChange={(e) => setWizard((w) => ({ ...w, name: e.target.value }))}
                 placeholder="e.g. Holliday Kitchen"
@@ -794,6 +910,7 @@ export default function ProjectKickoffPage() {
               <label htmlFor="wizard-persona" className="kickoff-sr-label">Your Role</label>
               <select
                 id="wizard-persona"
+                className="kickoff-select"
                 value={wizard.persona}
                 onChange={(e) => setWizard((w) => ({ ...w, persona: e.target.value }))}
                 required
@@ -868,7 +985,7 @@ export default function ProjectKickoffPage() {
         {step?.key === "roomScan" && (
           <div className="kickoff-step-body">
             <div className="kickoff-room-scan-options">
-              <label className={`kickoff-radio-item ${wizard.doRoomScan ? "active" : ""}`}>
+              <label className={`kickoff-radio-item ${wizard.doRoomScan === true ? "active" : ""}`}>
                 <input
                   type="radio"
                   name="doRoomScan"
@@ -885,7 +1002,7 @@ export default function ProjectKickoffPage() {
                 </div>
               </label>
 
-              <label className={`kickoff-radio-item ${!wizard.doRoomScan ? "active" : ""}`}>
+              <label className={`kickoff-radio-item ${wizard.doRoomScan === false ? "active" : ""}`}>
                 <input
                   type="radio"
                   name="doRoomScan"
@@ -919,6 +1036,20 @@ export default function ProjectKickoffPage() {
           </div>
         )}
 
+        {/* General comments — optional, text or voice */}
+        {step?.key === "comments" && (
+          <div className="kickoff-step-body">
+            <VoiceTextarea
+              id="wizard-comments"
+              value={wizard.comments}
+              onChange={(comments) => setWizard((w) => ({ ...w, comments }))}
+              placeholder="Anything else we should know — access constraints, timeline, HOA rules, existing damage…"
+              rows={5}
+              maxLength={1200}
+            />
+          </div>
+        )}
+
         {/* Permit preview + confirm */}
         {step?.key === "confirm" && (
           <div className="kickoff-step-body">
@@ -937,22 +1068,16 @@ export default function ProjectKickoffPage() {
                   <dd>{wizard.spaces.join(", ")}{wizard.otherSpaces ? `, ${wizard.otherSpaces}` : ""}</dd>
                 </div>
               )}
-              {wizard.workTypes.length > 0 && (
+              {allWorkTypes.length > 0 && (
                 <div className="kickoff-summary-row">
-                  <dt>Work Types</dt>
-                  <dd>{wizard.workTypes.join(", ")}{wizard.otherWorkTypes ? `, ${wizard.otherWorkTypes}` : ""}</dd>
+                  <dt>Work types</dt>
+                  <dd>{allWorkTypes.join(", ")}</dd>
                 </div>
               )}
               {wizard.materials.length > 0 && (
                 <div className="kickoff-summary-row">
                   <dt>Materials</dt>
                   <dd>{wizard.materials.join(", ")}{wizard.otherMaterials ? `, ${wizard.otherMaterials}` : ""}</dd>
-                </div>
-              )}
-              {allWorkTypes.length > 0 && (
-                <div className="kickoff-summary-row">
-                  <dt>Work types</dt>
-                  <dd>{allWorkTypes.join(", ")}</dd>
                 </div>
               )}
               {wizard.budget && (
@@ -964,7 +1089,19 @@ export default function ProjectKickoffPage() {
               {hasLidar && (
                 <div className="kickoff-summary-row">
                   <dt>LiDAR Scan Opt-in</dt>
-                  <dd>{wizard.doRoomScan ? "Yes, requested" : "No, skipped"}</dd>
+                  <dd>
+                    {wizard.doRoomScan === true
+                      ? "Yes, requested"
+                      : wizard.doRoomScan === false
+                        ? "No, skipped"
+                        : "Not chosen"}
+                  </dd>
+                </div>
+              )}
+              {wizard.comments.trim() && (
+                <div className="kickoff-summary-row">
+                  <dt>Comments</dt>
+                  <dd>{wizard.comments.trim()}</dd>
                 </div>
               )}
             </dl>
@@ -1036,12 +1173,14 @@ export default function ProjectKickoffPage() {
           )}
         </div>
 
-        {/* Skip is available throughout the wizard */}
-        <div className="kickoff-footer-actions">
-          <button type="button" className="text-button" onClick={skip}>
-            Skip for now
-          </button>
-        </div>
+        {/* Skip advances past this step only — the confirm/submit step has nothing to skip */}
+        {!isLastStep && (
+          <div className="kickoff-footer-actions">
+            <button type="button" className="text-button" onClick={wizardSkip} disabled={submitting}>
+              Skip for now
+            </button>
+          </div>
+        )}
       </section>
     </main>
   );

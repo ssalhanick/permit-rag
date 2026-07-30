@@ -545,6 +545,7 @@ class CreateProjectRequest(BaseModel):
     budget: str | None = Field(default=None, description="Project budget context")
     persona: str | None = Field(default=None, description="User role persona (diy, hiring_contractor, contractor)")
     custom_system_prompt: str | None = Field(default=None, description="Generated system prompt instructions")
+    project_notes: str | None = Field(default=None, max_length=1200, description="Bounded project notes (<=200 tokens) composed last by the Prompt Router")
 
 
 class UpdateProjectRequest(BaseModel):

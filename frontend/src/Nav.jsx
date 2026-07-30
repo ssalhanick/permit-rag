@@ -254,8 +254,10 @@ export default function Nav() {
           </div>
         </div>
       </nav>
-      {/* Floating Corner AI Assistant Modal — hidden on /query, it already is the full chat and the widget covers the submit button there */}
-      {location.pathname !== "/query" && <AiAssistantWidget />}
+      {/* Floating Corner AI Assistant Modal — hidden on /query (already the full chat,
+          the widget covers the submit button there) and on /kickoff (the intake wizard
+          has its own guided flow; the assistant is a distraction mid-setup) */}
+      {location.pathname !== "/query" && !location.pathname.startsWith("/kickoff") && <AiAssistantWidget />}
     </header>
   );
 }

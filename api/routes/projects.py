@@ -108,6 +108,7 @@ def create_project(body: CreateProjectRequest, current_user: CurrentUser) -> dic
         budget=body.budget,
         persona=body.persona,
         custom_system_prompt=body.custom_system_prompt,
+        project_notes=body.project_notes,
     )
     return dict(project)
 

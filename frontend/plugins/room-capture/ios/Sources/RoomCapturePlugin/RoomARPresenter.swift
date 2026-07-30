@@ -1172,6 +1172,13 @@ enum SpeechCapture {
         }
     }
 
+    /// Listens until the speaker pauses (~2s of silence) or a 60s safety cap
+    /// is hit, instead of a fixed short duration. The prior fixed 4s cutoff
+    /// truncated any dictation longer than one short phrase — endAudio() mid
+    /// -sentence made the recognizer finalize on whatever partial buffer it
+    /// had, dropping everything said before the cutoff. Partial results reset
+    /// the silence timer, so a normal breath between sentences doesn't end
+    /// the session early.
     static func recognize(from presenter: UIViewController, completion: @escaping (Result<String, Error>) -> Void) {
         guard let recognizer = SFSpeechRecognizer(), recognizer.isAvailable else {
             completion(.failure(NSError(domain: "Speech", code: 1, userInfo: [
@@ -1181,7 +1188,7 @@ enum SpeechCapture {
         }
 
         let request = SFSpeechAudioBufferRecognitionRequest()
-        request.shouldReportPartialResults = false
+        request.shouldReportPartialResults = true
         let audioEngine = AVAudioEngine()
 
         let session = AVAudioSession.sharedInstance()
@@ -1196,24 +1203,51 @@ enum SpeechCapture {
         audioEngine.prepare()
         try? audioEngine.start()
 
+        var finished = false
+        var silenceTimer: Timer?
+        var safetyTimer: Timer?
+
+        let stopListening = {
+            silenceTimer?.invalidate()
+            safetyTimer?.invalidate()
+            audioEngine.stop()
+            input.removeTap(onBus: 0)
+            request.endAudio()
+        }
+
+        let resetSilenceTimer = {
+            silenceTimer?.invalidate()
+            silenceTimer = Timer.scheduledTimer(withTimeInterval: 2.0, repeats: false) { _ in
+                stopListening()
+            }
+        }
+
+        resetSilenceTimer()
+        safetyTimer = Timer.scheduledTimer(withTimeInterval: 60.0, repeats: false) { _ in
+            stopListening()
+        }
+
         recognizer.recognitionTask(with: request) { result, error in
+            guard !finished else { return }
             if let error {
+                finished = true
+                silenceTimer?.invalidate()
+                safetyTimer?.invalidate()
                 audioEngine.stop()
                 input.removeTap(onBus: 0)
                 completion(.failure(error))
                 return
             }
-            if let result, result.isFinal {
-                audioEngine.stop()
-                input.removeTap(onBus: 0)
-                completion(.success(result.bestTranscription.formattedString))
+            guard let result else { return }
+            guard result.isFinal else {
+                // Still talking — push the silence deadline back out.
+                resetSilenceTimer()
+                return
             }
-        }
-
-        DispatchQueue.main.asyncAfter(deadline: .now() + 4.0) {
-            audioEngine.stop()
-            input.removeTap(onBus: 0)
-            request.endAudio()
+            finished = true
+            silenceTimer?.invalidate()
+            safetyTimer?.invalidate()
+            completion(.success(result.bestTranscription.formattedString))
         }
     }
 }

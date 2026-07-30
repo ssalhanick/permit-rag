@@ -153,6 +153,9 @@ p.muted,
   z-index: 100;
   border-bottom: 1px solid #1e293b;
   box-shadow: 0 4px 12px rgba(15, 23, 42, 0.15);
+  /* Clears the iOS notch/Dynamic Island — index.html sets viewport-fit=cover
+     so this env() is populated inside the Capacitor WebView; it is 0 on web. */
+  padding-top: env(safe-area-inset-top, 0px);
 }
 
 .tt-site-nav {
@@ -1503,6 +1506,40 @@ svg.tt-site-logo {
   background: #1d4ed8;
 }
 
+.primary-button:disabled,
+.secondary-button:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.secondary-button {
+  background: var(--tt-card-bg);
+  color: var(--tt-text-main);
+  font-weight: 600;
+  border: 1px solid var(--tt-border-strong);
+  border-radius: 8px;
+  padding: 12px 18px;
+  font-size: 0.9rem;
+  cursor: pointer;
+  transition: background 0.15s ease, border-color 0.15s ease;
+}
+
+.secondary-button:hover:not(:disabled) {
+  background: var(--tt-accent-bg);
+  border-color: var(--tt-primary);
+}
+
+.dark .secondary-button {
+  background: #0f172a !important;
+  border-color: #334155 !important;
+  color: #f8fafc !important;
+}
+
+.dark .secondary-button:hover:not(:disabled) {
+  background: #1e293b !important;
+  border-color: #3b82f6 !important;
+}
+
 .google-button,
 .apple-button {
   width: 100%;
@@ -1727,6 +1764,7 @@ textarea::placeholder {
 }
 
 .kickoff-panel {
+  position: relative;
   width: 100%;
   max-width: 680px;
   background: var(--tt-card-bg);
@@ -1736,6 +1774,48 @@ textarea::placeholder {
   box-shadow: 0 12px 30px -5px rgba(0, 0, 0, 0.08), 0 4px 12px -2px rgba(0, 0, 0, 0.04);
   color: var(--tt-text-main);
   transition: background-color 0.2s ease, border-color 0.2s ease;
+}
+
+.kickoff-close-button {
+  position: absolute;
+  top: 16px;
+  right: 16px;
+  width: 32px;
+  height: 32px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--tt-accent-bg);
+  border: 1px solid var(--tt-border);
+  border-radius: 999px;
+  color: var(--tt-text-muted);
+  font-size: 1.2rem;
+  line-height: 1;
+  cursor: pointer;
+  transition: background 0.15s ease, color 0.15s ease, border-color 0.15s ease;
+}
+
+.kickoff-close-button:hover:not(:disabled) {
+  background: #fee2e2;
+  border-color: #fca5a5;
+  color: #b91c1c;
+}
+
+.kickoff-close-button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.dark .kickoff-close-button {
+  background: #0f172a !important;
+  border-color: #334155 !important;
+  color: #94a3b8 !important;
+}
+
+.dark .kickoff-close-button:hover:not(:disabled) {
+  background: rgba(185, 28, 28, 0.25) !important;
+  border-color: #b91c1c !important;
+  color: #fca5a5 !important;
 }
 
 .dark .kickoff-panel {
@@ -1977,10 +2057,13 @@ textarea::placeholder {
 .kickoff-summary-row {
   display: flex;
   justify-content: space-between;
+  align-items: baseline;
+  gap: 16px;
   font-size: 0.9rem;
 }
 
 .kickoff-summary-row dt {
+  flex-shrink: 0;
   color: #475569;
   font-weight: 600;
 }
@@ -2039,12 +2122,294 @@ textarea::placeholder {
 }
 
 .kickoff-summary-row dd {
+  margin: 0;
+  text-align: right;
   color: #0f172a;
   font-weight: 700;
 }
 
 .dark .kickoff-summary-row dd {
   color: #f8fafc !important;
+}
+
+/* ── Form field polish (address / name / role / budget) ── */
+
+.kickoff-form-group {
+  margin-bottom: 20px;
+}
+
+.kickoff-form-group label:not(.kickoff-sr-label) {
+  display: block;
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: var(--tt-text-muted);
+  margin-bottom: 6px;
+}
+
+.kickoff-sr-label {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+}
+
+.kickoff-text-input,
+.kickoff-select,
+.kickoff-panel .autocomplete-container input,
+.kickoff-panel input[type="text"] {
+  width: 100%;
+  box-sizing: border-box;
+  padding: 12px 14px;
+  font-size: 1rem;
+  border: 1px solid var(--tt-border-strong);
+  border-radius: 10px;
+  background: var(--tt-card-bg);
+  color: var(--tt-text-main);
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+
+.kickoff-text-input:focus,
+.kickoff-select:focus,
+.kickoff-panel .autocomplete-container input:focus,
+.kickoff-panel input[type="text"]:focus {
+  outline: none;
+  border-color: var(--tt-primary);
+  box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.15);
+}
+
+.kickoff-select {
+  appearance: none;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%23475569' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'%3E%3C/polyline%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 14px center;
+  padding-right: 40px;
+  cursor: pointer;
+}
+
+.dark .kickoff-text-input,
+.dark .kickoff-select,
+.dark .kickoff-panel .autocomplete-container input,
+.dark .kickoff-panel input[type="text"] {
+  background: #0f172a !important;
+  border-color: #334155 !important;
+  color: #f8fafc !important;
+}
+
+.kickoff-budget-wrapper {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+
+.kickoff-budget-prefix {
+  position: absolute;
+  left: 18px;
+  font-size: 1.4rem;
+  font-weight: 700;
+  color: var(--tt-text-muted);
+  pointer-events: none;
+}
+
+.kickoff-budget-input {
+  width: 100%;
+  box-sizing: border-box;
+  padding: 18px 18px 18px 40px;
+  font-size: 1.6rem;
+  font-weight: 700;
+  border: 1px solid var(--tt-border-strong);
+  border-radius: 12px;
+  background: var(--tt-card-bg);
+  color: var(--tt-text-main);
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+
+.kickoff-budget-input:focus {
+  outline: none;
+  border-color: var(--tt-primary);
+  box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.15);
+}
+
+.dark .kickoff-budget-input {
+  background: #0f172a !important;
+  border-color: #334155 !important;
+  color: #f8fafc !important;
+}
+
+/* ── "Other" free-text fields: boxed, with a mic button ── */
+
+.kickoff-other-field {
+  margin-top: 16px;
+  padding: 14px;
+  background: var(--tt-accent-bg);
+  border: 1px solid var(--tt-border);
+  border-radius: 12px;
+}
+
+/* Span the full checkbox grid instead of sitting cramped in one column */
+.kickoff-checkbox-grid > .kickoff-other-field {
+  grid-column: 1 / -1;
+}
+
+.dark .kickoff-other-field {
+  background: #0f172a !important;
+  border-color: #334155 !important;
+}
+
+.kickoff-other-label {
+  display: block;
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: var(--tt-text-muted);
+  margin-bottom: 8px;
+}
+
+.kickoff-voice-input-box {
+  display: flex;
+  align-items: flex-end;
+  gap: 8px;
+}
+
+.kickoff-other-textarea {
+  flex: 1;
+  min-width: 0;
+  resize: vertical;
+  font-family: inherit;
+}
+
+.kickoff-mic-button {
+  flex-shrink: 0;
+  width: 40px;
+  height: 40px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 1.1rem;
+  background: var(--tt-card-bg);
+  border: 1px solid var(--tt-border-strong);
+  border-radius: 999px;
+  cursor: pointer;
+  transition: background 0.15s ease, border-color 0.15s ease;
+}
+
+.kickoff-mic-button:hover:not(:disabled) {
+  background: var(--tt-primary);
+  border-color: var(--tt-primary);
+}
+
+.kickoff-mic-button:disabled {
+  opacity: 0.6;
+  cursor: progress;
+}
+
+.dark .kickoff-mic-button {
+  background: #1e293b !important;
+  border-color: #334155 !important;
+}
+
+.kickoff-voice-error {
+  margin: 8px 0 0;
+  font-size: 0.8rem;
+  color: #b91c1c;
+}
+
+.dark .kickoff-voice-error {
+  color: #fca5a5 !important;
+}
+
+/* ── Room-scan opt-in radio cards (was entirely unstyled — the reported
+   "can't tell if Yes/No registered" bug) ── */
+
+.kickoff-room-scan-options {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.kickoff-radio-item {
+  display: block;
+  padding: 16px;
+  background: var(--tt-card-bg);
+  border: 2px solid var(--tt-border);
+  border-radius: 12px;
+  cursor: pointer;
+  transition: border-color 0.15s ease, background 0.15s ease, box-shadow 0.15s ease;
+}
+
+.kickoff-radio-item:hover {
+  border-color: var(--tt-primary);
+}
+
+.kickoff-radio-item.active {
+  border-color: var(--tt-primary);
+  background: #eff6ff;
+  box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.12);
+}
+
+.dark .kickoff-radio-item {
+  background: #0f172a !important;
+  border-color: #334155 !important;
+}
+
+.dark .kickoff-radio-item.active {
+  background: rgba(37, 99, 235, 0.15) !important;
+  border-color: #3b82f6 !important;
+}
+
+.kickoff-radio-content {
+  display: flex;
+  align-items: flex-start;
+  gap: 14px;
+}
+
+.kickoff-radio-icon {
+  font-size: 1.6rem;
+  line-height: 1;
+}
+
+.kickoff-radio-text strong {
+  display: block;
+  font-size: 0.95rem;
+  color: var(--tt-text-main);
+  margin-bottom: 4px;
+}
+
+.dark .kickoff-radio-text strong {
+  color: #f8fafc !important;
+}
+
+.kickoff-radio-text p {
+  margin: 0;
+  font-size: 0.82rem;
+  color: var(--tt-text-muted);
+  line-height: 1.4;
+}
+
+/* ── Recommended-permits pills ── */
+
+.kickoff-permit-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 4px 0 12px;
+}
+
+.kickoff-permit-tag {
+  display: inline-flex;
+  align-items: center;
+  background: #dbeafe;
+  color: #1d4ed8;
+  font-size: 0.8rem;
+  font-weight: 600;
+  padding: 6px 14px;
+  border-radius: 999px;
+  border: 1px solid rgba(37, 99, 235, 0.25);
+}
+
+.dark .kickoff-permit-tag {
+  background: rgba(37, 99, 235, 0.18) !important;
+  color: #93c5fd !important;
+  border-color: rgba(59, 130, 246, 0.35) !important;
 }
 
 .kickoff-wizard-nav {

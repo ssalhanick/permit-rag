@@ -2,7 +2,7 @@
  * projectKickoffRoutes.js — kickoff deep links and wizard prefill helpers.
  */
 
-import { SPACE_OPTIONS, WORK_TYPE_OPTIONS } from "./projectPermitRules.js";
+import { MATERIAL_OPTIONS, SPACE_OPTIONS, WORK_TYPE_OPTIONS } from "./projectPermitRules.js";
 
 const ALL_SPACE_OPTIONS = [...SPACE_OPTIONS.indoor, ...SPACE_OPTIONS.outdoor];
 
@@ -48,16 +48,26 @@ export function splitKnownAndOther(values, knownOptions) {
  * @returns {object}
  */
 export function projectToWizardState(project) {
+  const blank = {
+    address: "",
+    municipality: null,
+    latitude: null,
+    longitude: null,
+    name: "",
+    spaces: [],
+    otherSpaces: "",
+    workTypes: [],
+    otherWorkTypes: "",
+    materials: [],
+    otherMaterials: "",
+    budget: "",
+    persona: "",
+    customSystemPrompt: "",
+    comments: "",
+    doRoomScan: null,
+  };
   if (!project) {
-    return {
-      address: "",
-      municipality: null,
-      name: "",
-      spaces: [],
-      otherSpaces: "",
-      workTypes: [],
-      otherWorkTypes: "",
-    };
+    return blank;
   }
 
   const { known: spaces, other: otherSpaces } = splitKnownAndOther(project.spaces, ALL_SPACE_OPTIONS);
@@ -65,14 +75,27 @@ export function projectToWizardState(project) {
     project.work_types,
     WORK_TYPE_OPTIONS,
   );
+  const { known: materials, other: otherMaterials } = splitKnownAndOther(
+    project.materials,
+    MATERIAL_OPTIONS,
+  );
 
   return {
+    ...blank,
     address: project.address?.trim() || "",
     municipality: project.municipality || null,
+    latitude: project.latitude ?? null,
+    longitude: project.longitude ?? null,
     name: project.name?.trim() || "",
     spaces,
     otherSpaces,
     workTypes,
     otherWorkTypes,
+    materials,
+    otherMaterials,
+    budget: project.budget || "",
+    persona: project.persona || "",
+    customSystemPrompt: project.custom_system_prompt || "",
+    comments: project.project_notes || "",
   };
 }

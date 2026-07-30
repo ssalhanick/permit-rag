@@ -260,18 +260,7 @@ export default function RoomScanPanel({ project, canEdit, libraryMode = false, o
           >
             {scanning ? "Scanning…" : "Scan Single Room"}
           </button>
-          <button
-            type="button"
-            className="secondary-button room-scan-button room-scan-button--muted"
-            onClick={handleScanStructure}
-            disabled={scanning}
-          >
-            {scanning ? "Scanning…" : "Scan House"}
-          </button>
         </div>
-      )}
-      {canEdit && isNativePlatform() && (
-        <p className="muted room-scan-advanced-hint">Scan House is advanced — multi-room whole house capture.</p>
       )}
 
       {error && <div className="error-box">{error}</div>}
