@@ -82,7 +82,7 @@ _PROBES: list[tuple[str, str, str, str | None]] = [
     ),
     ("029_prompt_fragments", "column", "projects", "experience"),
     ("030_media_refs", "table", "media_refs", None),
-    ("031_media_transcripts", "table", "media_transcripts", None),
+    ("031_media_transcripts", "column", "documents", "content_class"),
     ("032_media_channels", "table", "media_channels", None),
     ("033_answer_feedback", "table", "answer_feedback", None),
     ("034_ontology_and_bids", "table", "form_templates", None),
@@ -91,7 +91,7 @@ _PROBES: list[tuple[str, str, str, str | None]] = [
     (
         "037_match_chunks_jurisdiction_hierarchy",
         "sql",
-        "SELECT EXISTS (SELECT 1 FROM pg_proc WHERE proname = 'match_chunks_jurisdiction_hierarchy') AS present;",
+        "SELECT EXISTS (SELECT 1 FROM information_schema.parameters WHERE specific_name LIKE 'match_chunks%' AND data_type = 'ARRAY') AS present;",
         None,
     ),
     ("038_overlays", "table", "overlays", None),
