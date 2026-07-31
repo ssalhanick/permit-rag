@@ -361,6 +361,28 @@ def match_overlay_chunks(
 # ════════════════════════════════════════════════
 
 
+def list_overlays_containing_point(latitude: float, longitude: float) -> list[dict[str, Any]]:
+    """Approved overlays (historic/conservation district, HOA) whose boundary
+    contains (latitude, longitude) — metadata only, no chunk search.
+
+    Document-upload plan, Type 3 coverage-surfacing addition: this is what lets
+    GET /projects/{project_id}/coverage report "you're in the Swiss Ave
+    Historic District" alongside the municipality-level status, using the same
+    ST_Contains pattern as match_overlay_chunks.
+    """
+    sql = """
+        SELECT id, name, overlay_type, jurisdiction_id, status,
+               petitioning_project_id, approved_by, approved_at, notes, created_at
+        FROM overlays
+        WHERE status = 'approved'
+          AND geom IS NOT NULL
+          AND ST_Contains(geom, ST_SetSRID(ST_MakePoint(%(lng)s, %(lat)s), 4326))
+        ORDER BY approved_at ASC;
+    """
+    with get_conn() as conn:
+        return conn.execute(sql, {"lat": latitude, "lng": longitude}).fetchall()
+
+
 def create_overlay_petition(
     *,
     name: str,

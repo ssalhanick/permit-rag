@@ -399,6 +399,13 @@ class CoverageResponse(BaseModel):
     municipality: str | None = Field(default=None, description="Resolved municipality, if any.")
     message: str = Field(description="Human-readable explanation, safe to show directly to a user.")
     is_covered: bool = Field(description="True only when status == 'covered'.")
+    overlays: list[OverlayResponse] = Field(
+        default_factory=list,
+        description=(
+            "Approved historic/conservation-district or HOA overlays whose boundary "
+            "contains this project's address, independent of municipality-level status."
+        ),
+    )
 
 
 class OverlayResponse(BaseModel):

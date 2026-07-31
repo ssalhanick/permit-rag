@@ -84,6 +84,19 @@ def check_coverage(
     return CoverageResult("unresolved", None, "No address on file yet.")
 
 
+def overlays_at_point(latitude: float | None, longitude: float | None) -> list[dict]:
+    """Approved overlays (historic/conservation district, HOA) whose boundary
+    contains this point -- Type 3 coverage-surfacing addition (document-upload
+    plan). Independent of municipality-level coverage status: a project can be
+    'covered' at the city level and also sit inside zero, one, or more overlays.
+    """
+    if latitude is None or longitude is None:
+        return []
+    from db.client import list_overlays_containing_point
+
+    return list_overlays_containing_point(latitude, longitude)
+
+
 def covered_municipalities() -> list[str]:
     """City display names with >=1 active document (e.g. "Dallas", "Fort Worth").
 

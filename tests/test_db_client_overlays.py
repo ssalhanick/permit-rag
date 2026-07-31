@@ -123,3 +123,20 @@ def test_match_overlay_chunks_filters_by_similarity(monkeypatch) -> None:
     assert [r["id"] for r in rows] == ["c1"]
     assert captured["params"]["lat"] == 32.8
     assert captured["params"]["lng"] == -96.78
+
+
+def test_list_overlays_containing_point_filters_approved_and_contains(monkeypatch) -> None:
+    """Type 3 coverage-surfacing addition: metadata-only, no chunk search."""
+    factory, captured = _fake_conn(
+        fetchall_result=[{"id": uuid4(), "name": "Swiss Avenue Historic District", "status": "approved"}]
+    )
+    monkeypatch.setattr(db_client, "get_conn", factory)
+
+    rows = db_client.list_overlays_containing_point(32.8, -96.78)
+
+    assert len(rows) == 1
+    assert rows[0]["status"] == "approved"
+    assert captured["params"]["lat"] == 32.8
+    assert captured["params"]["lng"] == -96.78
+    assert "status = 'approved'" in captured["sql"]
+    assert "ST_Contains" in captured["sql"]
