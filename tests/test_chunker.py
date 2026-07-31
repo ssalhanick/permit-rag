@@ -128,3 +128,99 @@ class TestNormalization:
             kept, stats = filter_chunks(chunks)
         assert len(kept) == 1
         assert stats["dropped"] == 0
+
+
+class TestContextPrefix:
+    """Chunking step 2 (document-upload plan): static, no-LLM context prefix."""
+
+    def test_build_context_prefix_formats_full_metadata(self) -> None:
+        from ingestion.chunker import _build_context_prefix
+
+        prefix = _build_context_prefix({
+            "municipality": "fort-worth",
+            "authority_level": "municipal",
+            "doc_type": "zoning_ordinance",
+        })
+        assert prefix == "[Fort Worth · municipal · zoning ordinance]\n"
+
+    def test_build_context_prefix_empty_for_missing_row(self) -> None:
+        from ingestion.chunker import _build_context_prefix
+
+        assert _build_context_prefix(None) == ""
+        assert _build_context_prefix({}) == ""
+
+    def test_build_context_prefix_omits_missing_fields(self) -> None:
+        from ingestion.chunker import _build_context_prefix
+
+        prefix = _build_context_prefix({"municipality": "dallas", "authority_level": None, "doc_type": ""})
+        assert prefix == "[Dallas]\n"
+
+    def test_wants_context_prefix_true_for_tier1_and_tier2(self) -> None:
+        from ingestion.chunker import _wants_context_prefix
+
+        assert _wants_context_prefix({"source_tier": 1, "overlay_id": None}) is True
+        assert _wants_context_prefix({"source_tier": 2, "overlay_id": None}) is True
+
+    def test_wants_context_prefix_true_for_overlay_regardless_of_tier(self) -> None:
+        from ingestion.chunker import _wants_context_prefix
+
+        assert _wants_context_prefix({"source_tier": 3, "overlay_id": "some-uuid"}) is True
+
+    def test_wants_context_prefix_false_for_plain_project_doc(self) -> None:
+        """Type 2 (project drawings/plans) is explicitly out of scope for the prefix."""
+        from ingestion.chunker import _wants_context_prefix
+
+        assert _wants_context_prefix({"source_tier": 3, "overlay_id": None}) is False
+
+    def test_wants_context_prefix_false_for_missing_row(self) -> None:
+        from ingestion.chunker import _wants_context_prefix
+
+        assert _wants_context_prefix(None) is False
+
+    def test_chunk_document_prepends_prefix_for_tier1(self, tmp_path: Path) -> None:
+        from ingestion.chunker import chunk_document
+
+        (tmp_path / "dallas-code.txt").write_text(
+            "A permit shall be required before construction begins on any structure.",
+            encoding="utf-8",
+        )
+        with patch(
+            "db.client.get_document_by_doc_id",
+            return_value={"source_tier": 1, "overlay_id": None, "municipality": "dallas",
+                          "authority_level": "municipal", "doc_type": "building_code"},
+        ), patch.dict("os.environ", {"CHUNK_CONTEXT_PREFIX_ENABLED": "true"}, clear=False):
+            result = chunk_document("dallas-code", raw_dir=tmp_path)
+
+        assert result["chunks"], "expected at least one chunk"
+        assert result["chunks"][0]["content"].startswith("[Dallas · municipal · building code]\n")
+
+    def test_chunk_document_skips_prefix_for_project_doc(self, tmp_path: Path) -> None:
+        from ingestion.chunker import chunk_document
+
+        (tmp_path / "project-doc-abc.txt").write_text(
+            "A permit shall be required before construction begins on any structure.",
+            encoding="utf-8",
+        )
+        with patch(
+            "db.client.get_document_by_doc_id",
+            return_value={"source_tier": 3, "overlay_id": None, "municipality": "dallas",
+                          "authority_level": "municipal", "doc_type": "other"},
+        ), patch.dict("os.environ", {"CHUNK_CONTEXT_PREFIX_ENABLED": "true"}, clear=False):
+            result = chunk_document("project-doc-abc", raw_dir=tmp_path)
+
+        assert result["chunks"], "expected at least one chunk"
+        assert not result["chunks"][0]["content"].startswith("[")
+
+    def test_chunk_document_respects_disabled_flag(self, tmp_path: Path) -> None:
+        from ingestion.chunker import chunk_document
+
+        (tmp_path / "dallas-code.txt").write_text(
+            "A permit shall be required before construction begins on any structure.",
+            encoding="utf-8",
+        )
+        with patch("db.client.get_document_by_doc_id") as mock_get, \
+             patch.dict("os.environ", {"CHUNK_CONTEXT_PREFIX_ENABLED": "false"}, clear=False):
+            result = chunk_document("dallas-code", raw_dir=tmp_path)
+
+        mock_get.assert_not_called()
+        assert not result["chunks"][0]["content"].startswith("[")

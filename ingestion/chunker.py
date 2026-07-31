@@ -87,6 +87,35 @@ def _env_int(name: str, default: int) -> int:
         return default
 
 
+def _build_context_prefix(doc_row: dict[str, Any] | None) -> str:
+    """Deterministic, no-LLM context string prepended to each chunk before
+    embedding (document-upload plan, chunking step 2) -- pure string
+    formatting from metadata already on the documents row, no model call.
+    Empty string if there's no row or no metadata to format.
+    """
+    if not doc_row:
+        return ""
+    municipality = (doc_row.get("municipality") or "").replace("-", " ").strip().title()
+    authority_level = str(doc_row.get("authority_level") or "").replace("_", " ").strip()
+    doc_type = str(doc_row.get("doc_type") or "").replace("_", " ").strip()
+    parts = [p for p in (municipality, authority_level, doc_type) if p]
+    if not parts:
+        return ""
+    return f"[{' · '.join(parts)}]\n"
+
+
+def _wants_context_prefix(doc_row: dict[str, Any] | None) -> bool:
+    """Scope the prefix to Type 1 (jurisdiction ordinance, source_tier 1/2)
+    and Type 3 (overlay, overlay_id set) documents, per the document-upload
+    plan's Key Files note -- not Type 2 project docs (drawings/plans), which
+    don't carry the same jurisdiction-ordinance framing."""
+    if not doc_row:
+        return False
+    if doc_row.get("source_tier") in (1, 2):
+        return True
+    return doc_row.get("overlay_id") is not None
+
+
 def _count_pattern_hits(text: str, patterns: tuple[Pattern[str], ...]) -> int:
     """Count total regex hits from a pattern set."""
     return sum(len(pattern.findall(text)) for pattern in patterns)
@@ -371,6 +400,18 @@ def chunk_document(
 
     chunks = split_text(clean, chunk_size, chunk_overlap)
     chunks, filter_stats = filter_chunks(chunks)
+
+    if _env_bool("CHUNK_CONTEXT_PREFIX_ENABLED", True):
+        from db.client import get_document_by_doc_id
+
+        doc_row = get_document_by_doc_id(doc_id)
+        if _wants_context_prefix(doc_row):
+            prefix = _build_context_prefix(doc_row)
+            if prefix:
+                for c in chunks:
+                    c["content"] = prefix + c["content"]
+                    c["char_count"] = len(c["content"])
+
     warn_drop_ratio = _env_float("CHUNK_FILTER_WARN_DROP_RATIO", 0.50)
     if filter_stats["drop_ratio"] > warn_drop_ratio:
         log.warning(
