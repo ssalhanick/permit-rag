@@ -386,10 +386,16 @@ if __name__ == "__main__":
     import sys
     from pathlib import Path
 
-    sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+    _project_root = Path(__file__).resolve().parent.parent
+    sys.path.insert(0, str(_project_root))
+    sys.path.insert(0, str(_project_root / "scripts"))
+
+    import _db_target
+
     from api.load_env import bootstrap_env
 
-    bootstrap_env()
+    # Resolved before argparse so the banner can name the target even on --help.
+    TARGET = _db_target.resolve(sys.argv[1:], bootstrap_env)
 
     parser = argparse.ArgumentParser(
         description="Embed document chunks via nomic-embed-text"
@@ -415,12 +421,29 @@ if __name__ == "__main__":
         action="store_true",
         help="Recompute/store embeddings for all chunks, including existing vectors",
     )
+    # Consumed by _db_target above; declared so argparse accepts them.
+    parser.add_argument(
+        "--local",
+        action="store_true",
+        help="Read DATABASE_URL from .env.local, ignoring later overrides",
+    )
+    parser.add_argument(
+        "--database-url",
+        default=None,
+        help="Target this database explicitly, bypassing dotenv resolution",
+    )
     args = parser.parse_args()
 
     logging.basicConfig(
         level=logging.INFO,
         format="%(asctime)s [%(levelname)s] %(message)s",
     )
+
+    # Embedding writes vectors to every chunk it touches -- this is exactly
+    # the kind of DB-mutating operation the drift hazard in STATE.md warns
+    # about, and this CLI previously had no target banner at all.
+    _db_target.banner(TARGET, read_only=args.dry_run)
+    _db_target.ensure_reachable(TARGET)
 
     if args.doc_id:
         result = embed_document(

@@ -1103,10 +1103,18 @@ def _build_cli_command(argv: list[str]) -> str:
 if __name__ == "__main__":
     import argparse
     import sys
+    from pathlib import Path
+
+    _project_root = Path(__file__).resolve().parent.parent
+    sys.path.insert(0, str(_project_root))
+    sys.path.insert(0, str(_project_root / "scripts"))
+
+    import _db_target
 
     from api.load_env import bootstrap_env
 
-    bootstrap_env()
+    # Resolved before argparse so the banner can name the target even on --help.
+    TARGET = _db_target.resolve(sys.argv[1:], bootstrap_env)
 
     parser = argparse.ArgumentParser(
         description="RAGAs evaluation harness for permit_rag"
@@ -1138,12 +1146,29 @@ if __name__ == "__main__":
             "load_dotenv(override=True) overwrites it inside the process."
         ),
     )
+    # Consumed by _db_target above; declared so argparse accepts them.
+    parser.add_argument(
+        "--local",
+        action="store_true",
+        help="Read DATABASE_URL from .env.local, ignoring later overrides",
+    )
+    parser.add_argument(
+        "--database-url",
+        default=None,
+        help="Target this database explicitly, bypassing dotenv resolution",
+    )
     args = parser.parse_args()
 
     logging.basicConfig(
         level=os.environ.get("LOG_LEVEL", "INFO"),
         format="%(asctime)s [%(levelname)s] %(name)s — %(message)s",
     )
+
+    # Read-only against the DB (retrieval only; generation/scoring are LLM
+    # calls, not writes) -- but this previously had no target banner at all,
+    # same gap as ingestion/embedder.py.
+    _db_target.banner(TARGET, read_only=True)
+    _db_target.ensure_reachable(TARGET)
 
     try:
         results = run_evaluation(
