@@ -257,21 +257,66 @@ export default function ProjectDashboardPage() {
         </div>
       </header>
 
-      {coverage && !coverage.is_covered && (
-        <div className="mb-6 flex items-start gap-3 rounded-lg border border-amber-300 bg-amber-50 p-4 text-sm dark:border-amber-700/60 dark:bg-amber-900/20">
-          <AlertTriangle className="w-5 h-5 shrink-0 text-amber-500 mt-0.5" />
-          <div className="flex-1">
-            <p className="font-semibold text-amber-800 dark:text-amber-300">
-              This project may be outside our coverage area
-            </p>
-            <p className="text-amber-700 dark:text-amber-400 mt-0.5">{coverage.message}</p>
+      {coverage && (
+        <div
+          className={`mb-6 rounded-lg border p-4 text-sm ${
+            coverage.is_covered
+              ? "border-slate-200 bg-white dark:border-slate-700 dark:bg-slate-800/90"
+              : "border-amber-300 bg-amber-50 dark:border-amber-700/60 dark:bg-amber-900/20"
+          }`}
+        >
+          <div className="flex flex-col sm:flex-row sm:items-start gap-3">
+            {coverage.is_covered ? (
+              <CheckCircle2 className="w-5 h-5 shrink-0 text-emerald-500 mt-0.5" />
+            ) : (
+              <AlertTriangle className="w-5 h-5 shrink-0 text-amber-500 mt-0.5" />
+            )}
+            <div className="flex-1 min-w-0">
+              <div className="flex flex-wrap items-center gap-1.5">
+                <p
+                  className={`font-semibold ${
+                    coverage.is_covered
+                      ? "text-slate-900 dark:text-slate-100"
+                      : "text-amber-800 dark:text-amber-300"
+                  }`}
+                >
+                  {coverage.municipality || "Jurisdiction not yet resolved"}
+                </p>
+                {coverage.overlays?.map((ov) => (
+                  <span
+                    key={ov.id}
+                    className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-indigo-100 dark:bg-indigo-900/60 text-indigo-800 dark:text-indigo-200"
+                  >
+                    {ov.name}
+                    {ov.approved_at && ` (approved ${new Date(ov.approved_at).toLocaleDateString()})`}
+                  </span>
+                ))}
+              </div>
+              <p
+                className={`mt-0.5 ${
+                  coverage.is_covered
+                    ? "text-slate-500 dark:text-slate-400"
+                    : "text-amber-700 dark:text-amber-400"
+                }`}
+              >
+                {coverage.message}
+              </p>
+            </div>
+            <div className="flex items-center gap-2 shrink-0">
+              <Link
+                to={`/projects/${projectId}/ordinance-petition`}
+                className="tt-btn-secondary text-xs whitespace-nowrap"
+              >
+                Petition an ordinance
+              </Link>
+              <Link
+                to={`/projects/${projectId}/petition`}
+                className="tt-btn-secondary text-xs whitespace-nowrap"
+              >
+                Petition an overlay
+              </Link>
+            </div>
           </div>
-          <Link
-            to={`/projects/${projectId}/petition`}
-            className="tt-btn-secondary text-xs whitespace-nowrap"
-          >
-            Petition this area
-          </Link>
         </div>
       )}
 
@@ -684,7 +729,10 @@ export default function ProjectDashboardPage() {
               <h3 className="text-base font-bold text-slate-900 dark:text-slate-100">Uploaded Documents & Files</h3>
               <p className="text-xs text-slate-500 dark:text-slate-300">Permits, inspection PDF documents, and 3D room scans uploaded for this project.</p>
             </div>
-            <Link to="/upload" className="tt-btn-primary flex items-center gap-1.5 text-xs">
+            <Link
+              to={`/projects/${projectId}/documents/upload`}
+              className="tt-btn-primary flex items-center gap-1.5 text-xs"
+            >
               <Upload className="w-3.5 h-3.5" />
               Upload Document
             </Link>
