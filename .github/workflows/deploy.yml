@@ -34,6 +34,8 @@ jobs:
               - 'audit/**'
               - 'evaluation/**'
               - 'commerce/**'
+              - 'bids/**'
+              - 'forms/**'
               - 'pyproject.toml'
               - 'Dockerfile'
             frontend:
@@ -57,7 +59,7 @@ jobs:
           python-version: "3.11"
 
       - name: Python syntax check
-        run: python -m compileall -q api db rag ingestion audit commerce
+        run: python -m compileall -q api db rag ingestion audit commerce bids forms
 
       - name: Login to ECR
         uses: aws-actions/amazon-ecr-login@v2

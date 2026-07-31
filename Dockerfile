@@ -33,6 +33,8 @@ COPY ingestion/ ./ingestion
 COPY audit/ ./audit
 COPY evaluation/ ./evaluation
 COPY commerce/ ./commerce
+COPY bids/ ./bids
+COPY forms/ ./forms
 
 RUN pip install --no-cache-dir hatchling && \
     pip install --no-cache-dir --no-deps .
