@@ -2012,6 +2012,77 @@ def delete_project_document(document_id: UUID) -> bool:
     return deleted
 
 
+def get_pending_documents() -> list[dict[str, Any]]:
+    """List tier-2 ordinance petitions awaiting staff review (migration 041 /
+    Type 1). Oldest first, so the admin queue works through the backlog in order."""
+    sql = """
+        SELECT * FROM documents
+        WHERE source_tier = 2 AND document_status = 'draft'
+        ORDER BY ingested_at ASC;
+    """
+    with get_conn() as conn:
+        return conn.execute(sql).fetchall()
+
+
+def approve_pending_document(doc_id: str) -> dict[str, Any] | None:
+    """Promote a tier-2 ordinance petition into the shared tier-1 corpus.
+
+    Scoped to source_tier = 2 in the WHERE clause so this can't be pointed at
+    an already-tier-1 (or tier-3) document by mistake. Returns None if doc_id
+    doesn't exist or isn't a pending tier-2 document.
+    """
+    sql = """
+        UPDATE documents
+        SET source_tier = 1, document_status = 'active'
+        WHERE doc_id = %s AND source_tier = 2
+        RETURNING *;
+    """
+    with get_conn() as conn:
+        row = conn.execute(sql, (doc_id,)).fetchone()
+        conn.commit()
+    if row:
+        log.info("Approved pending document: %s (tier 2 -> 1, active)", doc_id)
+    return row
+
+
+def reject_pending_document(doc_id: str) -> bool:
+    """Reject a tier-2 ordinance petition: delete its chunks and the document
+    row, in one transaction. documents.document_status has no 'rejected'
+    value (unlike overlays' status enum) — deletion is the terminal state
+    here rather than adding an enum value for one workflow. Scoped to
+    source_tier = 2 so this can't delete an already-approved (tier-1) or
+    project (tier-3) document.
+    """
+    sql_lookup = "SELECT id FROM documents WHERE doc_id = %s AND source_tier = 2;"
+    sql_chunks = "DELETE FROM chunks WHERE document_id = %s;"
+    sql_document = "DELETE FROM documents WHERE doc_id = %s AND source_tier = 2;"
+    with get_conn() as conn:
+        row = conn.execute(sql_lookup, (doc_id,)).fetchone()
+        if row is None:
+            return False
+        conn.execute(sql_chunks, (row["id"],))
+        cur = conn.execute(sql_document, (doc_id,))
+        conn.commit()
+    rejected = cur.rowcount > 0
+    if rejected:
+        log.info("Rejected pending document: %s (chunks + row deleted)", doc_id)
+    return rejected
+
+
+def set_user_verified_contributor(user_id: UUID, is_verified_contributor: bool) -> dict[str, Any] | None:
+    """Admin-settable trust flag (migration 041) gating Type-1 ordinance-
+    petition auto-approval. Returns None if the user doesn't exist or isn't active."""
+    sql = """
+        UPDATE users SET is_verified_contributor = %(value)s
+        WHERE id = %(user_id)s AND is_active = true
+        RETURNING *;
+    """
+    with get_conn() as conn:
+        row = conn.execute(sql, {"value": is_verified_contributor, "user_id": user_id}).fetchone()
+        conn.commit()
+    return row
+
+
 def get_user_query_history(user_id: UUID, project_id: UUID | None = None) -> list[dict[str, Any]]:
     """Fetch query log history for a specific user, sorted by newest first."""
     if project_id:

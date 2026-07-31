@@ -36,6 +36,7 @@ from api.routes import (
     commerce_router,
     contractors_router,
     corpus_router,
+    document_petitions_router,
     documents_router,
     marketplace_router,
     overlays_router,
@@ -184,6 +185,7 @@ app.add_middleware(CORSMiddleware, **_cors_middleware_kwargs())
 
 api_router = APIRouter(prefix="/api")
 api_router.include_router(query_router)
+api_router.include_router(document_petitions_router)
 api_router.include_router(documents_router)
 api_router.include_router(admin_router)
 api_router.include_router(agents_admin_router)

@@ -429,6 +429,14 @@ class ApproveOverlayRequest(BaseModel):
     )
 
 
+class SetVerifiedContributorRequest(BaseModel):
+    """Admin-settable tiered-trust flag (migration 041) — Type 1 of the
+    document-upload plan. A verified contributor's ordinance petitions
+    auto-approve into the shared corpus instead of queuing for review."""
+
+    is_verified_contributor: bool
+
+
 class ErrorResponse(BaseModel):
     """Standard error response body."""
 

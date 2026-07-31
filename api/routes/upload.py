@@ -122,10 +122,12 @@ def _process_upload(
     uploaded_by: UUID | None = None,
     overlay_id: UUID | None = None,
     visibility: str = "team",
+    auto_activate: bool = True,
 ) -> None:
     """
     Run in background: insert document row, chunk, and embed.
-    Sets document_status = 'active' on success, 'needs_ocr' on failure.
+    Sets document_status = 'active' on success (unless ``auto_activate`` is
+    False), 'needs_ocr' on failure.
 
     ``overlay_id`` (migration 038) links this document to a historic/
     conservation/HOA overlay petition — reused as-is by
@@ -133,6 +135,16 @@ def _process_upload(
     chunk/embed orchestration. ``visibility`` (migration 040) is only
     meaningful for tier-3 project documents — reused as-is by
     api/routes/project_documents.py.
+
+    ``auto_activate=False`` leaves a successfully chunked/embedded document at
+    'draft' instead of flipping it to 'active'. match_chunks has no
+    source_tier filter -- it orders tier-1 first but doesn't exclude tier-2 --
+    so 'active' alone is what keeps a document out of the shared corpus.
+    api/routes/document_petitions.py's unverified-contributor path (tier 2,
+    pending admin review) relies on this to actually stay pending: without it,
+    a tier-2 petition would leak into every query the moment chunking
+    finished, defeating the review queue. Verified-contributor petitions
+    (tier 1) and every other caller keep the default (immediate activation).
     """
     log.info("Background processing started for doc_id=%s project_id=%s uploaded_by=%s", doc_id, project_id, uploaded_by)
     try:
@@ -168,12 +180,14 @@ def _process_upload(
         delete_chunks_for_document(document_uuid)
         inserted = insert_chunks(document_uuid, chunks)
         embed_result = embed_document(doc_id, force=True)
-        update_document_admin_fields(doc_id, document_status="active")
+        if auto_activate:
+            update_document_admin_fields(doc_id, document_status="active")
         log.info(
-            "Upload processing complete: doc_id=%s chunks=%d embedded_new=%s",
+            "Upload processing complete: doc_id=%s chunks=%d embedded_new=%s auto_activate=%s",
             doc_id,
             inserted,
             embed_result.get("num_new"),
+            auto_activate,
         )
     except Exception as exc:
         log.exception("Upload processing failed for doc_id=%s: %s", doc_id, exc)
