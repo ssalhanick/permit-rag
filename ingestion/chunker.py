@@ -104,11 +104,12 @@ def _build_context_prefix(doc_row: dict[str, Any] | None) -> str:
     return f"[{' · '.join(parts)}]\n"
 
 
-def _wants_context_prefix(doc_row: dict[str, Any] | None) -> bool:
-    """Scope the prefix to Type 1 (jurisdiction ordinance, source_tier 1/2)
-    and Type 3 (overlay, overlay_id set) documents, per the document-upload
-    plan's Key Files note -- not Type 2 project docs (drawings/plans), which
-    don't carry the same jurisdiction-ordinance framing."""
+def _is_jurisdiction_or_overlay_doc(doc_row: dict[str, Any] | None) -> bool:
+    """Type 1 (jurisdiction ordinance, source_tier 1/2) or Type 3 (overlay,
+    overlay_id set) -- per the document-upload plan's Key Files note, both
+    the static context prefix (step 2) and structure-aware splitting (step 3)
+    are scoped to these two types, not Type 2 project docs (drawings/plans),
+    which don't carry the same legal-code framing."""
     if not doc_row:
         return False
     if doc_row.get("source_tier") in (1, 2):
@@ -300,10 +301,82 @@ def clean_text(text: str) -> str:
 #  CHUNKING
 # ════════════════════════════════════════════════
 
+_GENERIC_SEPARATORS = [
+    "\n\n\n",   # section breaks
+    "\n\n",      # paragraph breaks
+    "\n",        # line breaks
+    ". ",        # sentence ends
+    "; ",        # clause breaks
+    ", ",        # comma breaks
+    " ",         # word breaks
+]
+
+# Legal-section numbering: "§ 51A-4.209", "§ 3.4.1", "Sec. 12.03.004",
+# "Section 3.4.1" -- an optional letter suffix on the first number group
+# (chapter-style prefixes like "51A"), then at least one dot/hyphen-separated
+# sub-number, anchored to the start of a line so an inline cross-reference
+# ("see § 5 above") mid-sentence doesn't false-positive as a header.
+SECTION_HEADER_REGEX = re.compile(
+    r"^[ \t]*(?:§+\s*\d+[A-Za-z]?(?:[.\-]\d+)+|Sec(?:tion)?\.?\s+\d+[A-Za-z]?(?:[.\-]\d+)+)\b",
+    re.MULTILINE,
+)
+
+
+def _split_by_sections(text: str, chunk_size: int, chunk_overlap: int) -> list[str] | None:
+    """Split on legal-section markers so chunks align with actual code
+    sections instead of arbitrary paragraph breaks (document-upload plan,
+    chunking step 3). Returns None -- signaling the caller to fall back to
+    the generic separator cascade -- when fewer than two section markers are
+    found, since a single incidental match isn't enough signal that this is
+    a real sectioned document.
+
+    A section that fits within chunk_size becomes exactly one chunk. An
+    oversized section is sub-split with the same recursive splitter used for
+    unstructured text, so a single very long section still respects
+    chunk_size/chunk_overlap. No overlap is added *between* sections -- each
+    is already a complete, self-contained unit, unlike a paragraph-break cut.
+    """
+    matches = list(SECTION_HEADER_REGEX.finditer(text))
+    if len(matches) < 2:
+        return None
+
+    boundaries = [m.start() for m in matches]
+    segments: list[str] = []
+    if boundaries[0] > 0:
+        lead = text[: boundaries[0]].strip()
+        if lead:
+            segments.append(lead)
+    for i, start in enumerate(boundaries):
+        end = boundaries[i + 1] if i + 1 < len(boundaries) else len(text)
+        segment = text[start:end].strip()
+        if segment:
+            segments.append(segment)
+
+    sub_splitter = RecursiveCharacterTextSplitter(
+        chunk_size=chunk_size,
+        chunk_overlap=chunk_overlap,
+        separators=_GENERIC_SEPARATORS,
+        length_function=len,
+        is_separator_regex=False,
+    )
+
+    pieces: list[str] = []
+    for segment in segments:
+        if len(segment) <= chunk_size:
+            pieces.append(segment)
+        else:
+            pieces.extend(
+                d.page_content.strip() for d in sub_splitter.create_documents([segment])
+            )
+    return [p for p in pieces if p]
+
+
 def split_text(
     text: str,
     chunk_size: int = CHUNK_SIZE,
     chunk_overlap: int = CHUNK_OVERLAP,
+    *,
+    structure_aware: bool = False,
 ) -> list[dict]:
     """
     Split cleaned text into overlapping chunks.
@@ -313,28 +386,27 @@ def split_text(
 
     Uses RecursiveCharacterTextSplitter for legal/code text,
     splitting on sections, paragraphs, sentences, then words.
-    """
-    splitter = RecursiveCharacterTextSplitter(
-        chunk_size=chunk_size,
-        chunk_overlap=chunk_overlap,
-        separators=[
-            "\n\n\n",   # section breaks
-            "\n\n",      # paragraph breaks
-            "\n",        # line breaks
-            ". ",        # sentence ends
-            "; ",        # clause breaks
-            ", ",        # comma breaks
-            " ",         # word breaks
-        ],
-        length_function=len,
-        is_separator_regex=False,
-    )
 
-    docs = splitter.create_documents([text])
+    ``structure_aware=True`` (document-upload plan, chunking step 3) tries
+    legal-section-based splitting first via _split_by_sections, falling back
+    to the generic cascade below when the text doesn't look sectioned.
+    """
+    pieces: list[str] | None = None
+    if structure_aware:
+        pieces = _split_by_sections(text, chunk_size, chunk_overlap)
+
+    if pieces is None:
+        splitter = RecursiveCharacterTextSplitter(
+            chunk_size=chunk_size,
+            chunk_overlap=chunk_overlap,
+            separators=_GENERIC_SEPARATORS,
+            length_function=len,
+            is_separator_regex=False,
+        )
+        pieces = [d.page_content.strip() for d in splitter.create_documents([text])]
 
     chunks = []
-    for i, doc in enumerate(docs):
-        content = doc.page_content.strip()
+    for i, content in enumerate(pieces):
         if not content:
             continue
         chunks.append({
@@ -398,19 +470,27 @@ def chunk_document(
     clean = clean_text(raw_text)
     clean_chars = len(clean)
 
-    chunks = split_text(clean, chunk_size, chunk_overlap)
-    chunks, filter_stats = filter_chunks(chunks)
-
-    if _env_bool("CHUNK_CONTEXT_PREFIX_ENABLED", True):
+    context_prefix_enabled = _env_bool("CHUNK_CONTEXT_PREFIX_ENABLED", True)
+    structure_aware_enabled = _env_bool("CHUNK_STRUCTURE_AWARE_SPLITTING_ENABLED", True)
+    doc_row = None
+    if context_prefix_enabled or structure_aware_enabled:
         from db.client import get_document_by_doc_id
 
         doc_row = get_document_by_doc_id(doc_id)
-        if _wants_context_prefix(doc_row):
-            prefix = _build_context_prefix(doc_row)
-            if prefix:
-                for c in chunks:
-                    c["content"] = prefix + c["content"]
-                    c["char_count"] = len(c["content"])
+    is_scoped_doc = _is_jurisdiction_or_overlay_doc(doc_row)
+
+    chunks = split_text(
+        clean, chunk_size, chunk_overlap,
+        structure_aware=structure_aware_enabled and is_scoped_doc,
+    )
+    chunks, filter_stats = filter_chunks(chunks)
+
+    if context_prefix_enabled and is_scoped_doc:
+        prefix = _build_context_prefix(doc_row)
+        if prefix:
+            for c in chunks:
+                c["content"] = prefix + c["content"]
+                c["char_count"] = len(c["content"])
 
     warn_drop_ratio = _env_float("CHUNK_FILTER_WARN_DROP_RATIO", 0.50)
     if filter_stats["drop_ratio"] > warn_drop_ratio:
