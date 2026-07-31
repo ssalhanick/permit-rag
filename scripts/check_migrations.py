@@ -95,6 +95,8 @@ _PROBES: list[tuple[str, str, str, str | None]] = [
         None,
     ),
     ("038_overlays", "table", "overlays", None),
+    ("040_document_visibility", "column", "documents", "visibility"),
+    ("041_user_trust", "column", "users", "is_verified_contributor"),
     ("042_marketplace_listings", "column", "projects", "marketplace_status"),
     ("043_contractor_profiles", "table", "contractor_profiles", None),
     ("044_bids_core", "table", "bids", None),

@@ -290,7 +290,7 @@ def retrieve(
     # 1. Embed the query (uses "search_query: " prefix)
     query_vec = embed_query(query)
 
-    hybrid_enabled = _env_bool("RETRIEVAL_HYBRID_ENABLED", False)
+    hybrid_enabled = _env_bool("RETRIEVAL_HYBRID_ENABLED", True)
     dense_top_n = max(top_k, _env_int("RETRIEVAL_DENSE_TOP_N", 20))
     bm25_top_n = max(top_k, _env_int("RETRIEVAL_BM25_TOP_N", 20))
 

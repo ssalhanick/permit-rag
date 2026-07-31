@@ -168,6 +168,7 @@ def test_retrieve_without_municipality_skips_chain_lookup(
 
 @patch("ingestion.embedder.embed_query", return_value=[0.1, 0.2, 0.3])
 @patch("db.client.get_jurisdiction_chain", return_value=["dallas"])
+@patch("db.client.search_chunks_bm25", return_value=[])
 @patch("db.client.match_chunks", return_value=[])
 @patch("db.client.get_project")
 @patch("rag.mini_rag.retrieve_project_chunks", return_value=[])
@@ -177,6 +178,7 @@ def test_retrieve_with_project_merges_overlay_chunks(
     _mock_project_chunks,
     mock_get_project,
     _mock_match_chunks,
+    _mock_bm25,
     _mock_chain,
     _mock_embed,
 ) -> None:
@@ -202,6 +204,7 @@ def test_retrieve_with_project_merges_overlay_chunks(
 
 @patch("ingestion.embedder.embed_query", return_value=[0.1, 0.2, 0.3])
 @patch("db.client.get_jurisdiction_chain", return_value=["dallas"])
+@patch("db.client.search_chunks_bm25", return_value=[])
 @patch("db.client.match_chunks", return_value=[])
 @patch("db.client.get_project")
 @patch("rag.mini_rag.retrieve_project_chunks", return_value=[])
@@ -211,6 +214,7 @@ def test_retrieve_with_project_skips_overlay_lookup_without_coordinates(
     _mock_project_chunks,
     mock_get_project,
     _mock_match_chunks,
+    _mock_bm25,
     _mock_chain,
     _mock_embed,
 ) -> None:
