@@ -149,6 +149,7 @@ def insert_document(
     uploaded_by: UUID | None = None,
     content_class: str = "authority",  # migration 031: 'authority' | 'how_to'
     overlay_id: UUID | None = None,  # migration 038: linked overlay petition, if any
+    visibility: str = "team",  # migration 040: 'private' | 'team' -- tier-3 only
 ) -> dict[str, Any]:
     """
     Insert a document row. Returns the full row as a dict.
@@ -166,7 +167,7 @@ def insert_document(
             doc_type, subject_tags, effective_date, document_status,
             is_current, retrieval_weight, review_due,
             checksum_sha256, source_etag, local_path, source_tier,
-            project_id, uploaded_by, content_class, overlay_id
+            project_id, uploaded_by, content_class, overlay_id, visibility
         ) VALUES (
             %(doc_id)s, %(source_url)s, %(municipality)s,
             %(authority_level)s::authority_level,
@@ -176,7 +177,7 @@ def insert_document(
             %(is_current)s, %(retrieval_weight)s, %(review_due)s,
             %(checksum_sha256)s, %(source_etag)s, %(local_path)s,
             %(source_tier)s, %(project_id)s, %(uploaded_by)s, %(content_class)s,
-            %(overlay_id)s
+            %(overlay_id)s, %(visibility)s::document_visibility
         )
         ON CONFLICT (doc_id) DO UPDATE SET
             source_url       = EXCLUDED.source_url,
@@ -196,7 +197,8 @@ def insert_document(
             project_id       = EXCLUDED.project_id,
             uploaded_by      = EXCLUDED.uploaded_by,
             content_class    = EXCLUDED.content_class,
-            overlay_id       = EXCLUDED.overlay_id
+            overlay_id       = EXCLUDED.overlay_id,
+            visibility       = EXCLUDED.visibility
         RETURNING *;
     """
     params = {
@@ -219,6 +221,7 @@ def insert_document(
         "uploaded_by": uploaded_by,
         "content_class": content_class,
         "overlay_id": overlay_id,
+        "visibility": visibility,
     }
     with get_conn() as conn:
         row = conn.execute(sql, params).fetchone()
@@ -928,17 +931,27 @@ def match_project_chunks(
     project_id: UUID,
     top_k: int = 5,
     min_similarity: float = 0.0,
+    requesting_user_id: UUID | None = None,
 ) -> list[dict[str, Any]]:
     """
     Vector search limited to tier 2/3 documents for a project.
 
     Includes docs with documents.project_id or linked via project_documents.
 
+    Tier-3 (project-specific, migration 040) rows are additionally gated by
+    ``visibility``: 'team' docs are always included, 'private' docs only when
+    ``requesting_user_id`` matches ``uploaded_by``. Tier-2 rows are unaffected
+    (visibility is only meaningful for tier-3). ``requesting_user_id=None``
+    (an unauthenticated or system caller) sees 'team' docs only -- ``uploaded_by
+    = NULL`` never matches a real row under SQL's NULL semantics, so no extra
+    branching is needed to keep private docs hidden by default.
+
     Args:
         query_embedding: 768-dim query vector.
         project_id: Project scope UUID.
         top_k: Max results.
         min_similarity: Cosine similarity floor.
+        requesting_user_id: The querying user, for the tier-3 visibility filter.
 
     Returns:
         Chunk dicts ordered by source_tier ASC, similarity DESC.
@@ -962,11 +975,16 @@ def match_project_chunks(
         FROM chunks c
         JOIN documents d ON d.id = c.document_id
         LEFT JOIN project_documents pd ON pd.document_id = d.id
-        WHERE d.source_tier IN (2, 3)
-          AND d.document_status = 'active'
+        WHERE d.document_status = 'active'
           AND c.status = 'active'
           AND c.embedding IS NOT NULL
           AND (d.project_id = %(project_id)s OR pd.project_id = %(project_id)s)
+          AND (
+                d.source_tier = 2
+             OR (d.source_tier = 3 AND (
+                    d.visibility = 'team' OR d.uploaded_by = %(requesting_user_id)s
+                 ))
+          )
         ORDER BY d.source_tier ASC, similarity DESC
         LIMIT %(match_count)s;
     """
@@ -974,6 +992,7 @@ def match_project_chunks(
         "query_embedding": str(query_embedding),
         "project_id": project_id,
         "match_count": top_k,
+        "requesting_user_id": requesting_user_id,
     }
     with get_conn() as conn:
         rows = conn.execute(sql, params).fetchall()
@@ -1968,6 +1987,29 @@ def unshare_document_from_project(project_id: UUID, document_id: UUID) -> bool:
         cur = conn.execute(sql, (project_id, document_id))
         conn.commit()
     return cur.rowcount > 0
+
+
+def delete_project_document(document_id: UUID) -> bool:
+    """Hard-delete a tier-3 project document: its chunks, then the row itself,
+    in one transaction. Returns False (no-op) if the id isn't a tier-3 document.
+
+    Deliberately not a blanket ON DELETE CASCADE off uploaded_by -- that FK is
+    shared with tier-1/tier-2 corpus documents, which must survive user
+    deletion. The ``source_tier = 3`` guard on the DELETE itself means this is
+    safe to call with any document_id: it can only ever remove a project doc.
+    ``project_documents`` cleans itself up via its own ON DELETE CASCADE
+    (migration 011) once the documents row is gone.
+    """
+    sql_chunks = "DELETE FROM chunks WHERE document_id = %s;"
+    sql_document = "DELETE FROM documents WHERE id = %s AND source_tier = 3;"
+    with get_conn() as conn:
+        conn.execute(sql_chunks, (document_id,))
+        cur = conn.execute(sql_document, (document_id,))
+        conn.commit()
+    deleted = cur.rowcount > 0
+    if deleted:
+        log.info("Deleted project document %s (chunks + row, one transaction)", document_id)
+    return deleted
 
 
 def get_user_query_history(user_id: UUID, project_id: UUID | None = None) -> list[dict[str, Any]]:

@@ -39,6 +39,7 @@ from api.routes import (
     documents_router,
     marketplace_router,
     overlays_router,
+    project_documents_router,
     projects_router,
     pull_router,
     query_router,
@@ -190,6 +191,7 @@ api_router.include_router(upload_router)
 api_router.include_router(pull_router)
 api_router.include_router(auth_router)
 api_router.include_router(overlays_router)
+api_router.include_router(project_documents_router)
 api_router.include_router(projects_router)
 api_router.include_router(commerce_router)
 api_router.include_router(contractors_router)

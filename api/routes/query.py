@@ -537,6 +537,9 @@ def query_answer(
                 min_similarity=body.min_similarity,
                 project_id=body.project_id,
                 chunk_ids=body.chunk_ids,
+                user_id=str(current_user["user_id"])
+                if (current_user and isinstance(current_user, dict) and current_user.get("user_id"))
+                else None,
             ),
             _build_manager_deps(observer),
         )

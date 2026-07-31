@@ -121,6 +121,7 @@ def _process_upload(
     project_id: UUID | None = None,
     uploaded_by: UUID | None = None,
     overlay_id: UUID | None = None,
+    visibility: str = "team",
 ) -> None:
     """
     Run in background: insert document row, chunk, and embed.
@@ -129,7 +130,9 @@ def _process_upload(
     ``overlay_id`` (migration 038) links this document to a historic/
     conservation/HOA overlay petition — reused as-is by
     api/routes/overlays.py's petition endpoint rather than duplicating this
-    chunk/embed orchestration.
+    chunk/embed orchestration. ``visibility`` (migration 040) is only
+    meaningful for tier-3 project documents — reused as-is by
+    api/routes/project_documents.py.
     """
     log.info("Background processing started for doc_id=%s project_id=%s uploaded_by=%s", doc_id, project_id, uploaded_by)
     try:
@@ -148,6 +151,7 @@ def _process_upload(
             project_id=project_id,
             uploaded_by=uploaded_by,
             overlay_id=overlay_id,
+            visibility=visibility,
         )
         document_uuid = doc_row["id"]
         if project_id:

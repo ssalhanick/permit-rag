@@ -14,6 +14,7 @@ from uuid import UUID
 from pydantic import BaseModel, EmailStr, Field
 
 DocumentStatusType = Literal["active", "superseded", "repealed", "needs_ocr", "draft"]
+DocumentVisibilityType = Literal["private", "team"]  # migration 040, tier-3 only
 AuthorityLevelType = Literal["municipal", "county", "state", "federal"]
 DocTypeType = Literal[
     "building_code",

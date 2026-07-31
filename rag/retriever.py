@@ -390,6 +390,7 @@ def retrieve_with_project(
     top_k: int = 5,
     municipality: str | None = None,
     min_similarity: float = 0.0,
+    requesting_user_id: str | None = None,
 ) -> RetrievalResult:
     """
     Retrieve corpus chunks and merge project mini-RAG when project_id is set.
@@ -405,6 +406,9 @@ def retrieve_with_project(
         top_k: Max merged chunks.
         municipality: Optional municipality filter for corpus tier.
         min_similarity: Similarity floor.
+        requesting_user_id: The querying user's UUID string, for the tier-3
+            'private' vs 'team' visibility filter (migration 040). None (e.g.
+            unauthenticated) sees 'team' docs only.
 
     Returns:
         RetrievalResult with merged chunks.
@@ -431,11 +435,17 @@ def retrieve_with_project(
         log.warning("Invalid project_id for mini-RAG: %s", project_id)
         return result
 
+    try:
+        uid = UUID(requesting_user_id) if requesting_user_id else None
+    except ValueError:
+        uid = None
+
     project_chunks = retrieve_project_chunks(
         query,
         pid,
         top_k=max(3, top_k // 2),
         min_similarity=min_similarity,
+        requesting_user_id=uid,
     )
 
     from db.client import get_project
