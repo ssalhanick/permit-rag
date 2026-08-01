@@ -30,6 +30,10 @@ export class RoomCaptureWeb {
     return { applied: false };
   }
 
+  async previewRoomModel() {
+    return { previewed: false, error: "3D model preview requires native iOS build." };
+  }
+
   async startSpeechRecognition() {
     const SpeechClass = window.SpeechRecognition || window.webkitSpeechRecognition;
     if (!SpeechClass) {

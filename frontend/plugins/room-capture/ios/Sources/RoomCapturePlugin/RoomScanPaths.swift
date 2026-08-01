@@ -17,6 +17,14 @@ enum RoomScanPaths {
     static func redesignPath(projectId: String, structureId: String, roomId: String) -> String {
         "room_scans/\(projectId)/\(structureId)/rooms/\(roomId)/redesign.json"
     }
+
+    /// Cache dir for on-device 3D model previews, keyed only by roomId — native
+    /// capture doesn't know projectId/structureId yet (JS resolves those later),
+    /// and a preview file doesn't need to be durable the way capture.json is.
+    static func roomModelCacheURL(roomId: String) -> URL {
+        let base = FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask)[0]
+        return base.appendingPathComponent("room_models/\(roomId).usdz")
+    }
 }
 
 enum RoomScanJSON {

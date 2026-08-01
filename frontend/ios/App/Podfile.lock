@@ -92,7 +92,7 @@ SPEC CHECKSUMS:
   CapacitorShare: 25f7fc5dd0e4edbde5d6801c6de5d14a8b450a41
   IONFilesystemLib: 21a63377696b2d8fab5632ecfb7d2ac67bddb68a
   IONGeolocationLib: 20f9d0248a0b5264511fb57a37e25dd2badf797a
-  RoomCapture: d90a31ca43c735b681e51e20736cc0dfabcd9153
+  RoomCapture: 8e1c461b119c5ad91b7744805dc7ca2e6b825ade
 
 PODFILE CHECKSUM: 5facff61cd02d420dc5bd44cb27d868a55c35f9f
 

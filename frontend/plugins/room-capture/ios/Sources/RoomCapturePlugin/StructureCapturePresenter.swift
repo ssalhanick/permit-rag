@@ -18,6 +18,7 @@ final class StructureCapturePresenter: NSObject, RoomCaptureViewDelegate, RoomCa
     private var capturedRooms: [CapturedRoom] = []
     private var roomLabels: [String] = []
     private var roomSections: [String?] = []
+    private var roomIds: [String] = []
     private var roomCounter = 1
 
     init(call: CAPPluginCall, structureLabel: String, onFinished: (() -> Void)? = nil) {
@@ -190,6 +191,7 @@ final class StructureCapturePresenter: NSObject, RoomCaptureViewDelegate, RoomCa
             rooms: capturedRooms,
             labels: roomLabels,
             sections: roomSections,
+            roomIds: roomIds,
             structureLabel: structureLabel,
             structureId: structureId
         )
@@ -236,9 +238,12 @@ final class StructureCapturePresenter: NSObject, RoomCaptureViewDelegate, RoomCa
             return
         }
 
+        let roomId = UUID().uuidString.lowercased()
         capturedRooms.append(processedResult)
         roomLabels.append("Room \(roomCounter)")
         roomSections.append(nil)
+        roomIds.append(roomId)
+        RoomCaptureEncoder.exportModelPreview(processedResult, roomId: roomId)
         promptNextOrFinish()
     }
 }

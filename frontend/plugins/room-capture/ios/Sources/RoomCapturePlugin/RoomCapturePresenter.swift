@@ -151,11 +151,13 @@ final class RoomCapturePresenter: NSObject, RoomCaptureViewDelegate, RoomCapture
             return
         }
 
+        let roomId = UUID().uuidString.lowercased()
         let payload = RoomCaptureEncoder.encode(
             capturedRoom: processedResult,
             roomLabel: roomLabel,
-            roomId: UUID().uuidString.lowercased()
+            roomId: roomId
         )
+        RoomCaptureEncoder.exportModelPreview(processedResult, roomId: roomId)
         dismissHost {
             self.finish {
                 self.call.resolve(payload)

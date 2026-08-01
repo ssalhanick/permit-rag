@@ -30,12 +30,14 @@ public class RoomCapturePlugin: CAPPlugin, CAPBridgedPlugin {
         CAPPluginMethod(name: "openRoomAR", returnType: CAPPluginReturnPromise),
         CAPPluginMethod(name: "applyMaterial", returnType: CAPPluginReturnPromise),
         CAPPluginMethod(name: "startSpeechRecognition", returnType: CAPPluginReturnPromise),
+        CAPPluginMethod(name: "previewRoomModel", returnType: CAPPluginReturnPromise),
     ]
 
     #if canImport(RoomPlan)
     private var activePresenter: RoomCapturePresenter?
     private var activeStructurePresenter: StructureCapturePresenter?
     private var activeARPresenters: [String: RoomARPresenter] = [:]
+    private var activeModelPreviewPresenter: RoomModelPreviewPresenter?
     #endif
 
     @objc func isAvailable(_ call: CAPPluginCall) {
@@ -216,6 +218,38 @@ public class RoomCapturePlugin: CAPPlugin, CAPBridgedPlugin {
         call.resolve(["applied": true, "overlay": overlay, "persisted": true])
         #else
         call.resolve(["applied": false])
+        #endif
+    }
+
+    @objc func previewRoomModel(_ call: CAPPluginCall) {
+        #if canImport(RoomPlan)
+        guard let roomId = call.getString("roomId") else {
+            call.reject("roomId is required.")
+            return
+        }
+        guard let viewController = bridge?.viewController else {
+            call.reject("No view controller available for model preview.")
+            return
+        }
+        let modelURL = RoomScanPaths.roomModelCacheURL(roomId: roomId)
+        guard FileManager.default.fileExists(atPath: modelURL.path) else {
+            call.reject("No 3D model available for this room yet.")
+            return
+        }
+        DispatchQueue.main.async { [weak self] in
+            guard let self else { return }
+            let presenter = RoomModelPreviewPresenter(
+                call: call,
+                modelURL: modelURL,
+                onFinished: { [weak self] in
+                    self?.activeModelPreviewPresenter = nil
+                }
+            )
+            self.activeModelPreviewPresenter = presenter
+            presenter.present(from: viewController)
+        }
+        #else
+        call.reject("3D model preview requires iOS RoomPlan build.")
         #endif
     }
 

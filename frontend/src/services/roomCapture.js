@@ -100,6 +100,18 @@ export async function applyMaterial(opts) {
 }
 
 /**
+ * Open the on-device QuickLook preview for a room's cached 3D model.
+ * The model is exported at capture time; nothing to preview means the
+ * capture predates this feature or export failed on-device.
+ *
+ * @param {string} roomId
+ * @returns {Promise<{ previewed: boolean }>}
+ */
+export async function previewRoomModel(roomId) {
+  return RoomCapture.previewRoomModel({ roomId });
+}
+
+/**
  * Start native speech recognition for design commands.
  *
  * @returns {Promise<{ transcript: string }>}

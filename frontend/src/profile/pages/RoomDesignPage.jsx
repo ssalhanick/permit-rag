@@ -4,6 +4,7 @@ import { Directory, Encoding, Filesystem } from "@capacitor/filesystem";
 import {
   AlertTriangle,
   ArrowLeft,
+  Box,
   CheckCircle,
   Download,
   Eye,
@@ -31,7 +32,7 @@ import {
   saveDesignPreview,
 } from "../../services/roomDesignIntent.js";
 import { generateAndAttachRoomPreview } from "../../services/roomPreviewImage.js";
-import { openRoomARForScan, startSpeechRecognition } from "../../services/roomCapture.js";
+import { openRoomARForScan, previewRoomModel, startSpeechRecognition } from "../../services/roomCapture.js";
 import { findRoomFilesystemLocation } from "../../services/roomScanFilesystem.js";
 import { buildRoomDxf } from "../../services/roomCadExport.js";
 import { loadUserLibrary } from "../../services/roomScanStorage.js";
@@ -333,6 +334,21 @@ export default function RoomDesignPage({ libraryMode = false }) {
     }
   };
 
+  const handlePreviewModel = async () => {
+    if (!fsIds) {
+      return;
+    }
+    setError("");
+    setBusy(true);
+    try {
+      await previewRoomModel(fsIds.roomId);
+    } catch (err) {
+      setError(err.message || "3D model preview unavailable.");
+    } finally {
+      setBusy(false);
+    }
+  };
+
   const handleActivateRevision = async (revisionId) => {
     if (!fsIds) {
       return;
@@ -522,6 +538,17 @@ export default function RoomDesignPage({ libraryMode = false }) {
             >
               <Scan className="w-3.5 h-3.5" />
               {selectedSurfaceId ? "Open AR here" : "Open AR"}
+            </button>
+          )}
+          {isNativePlatform() && (
+            <button
+              type="button"
+              className="tt-btn-secondary flex items-center gap-1.5 text-xs px-4 py-2.5 rounded-xl"
+              onClick={handlePreviewModel}
+              disabled={busy}
+            >
+              <Box className="w-3.5 h-3.5" />
+              Preview 3D Model
             </button>
           )}
           <button

@@ -9,7 +9,7 @@ import RealityKit
 import ARKit
 
 /// Room-scoped AR design viewer with surface list and material overlays.
-final class RoomARPresenter: NSObject, UITableViewDelegate, UITableViewDataSource {
+final class RoomARPresenter: NSObject, UITableViewDelegate, UITableViewDataSource, ARSessionDelegate {
     private let call: CAPPluginCall?
     private let projectId: String
     private let structureId: String
@@ -18,6 +18,7 @@ final class RoomARPresenter: NSObject, UITableViewDelegate, UITableViewDataSourc
     private var capture: [String: Any] = [:]
     private var redesign: [String: Any] = [:]
     private var surfaces: [[String: Any]] = []
+    private var objects: [[String: Any]] = []
     private var arView: ARView?
     private var viewController: UIViewController?
     private var textureCache: [String: TextureResource] = [:]
@@ -31,6 +32,17 @@ final class RoomARPresenter: NSObject, UITableViewDelegate, UITableViewDataSourc
     private var overlayOpacity: Float = 0.3
     private var overlayImageView: UIImageView? = nil
     private var onFinished: (() -> Void)?
+
+    private enum PlacementState {
+        case placing
+        case locked
+    }
+    private var placementState: PlacementState = .placing
+    private var placementPreviewAnchor: AnchorEntity?
+    private var latestPlacementTransform: simd_float4x4?
+    private var roomAnchor: AnchorEntity?
+    private var lockAnchorButton: UIButton?
+    private var repositionButton: UIButton?
 
     init(
         call: CAPPluginCall? = nil,
@@ -87,6 +99,7 @@ final class RoomARPresenter: NSObject, UITableViewDelegate, UITableViewDataSourc
             "overlays": [],
         ]
         surfaces = capture["surfaces"] as? [[String: Any]] ?? []
+        objects = capture["objects"] as? [[String: Any]] ?? []
 
         let vc = UIViewController()
         vc.modalPresentationStyle = .fullScreen
@@ -94,9 +107,16 @@ final class RoomARPresenter: NSObject, UITableViewDelegate, UITableViewDataSourc
 
         let arView = ARView(frame: .zero)
         arView.translatesAutoresizingMaskIntoConstraints = false
-        arView.automaticallyConfigureSession = true
+        arView.automaticallyConfigureSession = false
         vc.view.addSubview(arView)
         self.arView = arView
+
+        // Explicit config (rather than automaticallyConfigureSession) so we can turn on
+        // horizontal plane detection — placement raycasts need real plane data to hit.
+        let sessionConfig = ARWorldTrackingConfiguration()
+        sessionConfig.planeDetection = [.horizontal]
+        arView.session.delegate = self
+        arView.session.run(sessionConfig)
 
         let overlayImageView = UIImageView()
         overlayImageView.translatesAutoresizingMaskIntoConstraints = false
@@ -125,6 +145,18 @@ final class RoomARPresenter: NSObject, UITableViewDelegate, UITableViewDataSourc
         hud.layer.masksToBounds = true
         vc.view.addSubview(hud)
         self.hudLabel = hud
+
+        let reposition = UIButton(type: .system)
+        reposition.setTitle("Reposition", for: .normal)
+        reposition.setTitleColor(.white, for: .normal)
+        reposition.titleLabel?.font = UIFont.systemFont(ofSize: 11, weight: .semibold)
+        reposition.backgroundColor = UIColor.black.withAlphaComponent(0.55)
+        reposition.layer.cornerRadius = 6
+        reposition.translatesAutoresizingMaskIntoConstraints = false
+        reposition.addTarget(self, action: #selector(repositionTapped), for: .touchUpInside)
+        reposition.isHidden = true
+        vc.view.insertSubview(reposition, aboveSubview: arView)
+        self.repositionButton = reposition
 
         let tapGesture = UITapGestureRecognizer(target: self, action: #selector(handleARViewTap(_:)))
         arView.addGestureRecognizer(tapGesture)
@@ -180,6 +212,18 @@ final class RoomARPresenter: NSObject, UITableViewDelegate, UITableViewDataSourc
             nudge.addArrangedSubview(btn)
         }
 
+        let lockAnchor = UIButton(type: .system)
+        lockAnchor.setTitle("Lock Anchor", for: .normal)
+        lockAnchor.setTitleColor(.white, for: .normal)
+        lockAnchor.titleLabel?.font = UIFont.systemFont(ofSize: 13, weight: .bold)
+        lockAnchor.backgroundColor = UIColor.systemBlue.withAlphaComponent(0.85)
+        lockAnchor.layer.cornerRadius = 8
+        lockAnchor.translatesAutoresizingMaskIntoConstraints = false
+        lockAnchor.addTarget(self, action: #selector(lockAnchorTapped), for: .touchUpInside)
+        lockAnchor.isEnabled = false
+        controlPanel.addSubview(lockAnchor)
+        self.lockAnchorButton = lockAnchor
+
         NSLayoutConstraint.activate([
             arView.topAnchor.constraint(equalTo: vc.view.topAnchor),
             arView.leadingAnchor.constraint(equalTo: vc.view.leadingAnchor),
@@ -217,15 +261,31 @@ final class RoomARPresenter: NSObject, UITableViewDelegate, UITableViewDataSourc
             dictate.topAnchor.constraint(equalTo: nudge.bottomAnchor, constant: 12),
             dictate.trailingAnchor.constraint(equalTo: controlPanel.trailingAnchor, constant: -20),
             dictate.heightAnchor.constraint(equalToConstant: 44),
+
+            lockAnchor.topAnchor.constraint(equalTo: controlPanel.topAnchor, constant: 10),
+            lockAnchor.leadingAnchor.constraint(equalTo: controlPanel.leadingAnchor, constant: 12),
+            lockAnchor.trailingAnchor.constraint(equalTo: controlPanel.trailingAnchor, constant: -12),
+            lockAnchor.heightAnchor.constraint(equalToConstant: 32),
+
+            reposition.topAnchor.constraint(equalTo: hud.bottomAnchor, constant: 8),
+            reposition.trailingAnchor.constraint(equalTo: arView.trailingAnchor, constant: -12),
+            reposition.widthAnchor.constraint(equalToConstant: 100),
+            reposition.heightAnchor.constraint(equalToConstant: 30),
         ])
 
-        addWallAnchors(to: arView)
+        enterPlacementMode()
         updateDictateButtonTitle()
 
         self.raycastTimer = Timer.scheduledTimer(withTimeInterval: 0.3, repeats: true) { [weak self] _ in
-            self?.performCenterRaycast()
+            guard let self else { return }
+            switch self.placementState {
+            case .placing:
+                self.updatePlacementPreview()
+            case .locked:
+                self.performCenterRaycast()
+            }
         }
-        
+
         viewController = vc
         host.present(vc, animated: true) {
             self.call?.resolve(["opened": true, "room_id": self.roomId])
@@ -270,11 +330,159 @@ final class RoomARPresenter: NSObject, UITableViewDelegate, UITableViewDataSourc
         return nil
     }
 
-    private func addWallAnchors(to arView: ARView) {
+    // MARK: - Guided placement (aim, preview, lock)
+    //
+    // The AR session here has no shared world map with the original RoomPlan
+    // scan, so nothing can align this diorama with the room's actual real
+    // walls. What we *can* do is anchor it to a real detected surface near
+    // the user, deliberately, instead of a fixed offset from wherever
+    // tracking happened to start. Placement is a distinct phase — nothing is
+    // built until the user aims and taps "Lock Anchor" — rather than an
+    // automatic first-plane guess the user has no control over.
+
+    func session(_ session: ARSession, cameraDidChangeTrackingState camera: ARCamera) {
+        DispatchQueue.main.async { [weak self] in
+            self?.handleTrackingState(camera.trackingState)
+        }
+    }
+
+    private func handleTrackingState(_ state: ARCamera.TrackingState) {
+        guard placementState == .placing else { return }
+        switch state {
+        case .limited(let reason):
+            let hint: String
+            switch reason {
+            case .initializing: hint = "Move your phone slowly to start tracking…"
+            case .excessiveMotion: hint = "Move more slowly."
+            case .insufficientFeatures: hint = "Point at a well-lit surface with detail."
+            case .relocalizing: hint = "Finding your position…"
+            @unknown default: hint = "Move your phone slowly."
+            }
+            hudLabel?.text = " \(hint)"
+        case .normal:
+            hudLabel?.text = " Point at the floor where the room should sit, then tap Lock Anchor"
+        case .notAvailable:
+            hudLabel?.text = " Tracking unavailable."
+        }
+    }
+
+    private func enterPlacementMode() {
+        placementState = .placing
+        nudgeStack?.isHidden = true
+        dictateButton?.isHidden = true
+        lockAnchorButton?.isHidden = false
+        lockAnchorButton?.isEnabled = false
+        repositionButton?.isHidden = true
+        hudLabel?.text = " Point at the floor where the room should sit, then tap Lock Anchor"
+    }
+
+    private func enterLockedMode() {
+        placementState = .locked
+        nudgeStack?.isHidden = false
+        dictateButton?.isHidden = false
+        lockAnchorButton?.isHidden = true
+        repositionButton?.isHidden = false
+    }
+
+    private func updatePlacementPreview() {
+        guard let arView = arView else { return }
+        let center = CGPoint(x: arView.bounds.midX, y: arView.bounds.midY)
+        let results = arView.raycast(from: center, allowing: .estimatedPlane, alignment: .horizontal)
+        guard let hit = results.first else {
+            latestPlacementTransform = nil
+            lockAnchorButton?.isEnabled = false
+            return
+        }
+        latestPlacementTransform = hit.worldTransform
+        lockAnchorButton?.isEnabled = true
+        updatePlacementPreviewEntity(worldTransform: hit.worldTransform)
+    }
+
+    private func updatePlacementPreviewEntity(worldTransform: simd_float4x4) {
+        guard let arView = arView else { return }
+        if let existing = placementPreviewAnchor {
+            arView.scene.removeAnchor(existing)
+        }
+        let anchor = AnchorEntity(world: worldTransform)
+        anchor.addChild(buildPlacementFootprintEntity())
+        arView.scene.addAnchor(anchor)
+        placementPreviewAnchor = anchor
+    }
+
+    private func estimatedFootprintSize() -> SIMD2<Float> {
+        var minX: Float = .greatestFiniteMagnitude, maxX: Float = -.greatestFiniteMagnitude
+        var minZ: Float = .greatestFiniteMagnitude, maxZ: Float = -.greatestFiniteMagnitude
+        var found = false
+        for surface in surfaces where (surface["category"] as? String) == "wall" {
+            guard let matrixArray = surface["transform_matrix"] as? [Double],
+                  let matrix = transformMatrix(from: matrixArray) else { continue }
+            let pos = matrix.columns.3
+            minX = min(minX, pos.x); maxX = max(maxX, pos.x)
+            minZ = min(minZ, pos.z); maxZ = max(maxZ, pos.z)
+            found = true
+        }
+        guard found else { return SIMD2<Float>(2, 2) }
+        return SIMD2<Float>(max(maxX - minX, 1.0), max(maxZ - minZ, 1.0))
+    }
+
+    private func buildPlacementFootprintEntity() -> Entity {
+        let size = estimatedFootprintSize()
+        let mesh = MeshResource.generateBox(width: size.x, height: 0.02, depth: size.y)
+        var material = UnlitMaterial()
+        material.color = .init(tint: UIColor.systemBlue.withAlphaComponent(0.35))
+        return ModelEntity(mesh: mesh, materials: [material])
+    }
+
+    @objc private func lockAnchorTapped() {
+        guard let transform = latestPlacementTransform, let arView = arView else { return }
+        if let previewAnchor = placementPreviewAnchor {
+            arView.scene.removeAnchor(previewAnchor)
+            placementPreviewAnchor = nil
+        }
+        lockRoomAnchor(worldTransform: transform)
+    }
+
+    @objc private func repositionTapped() {
+        if let anchor = roomAnchor {
+            arView?.scene.removeAnchor(anchor)
+        }
+        roomAnchor = nil
+        selectedSurfaceId = nil
+        pointedSurfaceId = nil
+        enterPlacementMode()
+    }
+
+    /// Floor height in the captured room's own coordinate frame, so the
+    /// captured floor lands on the real detected plane rather than floating
+    /// at an arbitrary height. Falls back to an estimate from wall geometry
+    /// when no floor surface was captured (pre-iOS 17 scans) — worth
+    /// confirming visually on-device, this fallback is a reasonable guess,
+    /// not measured.
+    private func estimatedFloorY() -> Float {
+        if let floorSurface = surfaces.first(where: { ($0["category"] as? String) == "floor" }),
+           let matrixArray = floorSurface["transform_matrix"] as? [Double],
+           let matrix = transformMatrix(from: matrixArray) {
+            return matrix.columns.3.y
+        }
+        return calculateCentroid().y - 1.2
+    }
+
+    private func lockRoomAnchor(worldTransform: simd_float4x4) {
+        guard let arView = arView else { return }
+        if let existing = roomAnchor {
+            arView.scene.removeAnchor(existing)
+        }
         let centroid = calculateCentroid()
-        let anchor = AnchorEntity(world: .zero)
-        anchor.position = SIMD3<Float>(0, -0.5, -1.8) - centroid
-        
+        let floorY = estimatedFloorY()
+        let anchor = AnchorEntity(world: worldTransform)
+        anchor.position -= SIMD3<Float>(centroid.x, floorY, centroid.z)
+        populateRoomEntities(in: anchor)
+        arView.scene.addAnchor(anchor)
+        roomAnchor = anchor
+        enterLockedMode()
+    }
+
+    private func populateRoomEntities(in anchor: AnchorEntity) {
         var wallCount = 0
         var doorCount = 0
         var windowCount = 0
@@ -294,10 +502,91 @@ final class RoomARPresenter: NSObject, UITableViewDelegate, UITableViewDataSourc
             let entity = buildWallEntity(surface: surface, index: index)
             anchor.addChild(entity)
         }
-        arView.scene.addAnchor(anchor)
 
-        hudLabel?.text = " Scan Loaded: \(surfaces.count) surfaces\n - Walls: \(wallCount) | Doors: \(doorCount)\n - Windows: \(windowCount) | Openings: \(openingCount) | Floors: \(floorCount)\n Centroid: \(String(format: "%.2f, %.2f, %.2f", centroid.x, centroid.y, centroid.z))"
-        
+        for (index, object) in objects.enumerated() {
+            anchor.addChild(buildObjectEntity(object: object, index: index))
+        }
+
+        var summary = " Scan Loaded: \(surfaces.count) surfaces\n - Walls: \(wallCount) | Doors: \(doorCount)\n - Windows: \(windowCount) | Openings: \(openingCount) | Floors: \(floorCount)"
+        if !objects.isEmpty {
+            summary += "\n - Detected items: \(objects.count)"
+        }
+        hudLabel?.text = summary
+
+        preloadOverlayTextures()
+    }
+
+    /// Detected fixtures/appliances (sinks, refrigerators, etc.) — read-only:
+    /// no collision shapes, not addressable by surfaceId, so they never enter
+    /// the tap-to-select/paint-picker/nudge flow that surfaces use.
+    private func buildObjectEntity(object: [String: Any], index: Int) -> Entity {
+        let dims = object["dimensions"] as? [String: Double] ?? [:]
+        let width = Float(dims["width"] ?? 0.3)
+        let height = Float(dims["height"] ?? 0.3)
+        let depth = Float(dims["depth"] ?? 0.3)
+        let objectId = object["id"] as? String ?? "object_\(index)"
+
+        let parent = Entity()
+        parent.name = objectId
+
+        let mesh = MeshResource.generateBox(width: width, height: height, depth: depth)
+        var material = UnlitMaterial()
+        material.color = .init(tint: UIColor.systemOrange.withAlphaComponent(0.45))
+        let child = ModelEntity(mesh: mesh, materials: [material])
+        child.name = objectId
+        parent.addChild(child)
+
+        if let matrixArray = object["transform_matrix"] as? [Double],
+           let matrix = transformMatrix(from: matrixArray) {
+            parent.transform.matrix = matrix
+        }
+
+        return parent
+    }
+
+    /// Reconciles existing entities against current surfaces/overlays in
+    /// place (update materials/geometry, add/remove segments as needed)
+    /// instead of tearing down and rebuilding the whole scene — a full
+    /// rebuild on every material tap or nudge was the other half of what
+    /// made the AR view feel unstable, independent of placement itself.
+    private func syncWallEntities() {
+        guard let anchor = roomAnchor else { return }
+        for (index, surface) in surfaces.enumerated() {
+            let cat = surface["category"] as? String ?? ""
+            guard cat == "wall" || cat == "door" || cat == "window" || cat == "opening" || cat == "floor" else { continue }
+            let surfaceId = surface["id"] as? String
+            let name = surfaceId ?? "\(cat)_\(index)"
+            guard let parent = anchor.children.first(where: { $0.name == name }) else {
+                anchor.addChild(buildWallEntity(surface: surface, index: index))
+                continue
+            }
+
+            let isSelected = (selectedSurfaceId != nil && selectedSurfaceId == surfaceId)
+            let isPointed = (selectedSurfaceId == nil && pointedSurfaceId != nil && pointedSurfaceId == surfaceId)
+            let specs = wallSegmentSpecs(surface: surface, surfaceId: surfaceId, isSelected: isSelected, isPointed: isPointed)
+            let existingChildren = parent.children.compactMap { $0 as? ModelEntity }
+
+            for (i, spec) in specs.enumerated() {
+                if i < existingChildren.count {
+                    let child = existingChildren[i]
+                    child.model?.mesh = spec.mesh
+                    child.model?.materials = [spec.material]
+                    child.position = spec.localPosition
+                    child.generateCollisionShapes(recursive: true)
+                } else {
+                    let child = ModelEntity(mesh: spec.mesh, materials: [spec.material])
+                    child.name = parent.name
+                    child.position = spec.localPosition
+                    child.generateCollisionShapes(recursive: true)
+                    parent.addChild(child)
+                }
+            }
+            if existingChildren.count > specs.count {
+                for extra in existingChildren[specs.count...] {
+                    extra.removeFromParent()
+                }
+            }
+        }
         preloadOverlayTextures()
     }
 
@@ -340,20 +629,6 @@ final class RoomARPresenter: NSObject, UITableViewDelegate, UITableViewDataSourc
                 }
             }
         }
-    }
-
-    private func addWallAnchorsWithoutPreload(to arView: ARView) {
-        let centroid = calculateCentroid()
-        let anchor = AnchorEntity(world: .zero)
-        anchor.position = SIMD3<Float>(0, -0.5, -1.8) - centroid
-        
-        for (index, surface) in surfaces.enumerated() {
-            let cat = surface["category"] as? String ?? ""
-            guard cat == "wall" || cat == "door" || cat == "window" || cat == "opening" || cat == "floor" else { continue }
-            let entity = buildWallEntity(surface: surface, index: index)
-            anchor.addChild(entity)
-        }
-        arView.scene.addAnchor(anchor)
     }
 
     private func updateWallMaterials() {
@@ -577,11 +852,10 @@ final class RoomARPresenter: NSObject, UITableViewDelegate, UITableViewDataSourc
 
         let path = RoomScanPaths.redesignPath(projectId: projectId, structureId: structureId, roomId: roomId)
         try? RoomScanJSON.write(path: path, object: redesign)
-        if let arView {
+        if roomAnchor != nil {
             let refresh = { [weak self] in
                 guard let self else { return }
-                arView.scene.anchors.removeAll()
-                self.addWallAnchors(to: arView)
+                self.syncWallEntities()
             }
             if Thread.isMainThread {
                 refresh()
@@ -854,108 +1128,144 @@ final class RoomARPresenter: NSObject, UITableViewDelegate, UITableViewDataSourc
         viewController?.present(alert, animated: true)
     }
 
-    private func buildWallEntity(surface: [String: Any], index: Int) -> Entity {
+    /// Builds a flat mesh from RoomPlan's real wall polygon (iOS 17+) instead
+    /// of a rectangular box — nil if unavailable (older scan, pre-iOS 17
+    /// capture, or too few points), so callers fall back to generateBox.
+    /// Emits both triangle windings so the wall renders from either side
+    /// regardless of material face-culling defaults.
+    private func polygonMesh(from corners: [[String: Any]]?) -> MeshResource? {
+        guard let corners, corners.count >= 3 else { return nil }
+        let points: [SIMD3<Float>] = corners.map {
+            SIMD3<Float>(
+                Float($0["x"] as? Double ?? 0),
+                Float($0["y"] as? Double ?? 0),
+                Float($0["z"] as? Double ?? 0)
+            )
+        }
+        var descriptor = MeshDescriptor(name: "wallPolygon")
+        descriptor.positions = MeshBuffers.Positions(points)
+        var indices: [UInt32] = []
+        for i in 1..<(points.count - 1) {
+            indices.append(0)
+            indices.append(UInt32(i))
+            indices.append(UInt32(i + 1))
+            indices.append(0)
+            indices.append(UInt32(i + 1))
+            indices.append(UInt32(i))
+        }
+        descriptor.primitives = .triangles(indices)
+        return try? MeshResource.generate(from: [descriptor])
+    }
+
+    private struct WallSegmentSpec {
+        let mesh: MeshResource
+        let material: Material
+        let localPosition: SIMD3<Float>
+    }
+
+    /// Desired child-entity specs for a surface, shared by buildWallEntity
+    /// (first build) and syncWallEntities (in-place reconciliation) so both
+    /// stay in lockstep instead of drifting apart.
+    private func wallSegmentSpecs(
+        surface: [String: Any],
+        surfaceId: String?,
+        isSelected: Bool,
+        isPointed: Bool
+    ) -> [WallSegmentSpec] {
         let dims = surface["dimensions"] as? [String: Double] ?? [:]
         let width = Float(dims["width"] ?? 1)
         let height = Float(dims["height"] ?? 2.4)
         let depth = Float(dims["depth"] ?? 1)
-        let surfaceId = surface["id"] as? String
         let category = surface["category"] as? String ?? "wall"
-        
-        let parent = Entity()
-        parent.name = surfaceId ?? "\(category)_\(index)"
-        
-        let isSelected = (selectedSurfaceId != nil && selectedSurfaceId == surfaceId)
-        let isPointed = (selectedSurfaceId == nil && pointedSurfaceId != nil && pointedSurfaceId == surfaceId)
-        
-        let overlays = activeOverlays().filter {
-            ($0["surface_id"] as? String) == surfaceId
-        }
-        
-        var mesh = MeshResource.generateBox(width: width, height: height, depth: 0.05)
-        let material: Material
+        let overlays = activeOverlays().filter { ($0["surface_id"] as? String) == surfaceId }
 
-        if category == "floor" {
+        switch category {
+        case "floor":
             // Floor surfaces are flat: RoomPlan reports the second planar extent
             // in the "depth" field rather than a vertical height, so swap axes
             // and use a thin fixed thickness for visibility.
-            mesh = MeshResource.generateBox(width: width, height: 0.02, depth: depth)
+            let mesh = MeshResource.generateBox(width: width, height: 0.02, depth: depth)
             var unlit = UnlitMaterial()
             unlit.color = .init(tint: isSelected ? UIColor.systemBlue.withAlphaComponent(0.65) : (isPointed ? UIColor.systemGreen.withAlphaComponent(0.35) : (UIColor(hex: "#C2A878")?.withAlphaComponent(0.35) ?? .gray.withAlphaComponent(0.35))))
-            material = unlit
-        } else if category == "door" {
+            return [WallSegmentSpec(mesh: mesh, material: unlit, localPosition: .zero)]
+        case "door":
+            let mesh = MeshResource.generateBox(width: width, height: height, depth: 0.05)
             var unlit = UnlitMaterial()
             unlit.color = .init(tint: isSelected ? UIColor.systemBlue.withAlphaComponent(0.65) : (isPointed ? UIColor.systemGreen.withAlphaComponent(0.35) : (UIColor(hex: "#8B5A2B")?.withAlphaComponent(0.4) ?? .brown.withAlphaComponent(0.4))))
-            material = unlit
-        } else if category == "window" {
+            return [WallSegmentSpec(mesh: mesh, material: unlit, localPosition: SIMD3<Float>(0, 0, 0.005))]
+        case "window":
+            let mesh = MeshResource.generateBox(width: width, height: height, depth: 0.05)
             var unlit = UnlitMaterial()
             unlit.color = .init(tint: isSelected ? UIColor.systemBlue.withAlphaComponent(0.65) : (isPointed ? UIColor.systemGreen.withAlphaComponent(0.35) : (UIColor(hex: "#ADD8E6")?.withAlphaComponent(0.3) ?? .blue.withAlphaComponent(0.3))))
-            material = unlit
-        } else if category == "opening" {
+            return [WallSegmentSpec(mesh: mesh, material: unlit, localPosition: SIMD3<Float>(0, 0, 0.005))]
+        case "opening":
+            let mesh = MeshResource.generateBox(width: width, height: height, depth: 0.05)
             var unlit = UnlitMaterial()
             unlit.color = .init(tint: isSelected ? UIColor.systemBlue.withAlphaComponent(0.65) : (isPointed ? UIColor.systemGreen.withAlphaComponent(0.35) : UIColor.lightGray.withAlphaComponent(0.15)))
-            material = unlit
-        } else {
+            return [WallSegmentSpec(mesh: mesh, material: unlit, localPosition: SIMD3<Float>(0, 0, 0.005))]
+        default:
             // Wall category
             if overlays.isEmpty {
-                let overlay = overlayForSurface(surfaceId)
-                if let overlay {
+                let polygon = polygonMesh(from: surface["polygon_corners"] as? [[String: Any]])
+                let mesh = polygon ?? MeshResource.generateBox(width: width, height: height, depth: 0.05)
+                print("[RoomAR] Wall mesh source for \(surfaceId ?? "?"): \(polygon != nil ? "real polygon" : "box fallback")")
+                let material: Material
+                if let overlay = overlayForSurface(surfaceId) {
                     material = materialForOverlay(overlay, texture: textureForOverlay(overlay), isSelected: isSelected, isPointed: isPointed)
                 } else {
                     var unlit = UnlitMaterial()
                     unlit.color = .init(tint: isSelected ? UIColor.systemBlue.withAlphaComponent(0.6) : (isPointed ? UIColor.systemGreen.withAlphaComponent(0.35) : UIColor.white.withAlphaComponent(0.2)))
                     material = unlit
                 }
-            } else {
-                for (idx, overlay) in overlays.enumerated() {
-                    let xMin = Float(overlay["x_min"] as? Double ?? 0.0)
-                    let xMax = Float(overlay["x_max"] as? Double ?? 1.0)
-                    let yMin = Float(overlay["y_min"] as? Double ?? 0.0)
-                    let yMax = Float(overlay["y_max"] as? Double ?? 1.0)
-                    
-                    let w = width * (xMax - xMin)
-                    let h = height * (yMax - yMin)
-                    
-                    let segmentMesh = MeshResource.generateBox(width: w, height: h, depth: 0.05)
-                    let segmentMat = materialForOverlay(overlay, texture: textureForOverlay(overlay), isSelected: isSelected, isPointed: isPointed)
-                    
-                    let child = ModelEntity(mesh: segmentMesh, materials: [segmentMat])
-                    child.name = parent.name
-                    
-                    let localX = -width / 2.0 + xMin * width + w / 2.0
-                    let localY = -height / 2.0 + yMin * height + h / 2.0
-                    let localZ = Float(idx) * 0.005 + 0.001
-                    
-                    child.position = SIMD3<Float>(localX, localY, localZ)
-                    child.generateCollisionShapes(recursive: true)
-                    parent.addChild(child)
-                }
-                
-                if let matrixArray = surface["transform_matrix"] as? [Double],
-                   let matrix = transformMatrix(from: matrixArray) {
-                    parent.transform.matrix = matrix
-                } else {
-                    parent.position = SIMD3<Float>(Float(index) * 1.05 - 1.0, 0, -1.8)
-                }
-                return parent
+                return [WallSegmentSpec(mesh: mesh, material: material, localPosition: .zero)]
+            }
+            return overlays.enumerated().map { idx, overlay in
+                let xMin = Float(overlay["x_min"] as? Double ?? 0.0)
+                let xMax = Float(overlay["x_max"] as? Double ?? 1.0)
+                let yMin = Float(overlay["y_min"] as? Double ?? 0.0)
+                let yMax = Float(overlay["y_max"] as? Double ?? 1.0)
+
+                let w = width * (xMax - xMin)
+                let h = height * (yMax - yMin)
+
+                let segmentMesh = MeshResource.generateBox(width: w, height: h, depth: 0.05)
+                let segmentMat = materialForOverlay(overlay, texture: textureForOverlay(overlay), isSelected: isSelected, isPointed: isPointed)
+
+                let localX = -width / 2.0 + xMin * width + w / 2.0
+                let localY = -height / 2.0 + yMin * height + h / 2.0
+                let localZ = Float(idx) * 0.005 + 0.001
+
+                return WallSegmentSpec(mesh: segmentMesh, material: segmentMat, localPosition: SIMD3<Float>(localX, localY, localZ))
             }
         }
-        
-        let child = ModelEntity(mesh: mesh, materials: [material])
-        child.name = parent.name
-        if category == "door" || category == "window" || category == "opening" {
-            child.position = SIMD3<Float>(0, 0, 0.005)
+    }
+
+    private func buildWallEntity(surface: [String: Any], index: Int) -> Entity {
+        let surfaceId = surface["id"] as? String
+        let category = surface["category"] as? String ?? "wall"
+
+        let parent = Entity()
+        parent.name = surfaceId ?? "\(category)_\(index)"
+
+        let isSelected = (selectedSurfaceId != nil && selectedSurfaceId == surfaceId)
+        let isPointed = (selectedSurfaceId == nil && pointedSurfaceId != nil && pointedSurfaceId == surfaceId)
+        let specs = wallSegmentSpecs(surface: surface, surfaceId: surfaceId, isSelected: isSelected, isPointed: isPointed)
+
+        for spec in specs {
+            let child = ModelEntity(mesh: spec.mesh, materials: [spec.material])
+            child.name = parent.name
+            child.position = spec.localPosition
+            child.generateCollisionShapes(recursive: true)
+            parent.addChild(child)
         }
-        child.generateCollisionShapes(recursive: true)
-        parent.addChild(child)
-        
+
         if let matrixArray = surface["transform_matrix"] as? [Double],
            let matrix = transformMatrix(from: matrixArray) {
             parent.transform.matrix = matrix
         } else {
             parent.position = SIMD3<Float>(Float(index) * 1.05 - 1.0, 0, -1.8)
         }
-        
+
         return parent
     }
 
@@ -1093,11 +1403,8 @@ final class RoomARPresenter: NSObject, UITableViewDelegate, UITableViewDataSourc
             }
             
             hudLabel?.text = " Nudge HUD [Selected Wall: \(selectedId.suffix(8))]\n x_min: \(String(format: "%.2f", xMin)) | x_max: \(String(format: "%.2f", xMax))\n y_min: \(String(format: "%.2f", yMin)) | y_max: \(String(format: "%.2f", yMax))"
-            
-            if let arView = arView {
-                arView.scene.anchors.removeAll()
-                addWallAnchors(to: arView)
-            }
+
+            syncWallEntities()
         }
     }
 
