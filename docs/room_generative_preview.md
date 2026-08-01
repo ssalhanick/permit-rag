@@ -16,10 +16,16 @@ Connect room-scan design intent to a generative room image shown on iPhone, then
 
 ## Provider
 
+Preference order: fal → Leonardo → OpenAI → mock. `generate_room_preview_image()` tries each in turn and falls through on missing key or request failure.
+
 | Env | Behavior |
 |-----|----------|
-| `OPENAI_API_KEY` unset | Mock solid PNG tinted from overlay color |
-| `OPENAI_API_KEY` set | OpenAI Images API (`OPENAI_IMAGE_MODEL`, default `gpt-image-1`) |
+| `FAL_API_KEY` set | fal.ai PATINA (`fal-ai/patina/material`), synchronous call — returns a full tileable PBR set (basecolor/normal/roughness/metalness/height); only basecolor is used until the AR material system moves off `UnlitMaterial` |
+| `FAL_API_KEY` unset, `LEONARDO_API_KEY` set | Leonardo.ai Generations API (`LEONARDO_IMAGE_MODEL`, default `de7d3faf-762f-48e0-b3b7-9d0ac3a3fcf3` — Phoenix), polled to completion |
+| Both unset, `OPENAI_API_KEY` set | OpenAI Images API (`OPENAI_IMAGE_MODEL`, default `gpt-image-1`) |
+| None set | Mock solid PNG tinted from overlay color |
+
+`_fal_generate`'s response parsing (`_extract_fal_basecolor_url` in `commerce/room_image.py`) was written from fal's documented request shape but wasn't confirmed against a live response — fal's docs pages were rate-limiting fetches while this was built. It defensively checks a few plausible key layouts and raises with the actual response keys if none match; if the very first real call errors, that error message is the fix.
 
 ## Key files
 

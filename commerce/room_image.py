@@ -28,6 +28,81 @@ MOCK_SIZE = 256
 LEONARDO_GENERATIONS_URL = "https://cloud.leonardo.ai/api/rest/v1/generations"
 LEONARDO_DEFAULT_MODEL = "de7d3faf-762f-48e0-b3b7-9d0ac3a3fcf3"  # Phoenix
 
+FAL_MATERIAL_URL = "https://fal.run/fal-ai/patina/material"
+
+
+def _extract_fal_basecolor_url(payload: dict[str, Any]) -> str | None:
+    """
+    Best-effort lookup across a few plausible PATINA response shapes.
+
+    Not confirmed against a live call — fal's docs were rate-limiting fetches
+    while this was written. Checks the shapes documented/observed elsewhere
+    (top-level map keys, a nested "maps" object, a generic "images" list) and
+    is used from _fal_generate, which raises with the actual response keys if
+    none of these match, so a first real call is easy to diagnose.
+    """
+    for key in ("basecolor", "base_color", "baseColor"):
+        node = payload.get(key)
+        if isinstance(node, dict) and node.get("url"):
+            return node["url"]
+        if isinstance(node, str):
+            return node
+    maps = payload.get("maps")
+    if isinstance(maps, dict):
+        for key in ("basecolor", "base_color", "baseColor"):
+            node = maps.get(key)
+            if isinstance(node, dict) and node.get("url"):
+                return node["url"]
+    images = payload.get("images")
+    if isinstance(images, list) and images:
+        first = images[0]
+        if isinstance(first, dict) and first.get("url"):
+            return first["url"]
+    return None
+
+
+def _fal_generate(prompt: str) -> str:
+    """
+    Call fal.ai's PATINA material endpoint (synchronous — no queue/polling,
+    unlike Leonardo) and return the basecolor map as base64.
+
+    PATINA returns a full PBR set (basecolor/normal/roughness/metalness/height)
+    by default; only basecolor is used for now since the AR viewer renders
+    with RealityKit's UnlitMaterial, which doesn't consume the other maps —
+    revisit once that's upgraded to PhysicallyBasedMaterial.
+    """
+    api_key = os.environ.get("FAL_API_KEY", "").strip()
+    if not api_key:
+        raise RuntimeError("FAL_API_KEY not set")
+
+    req = urllib.request.Request(
+        FAL_MATERIAL_URL,
+        data=json.dumps({"prompt": prompt}).encode("utf-8"),
+        headers={
+            "Authorization": f"Key {api_key}",
+            "Content-Type": "application/json",
+        },
+        method="POST",
+    )
+    try:
+        with urllib.request.urlopen(req, timeout=90) as resp:
+            payload = json.loads(resp.read().decode("utf-8"))
+    except urllib.error.HTTPError as exc:
+        # Surface fal's actual error body — "HTTP Error 403: Forbidden" alone
+        # (urllib's default message) isn't enough to tell a bad key apart
+        # from a billing/permission issue apart from a wrong request shape.
+        detail = exc.read().decode("utf-8", errors="replace")
+        raise RuntimeError(f"fal request failed: HTTP {exc.code} {exc.reason} — {detail}") from exc
+
+    url = _extract_fal_basecolor_url(payload)
+    if not url:
+        raise RuntimeError(
+            f"fal PATINA response missing a basecolor map URL (top-level keys: {list(payload.keys())})"
+        )
+
+    with urllib.request.urlopen(url, timeout=60) as img_resp:
+        return base64.b64encode(img_resp.read()).decode("ascii")
+
 
 def _leonardo_generate(prompt: str, model: str, tiling: bool) -> str:
     """Call Leonardo.ai REST API (v1); poll for asynchronous completion, return base64."""
@@ -217,9 +292,11 @@ def generate_room_preview_image(
     """
     Generate a room redesign preview image.
 
-    Prefers Leonardo when LEONARDO_API_KEY is set, then OpenAI when OPENAI_API_KEY is set.
-    Optional source_image_b64 is reserved for future img2img edits; currently folded
-    into the text prompt.
+    Prefers fal.ai (PATINA) when FAL_API_KEY is set — genuinely tileable
+    material output and a more accessible signup than Leonardo — then
+    Leonardo when LEONARDO_API_KEY is set, then OpenAI when OPENAI_API_KEY
+    is set. Optional source_image_b64 is reserved for future img2img edits;
+    currently folded into the text prompt.
 
     Returns:
         Dict with image_base64, mime_type, provider, prompt, model.
@@ -234,6 +311,21 @@ def generate_room_preview_image(
         prompt = (
             f"{prompt} Match the camera angle and layout of the provided room photo."
         )
+
+    fal_key = os.environ.get("FAL_API_KEY", "").strip()
+    if fal_key:
+        try:
+            b64 = _fal_generate(prompt)
+            return {
+                "image_base64": b64,
+                "mime_type": "image/png",
+                "provider": "fal",
+                "model": "patina/material",
+                "prompt": prompt,
+                "mock": False,
+            }
+        except Exception as exc:
+            log.warning("fal room image failed (%s); falling back", exc)
 
     leonardo_key = os.environ.get("LEONARDO_API_KEY", "").strip()
     if leonardo_key:

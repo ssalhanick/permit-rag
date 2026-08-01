@@ -364,6 +364,7 @@ resource "aws_ecs_task_definition" "backend" {
         { name = "LLM_MODEL", value = "claude-haiku-4-5-20251001" },
         { name = "LLM_PROVIDER", value = "anthropic" },
         { name = "OPENAI_IMAGE_MODEL", value = "gpt-image-1" },
+        { name = "LEONARDO_IMAGE_MODEL", value = "de7d3faf-762f-48e0-b3b7-9d0ac3a3fcf3" },
         { name = "LANGCHAIN_TRACING_V2", value = "true" },
         { name = "LANGCHAIN_PROJECT", value = "permit-rag-app" },
         # Document-upload plan, chunking step 3: RAGAs regressed vs. step 2's
@@ -394,6 +395,14 @@ resource "aws_ecs_task_definition" "backend" {
         {
           name      = "LEONARDO_API_KEY"
           valueFrom = "arn:aws:ssm:${data.aws_region.current.name}:${data.aws_caller_identity.current.account_id}:parameter/permit_rag/prod/leonardo_api_key"
+        },
+        {
+          name      = "FAL_API_KEY"
+          valueFrom = "arn:aws:ssm:${data.aws_region.current.name}:${data.aws_caller_identity.current.account_id}:parameter/permit_rag/prod/fal_api_key"
+        },
+        {
+          name      = "SERPAPI_API_KEY"
+          valueFrom = "arn:aws:ssm:${data.aws_region.current.name}:${data.aws_caller_identity.current.account_id}:parameter/permit_rag/prod/serpapi_api_key"
         },
         {
           name      = "API_JWT_SECRET"
