@@ -223,18 +223,20 @@ def project_coverage(project_id: UUID, current_user: CurrentUser) -> dict:
     if not project:
         raise HTTPException(status_code=404, detail="Project not found.")
 
-    from rag.coverage import check_coverage
+    from rag.coverage import check_coverage, overlays_at_point
 
     result = check_coverage(
         municipality=project.get("municipality"),
         latitude=project.get("latitude"),
         longitude=project.get("longitude"),
     )
+    overlays = overlays_at_point(project.get("latitude"), project.get("longitude"))
     return {
         "status": result.status,
         "municipality": result.municipality,
         "message": result.message,
         "is_covered": result.is_covered,
+        "overlays": overlays,
     }
 
 

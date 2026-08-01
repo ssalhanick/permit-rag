@@ -14,6 +14,7 @@ from uuid import UUID
 from pydantic import BaseModel, EmailStr, Field
 
 DocumentStatusType = Literal["active", "superseded", "repealed", "needs_ocr", "draft"]
+DocumentVisibilityType = Literal["private", "team"]  # migration 040, tier-3 only
 AuthorityLevelType = Literal["municipal", "county", "state", "federal"]
 DocTypeType = Literal[
     "building_code",
@@ -398,6 +399,13 @@ class CoverageResponse(BaseModel):
     municipality: str | None = Field(default=None, description="Resolved municipality, if any.")
     message: str = Field(description="Human-readable explanation, safe to show directly to a user.")
     is_covered: bool = Field(description="True only when status == 'covered'.")
+    overlays: list[OverlayResponse] = Field(
+        default_factory=list,
+        description=(
+            "Approved historic/conservation-district or HOA overlays whose boundary "
+            "contains this project's address, independent of municipality-level status."
+        ),
+    )
 
 
 class OverlayResponse(BaseModel):
@@ -426,6 +434,14 @@ class ApproveOverlayRequest(BaseModel):
             "existing (default-buffer) geometry as-is."
         ),
     )
+
+
+class SetVerifiedContributorRequest(BaseModel):
+    """Admin-settable tiered-trust flag (migration 041) — Type 1 of the
+    document-upload plan. A verified contributor's ordinance petitions
+    auto-approve into the shared corpus instead of queuing for review."""
+
+    is_verified_contributor: bool
 
 
 class ErrorResponse(BaseModel):

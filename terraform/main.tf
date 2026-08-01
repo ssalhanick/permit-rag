@@ -365,7 +365,14 @@ resource "aws_ecs_task_definition" "backend" {
         { name = "LLM_PROVIDER", value = "anthropic" },
         { name = "OPENAI_IMAGE_MODEL", value = "gpt-image-1" },
         { name = "LANGCHAIN_TRACING_V2", value = "true" },
-        { name = "LANGCHAIN_PROJECT", value = "permit-rag-app" }
+        { name = "LANGCHAIN_PROJECT", value = "permit-rag-app" },
+        # Document-upload plan, chunking step 3: RAGAs regressed vs. step 2's
+        # baseline (q0 relevancy hit the hard-zero judge blind spot for the
+        # first time, q1 faithfulness dropped 1.000->0.667) -- forced off
+        # here pending investigation, overriding the code default (true) in
+        # ingestion/chunker.py. Steps 1/2 (hybrid retrieval, context prefix)
+        # are unaffected and have no override here because they validated clean.
+        { name = "CHUNK_STRUCTURE_AWARE_SPLITTING_ENABLED", value = "false" }
       ]
       secrets = [
         {

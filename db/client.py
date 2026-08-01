@@ -149,6 +149,7 @@ def insert_document(
     uploaded_by: UUID | None = None,
     content_class: str = "authority",  # migration 031: 'authority' | 'how_to'
     overlay_id: UUID | None = None,  # migration 038: linked overlay petition, if any
+    visibility: str = "team",  # migration 040: 'private' | 'team' -- tier-3 only
 ) -> dict[str, Any]:
     """
     Insert a document row. Returns the full row as a dict.
@@ -166,7 +167,7 @@ def insert_document(
             doc_type, subject_tags, effective_date, document_status,
             is_current, retrieval_weight, review_due,
             checksum_sha256, source_etag, local_path, source_tier,
-            project_id, uploaded_by, content_class, overlay_id
+            project_id, uploaded_by, content_class, overlay_id, visibility
         ) VALUES (
             %(doc_id)s, %(source_url)s, %(municipality)s,
             %(authority_level)s::authority_level,
@@ -176,7 +177,7 @@ def insert_document(
             %(is_current)s, %(retrieval_weight)s, %(review_due)s,
             %(checksum_sha256)s, %(source_etag)s, %(local_path)s,
             %(source_tier)s, %(project_id)s, %(uploaded_by)s, %(content_class)s,
-            %(overlay_id)s
+            %(overlay_id)s, %(visibility)s::document_visibility
         )
         ON CONFLICT (doc_id) DO UPDATE SET
             source_url       = EXCLUDED.source_url,
@@ -196,7 +197,8 @@ def insert_document(
             project_id       = EXCLUDED.project_id,
             uploaded_by      = EXCLUDED.uploaded_by,
             content_class    = EXCLUDED.content_class,
-            overlay_id       = EXCLUDED.overlay_id
+            overlay_id       = EXCLUDED.overlay_id,
+            visibility       = EXCLUDED.visibility
         RETURNING *;
     """
     params = {
@@ -219,6 +221,7 @@ def insert_document(
         "uploaded_by": uploaded_by,
         "content_class": content_class,
         "overlay_id": overlay_id,
+        "visibility": visibility,
     }
     with get_conn() as conn:
         row = conn.execute(sql, params).fetchone()
@@ -356,6 +359,28 @@ def match_overlay_chunks(
 # ════════════════════════════════════════════════
 #  OVERLAYS (migration 038) — historic/conservation/HOA petitions
 # ════════════════════════════════════════════════
+
+
+def list_overlays_containing_point(latitude: float, longitude: float) -> list[dict[str, Any]]:
+    """Approved overlays (historic/conservation district, HOA) whose boundary
+    contains (latitude, longitude) — metadata only, no chunk search.
+
+    Document-upload plan, Type 3 coverage-surfacing addition: this is what lets
+    GET /projects/{project_id}/coverage report "you're in the Swiss Ave
+    Historic District" alongside the municipality-level status, using the same
+    ST_Contains pattern as match_overlay_chunks.
+    """
+    sql = """
+        SELECT id, name, overlay_type, jurisdiction_id, status,
+               petitioning_project_id, approved_by, approved_at, notes, created_at
+        FROM overlays
+        WHERE status = 'approved'
+          AND geom IS NOT NULL
+          AND ST_Contains(geom, ST_SetSRID(ST_MakePoint(%(lng)s, %(lat)s), 4326))
+        ORDER BY approved_at ASC;
+    """
+    with get_conn() as conn:
+        return conn.execute(sql, {"lat": latitude, "lng": longitude}).fetchall()
 
 
 def create_overlay_petition(
@@ -928,17 +953,27 @@ def match_project_chunks(
     project_id: UUID,
     top_k: int = 5,
     min_similarity: float = 0.0,
+    requesting_user_id: UUID | None = None,
 ) -> list[dict[str, Any]]:
     """
     Vector search limited to tier 2/3 documents for a project.
 
     Includes docs with documents.project_id or linked via project_documents.
 
+    Tier-3 (project-specific, migration 040) rows are additionally gated by
+    ``visibility``: 'team' docs are always included, 'private' docs only when
+    ``requesting_user_id`` matches ``uploaded_by``. Tier-2 rows are unaffected
+    (visibility is only meaningful for tier-3). ``requesting_user_id=None``
+    (an unauthenticated or system caller) sees 'team' docs only -- ``uploaded_by
+    = NULL`` never matches a real row under SQL's NULL semantics, so no extra
+    branching is needed to keep private docs hidden by default.
+
     Args:
         query_embedding: 768-dim query vector.
         project_id: Project scope UUID.
         top_k: Max results.
         min_similarity: Cosine similarity floor.
+        requesting_user_id: The querying user, for the tier-3 visibility filter.
 
     Returns:
         Chunk dicts ordered by source_tier ASC, similarity DESC.
@@ -962,11 +997,16 @@ def match_project_chunks(
         FROM chunks c
         JOIN documents d ON d.id = c.document_id
         LEFT JOIN project_documents pd ON pd.document_id = d.id
-        WHERE d.source_tier IN (2, 3)
-          AND d.document_status = 'active'
+        WHERE d.document_status = 'active'
           AND c.status = 'active'
           AND c.embedding IS NOT NULL
           AND (d.project_id = %(project_id)s OR pd.project_id = %(project_id)s)
+          AND (
+                d.source_tier = 2
+             OR (d.source_tier = 3 AND (
+                    d.visibility = 'team' OR d.uploaded_by = %(requesting_user_id)s
+                 ))
+          )
         ORDER BY d.source_tier ASC, similarity DESC
         LIMIT %(match_count)s;
     """
@@ -974,6 +1014,7 @@ def match_project_chunks(
         "query_embedding": str(query_embedding),
         "project_id": project_id,
         "match_count": top_k,
+        "requesting_user_id": requesting_user_id,
     }
     with get_conn() as conn:
         rows = conn.execute(sql, params).fetchall()
@@ -1968,6 +2009,100 @@ def unshare_document_from_project(project_id: UUID, document_id: UUID) -> bool:
         cur = conn.execute(sql, (project_id, document_id))
         conn.commit()
     return cur.rowcount > 0
+
+
+def delete_project_document(document_id: UUID) -> bool:
+    """Hard-delete a tier-3 project document: its chunks, then the row itself,
+    in one transaction. Returns False (no-op) if the id isn't a tier-3 document.
+
+    Deliberately not a blanket ON DELETE CASCADE off uploaded_by -- that FK is
+    shared with tier-1/tier-2 corpus documents, which must survive user
+    deletion. The ``source_tier = 3`` guard on the DELETE itself means this is
+    safe to call with any document_id: it can only ever remove a project doc.
+    ``project_documents`` cleans itself up via its own ON DELETE CASCADE
+    (migration 011) once the documents row is gone.
+    """
+    sql_chunks = "DELETE FROM chunks WHERE document_id = %s;"
+    sql_document = "DELETE FROM documents WHERE id = %s AND source_tier = 3;"
+    with get_conn() as conn:
+        conn.execute(sql_chunks, (document_id,))
+        cur = conn.execute(sql_document, (document_id,))
+        conn.commit()
+    deleted = cur.rowcount > 0
+    if deleted:
+        log.info("Deleted project document %s (chunks + row, one transaction)", document_id)
+    return deleted
+
+
+def get_pending_documents() -> list[dict[str, Any]]:
+    """List tier-2 ordinance petitions awaiting staff review (migration 041 /
+    Type 1). Oldest first, so the admin queue works through the backlog in order."""
+    sql = """
+        SELECT * FROM documents
+        WHERE source_tier = 2 AND document_status = 'draft'
+        ORDER BY ingested_at ASC;
+    """
+    with get_conn() as conn:
+        return conn.execute(sql).fetchall()
+
+
+def approve_pending_document(doc_id: str) -> dict[str, Any] | None:
+    """Promote a tier-2 ordinance petition into the shared tier-1 corpus.
+
+    Scoped to source_tier = 2 in the WHERE clause so this can't be pointed at
+    an already-tier-1 (or tier-3) document by mistake. Returns None if doc_id
+    doesn't exist or isn't a pending tier-2 document.
+    """
+    sql = """
+        UPDATE documents
+        SET source_tier = 1, document_status = 'active'
+        WHERE doc_id = %s AND source_tier = 2
+        RETURNING *;
+    """
+    with get_conn() as conn:
+        row = conn.execute(sql, (doc_id,)).fetchone()
+        conn.commit()
+    if row:
+        log.info("Approved pending document: %s (tier 2 -> 1, active)", doc_id)
+    return row
+
+
+def reject_pending_document(doc_id: str) -> bool:
+    """Reject a tier-2 ordinance petition: delete its chunks and the document
+    row, in one transaction. documents.document_status has no 'rejected'
+    value (unlike overlays' status enum) — deletion is the terminal state
+    here rather than adding an enum value for one workflow. Scoped to
+    source_tier = 2 so this can't delete an already-approved (tier-1) or
+    project (tier-3) document.
+    """
+    sql_lookup = "SELECT id FROM documents WHERE doc_id = %s AND source_tier = 2;"
+    sql_chunks = "DELETE FROM chunks WHERE document_id = %s;"
+    sql_document = "DELETE FROM documents WHERE doc_id = %s AND source_tier = 2;"
+    with get_conn() as conn:
+        row = conn.execute(sql_lookup, (doc_id,)).fetchone()
+        if row is None:
+            return False
+        conn.execute(sql_chunks, (row["id"],))
+        cur = conn.execute(sql_document, (doc_id,))
+        conn.commit()
+    rejected = cur.rowcount > 0
+    if rejected:
+        log.info("Rejected pending document: %s (chunks + row deleted)", doc_id)
+    return rejected
+
+
+def set_user_verified_contributor(user_id: UUID, is_verified_contributor: bool) -> dict[str, Any] | None:
+    """Admin-settable trust flag (migration 041) gating Type-1 ordinance-
+    petition auto-approval. Returns None if the user doesn't exist or isn't active."""
+    sql = """
+        UPDATE users SET is_verified_contributor = %(value)s
+        WHERE id = %(user_id)s AND is_active = true
+        RETURNING *;
+    """
+    with get_conn() as conn:
+        row = conn.execute(sql, {"value": is_verified_contributor, "user_id": user_id}).fetchone()
+        conn.commit()
+    return row
 
 
 def get_user_query_history(user_id: UUID, project_id: UUID | None = None) -> list[dict[str, Any]]:

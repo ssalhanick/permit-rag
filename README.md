@@ -539,6 +539,10 @@ py -m ingestion.embedder
 # Force re-embed all chunks (including already-embedded chunks)
 py -m ingestion.embedder --force
 
+# Re-chunk + force re-embed + RAGAs gate, in one script (see "Corpus
+# Reprocessing" below for why this needs to be all three, in this order)
+scripts/reprocess_corpus.sh --local
+
 # Chunk + verify all documents (no DB insert)
 py -m scripts.run_chunk_verify
 
@@ -551,6 +555,44 @@ py -m scripts.purge_project_uploads --doc-id "<doc_id>" --admin-role owner
 # Purge many docs listed in a text file (one doc_id per line)
 py -m scripts.purge_project_uploads --doc-id-file "docs_to_purge.txt" --admin-role owner
 ```
+
+---
+
+## Corpus Reprocessing
+
+A chunking-strategy change in `ingestion/chunker.py` (a new context prefix, a
+new splitting rule, etc.) only affects documents chunked **after** the change
+ships — the existing corpus keeps whatever chunks and embeddings it already
+had. To measure a change's real effect, or just bring the whole corpus up to
+date, re-chunk and re-embed everything and re-run the RAGAs gate:
+
+```bash
+scripts/reprocess_corpus.sh --local
+# or, against a specific database:
+scripts/reprocess_corpus.sh --database-url='postgresql://...'
+```
+
+Runs three steps in order, stopping before the next one if any step fails:
+
+1. **Re-chunk** (`py -m scripts.ingest_documents --include-existing`) —
+   re-runs the chunker against every existing document.
+2. **Force re-embed** (`py -m ingestion.embedder --force`) — re-chunking
+   alone updates a chunk's stored text via upsert but never its embedding
+   vector; this step is what actually makes the new content searchable.
+3. **RAGAs eval** (`py -m evaluation.ragas_eval --no-answer-cache --export`)
+   — the quality gate. Running this before both steps above finish would
+   just re-score the old corpus and report "no change" — not because
+   nothing improved, but because nothing was reprocessed yet.
+
+A DB target flag (`--local` or `--database-url=...`) is required; there's no
+default, and every step prints its own target banner (`scripts/_db_target.py`)
+— read it before trusting the run, especially against production. A report
+and full log land in `evaluation/results/reprocess_<timestamp>_report.txt`
+(and `.log`) regardless of whether the run succeeded or failed partway
+through, so a failed run still tells you exactly how far it got.
+
+Not on a schedule yet — run it manually. (A cron job to run this
+automatically is a natural next step, not built yet.)
 
 ---
 

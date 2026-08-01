@@ -218,3 +218,79 @@ def test_project_coverage_route_returns_check_coverage_result() -> None:
         )
     finally:
         app.dependency_overrides.clear()
+
+
+def test_project_coverage_route_surfaces_approved_overlays() -> None:
+    """Type 3 addition: the coverage response includes any approved overlay
+    whose boundary contains the project's address, alongside municipality status."""
+    from datetime import UTC, datetime
+
+    from rag.coverage import CoverageResult
+
+    owner_id = uuid4()
+    project_id = uuid4()
+    overlay_id = uuid4()
+
+    app.dependency_overrides[projects_route.get_current_user] = lambda: _current_user(owner_id)
+    try:
+        with patch.object(projects_route.db_client, "get_project_role", return_value="owner"), \
+             patch.object(
+                 projects_route.db_client, "get_project",
+                 return_value=_project_row(
+                     project_id, owner_id, municipality="dallas",
+                     latitude=32.8, longitude=-96.78,
+                 ),
+             ), \
+             patch(
+                 "rag.coverage.check_coverage",
+                 return_value=CoverageResult("covered", "dallas", "This area is in our coverage area."),
+             ), \
+             patch.object(
+                 projects_route.db_client, "list_overlays_containing_point",
+                 return_value=[{
+                     "id": overlay_id, "name": "Swiss Avenue Historic District",
+                     "overlay_type": "historic_district", "jurisdiction_id": "dallas",
+                     "status": "approved", "petitioning_project_id": None,
+                     "approved_by": None, "approved_at": datetime.now(UTC),
+                     "notes": None, "created_at": datetime.now(UTC),
+                 }],
+             ) as mock_overlays:
+            resp = client.get(f"/api/projects/{project_id}/coverage")
+
+        assert resp.status_code == 200
+        body = resp.json()
+        assert len(body["overlays"]) == 1
+        assert body["overlays"][0]["name"] == "Swiss Avenue Historic District"
+        mock_overlays.assert_called_once_with(32.8, -96.78)
+    finally:
+        app.dependency_overrides.clear()
+
+
+def test_project_coverage_route_overlays_empty_without_coordinates() -> None:
+    """No lat/lng on file -> empty overlays list, no DB round trip attempted."""
+    from rag.coverage import CoverageResult
+
+    owner_id = uuid4()
+    project_id = uuid4()
+
+    app.dependency_overrides[projects_route.get_current_user] = lambda: _current_user(owner_id)
+    try:
+        with patch.object(projects_route.db_client, "get_project_role", return_value="owner"), \
+             patch.object(
+                 projects_route.db_client, "get_project",
+                 return_value=_project_row(project_id, owner_id, municipality="frisco"),
+             ), \
+             patch(
+                 "rag.coverage.check_coverage",
+                 return_value=CoverageResult("no_documents", "frisco", "..."),
+             ), \
+             patch.object(
+                 projects_route.db_client, "list_overlays_containing_point",
+             ) as mock_overlays:
+            resp = client.get(f"/api/projects/{project_id}/coverage")
+
+        assert resp.status_code == 200
+        assert resp.json()["overlays"] == []
+        mock_overlays.assert_not_called()
+    finally:
+        app.dependency_overrides.clear()

@@ -19,6 +19,7 @@ def retrieve_project_chunks(
     *,
     top_k: int = 5,
     min_similarity: float = 0.0,
+    requesting_user_id: UUID | None = None,
 ) -> list[dict[str, Any]]:
     """
     Embed query and retrieve tier 2/3 chunks scoped to a project.
@@ -28,6 +29,8 @@ def retrieve_project_chunks(
         project_id: Active project UUID.
         top_k: Max chunks from project namespace.
         min_similarity: Similarity floor.
+        requesting_user_id: The querying user -- gates tier-3 'private' docs
+            (migration 040) to their uploader; 'team' docs are unaffected.
 
     Returns:
         Ranked chunk dicts from db.client.match_project_chunks().
@@ -41,6 +44,7 @@ def retrieve_project_chunks(
         project_id=project_id,
         top_k=top_k,
         min_similarity=min_similarity,
+        requesting_user_id=requesting_user_id,
     )
 
 

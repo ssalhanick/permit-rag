@@ -125,6 +125,9 @@ class ManagerRequest:
     min_similarity: float = 0.0
     project_id: str | None = None
     chunk_ids: list[str] | None = None
+    # The querying user's id, if authenticated -- gates tier-3 'private'
+    # project documents (migration 040) to their uploader in retrieval.
+    user_id: str | None = None
 
 
 @dataclass
@@ -349,6 +352,7 @@ def _single_retrieval(state: _PlanState) -> Any:
         top_k=r.top_k,
         municipality=state.effective_municipality,
         min_similarity=r.min_similarity,
+        requesting_user_id=r.user_id,
     )
 
 
@@ -374,6 +378,7 @@ def _fanout_retrieval(state: _PlanState) -> Any:
             res = state.deps.retrieve(
                 sub.text, project_id=r.project_id, top_k=r.top_k,
                 municipality=muni, min_similarity=r.min_similarity,
+                requesting_user_id=r.user_id,
             )
         except Exception as exc:  # one weak sub-question must not fail the whole query
             log.warning("sub-question retrieval failed (%s)", exc)

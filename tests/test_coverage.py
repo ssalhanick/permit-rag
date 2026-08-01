@@ -6,7 +6,12 @@ from __future__ import annotations
 
 from unittest.mock import patch
 
-from rag.coverage import CoverageResult, check_coverage, covered_municipalities
+from rag.coverage import (
+    CoverageResult,
+    check_coverage,
+    covered_municipalities,
+    overlays_at_point,
+)
 
 
 @patch("db.client.list_documents")
@@ -85,3 +90,22 @@ def test_covered_municipalities_falls_back_when_db_unreachable(_mock) -> None:
 @patch("db.client.list_covered_municipalities", return_value=[])
 def test_covered_municipalities_falls_back_when_empty(_mock) -> None:
     assert covered_municipalities() == ["Dallas", "Plano", "Fort Worth"]
+
+
+# ── overlays_at_point (Type 3 coverage-surfacing addition) ─────
+
+
+def test_overlays_at_point_returns_empty_without_coordinates() -> None:
+    assert overlays_at_point(None, None) == []
+    assert overlays_at_point(32.8, None) == []
+    assert overlays_at_point(None, -96.78) == []
+
+
+@patch("db.client.list_overlays_containing_point")
+def test_overlays_at_point_delegates_to_db_client(mock_list_overlays) -> None:
+    mock_list_overlays.return_value = [{"id": "x", "name": "Swiss Avenue Historic District"}]
+
+    result = overlays_at_point(32.8, -96.78)
+
+    assert result == [{"id": "x", "name": "Swiss Avenue Historic District"}]
+    mock_list_overlays.assert_called_once_with(32.8, -96.78)
