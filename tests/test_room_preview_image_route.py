@@ -9,14 +9,21 @@ from fastapi.testclient import TestClient
 
 def test_room_preview_image_returns_mock_without_openai(monkeypatch) -> None:
     """Route should return mock PNG payload when keys are absent."""
+    # Import api.main FIRST: its module-level bootstrap_env() does
+    # load_dotenv(".env", override=True) on first import in the process,
+    # which would silently undo delenv below if it ran after. Only fires
+    # once per process (module caching), so this ordering makes the
+    # delenv calls the actual last word regardless of whether some other
+    # test already triggered the import.
+    from api.main import app
+    from api.auth import get_current_user
+    from db import client as db_client
+
+    monkeypatch.delenv("FAL_API_KEY", raising=False)
     monkeypatch.delenv("OPENAI_API_KEY", raising=False)
     monkeypatch.delenv("LEONARDO_API_KEY", raising=False)
     monkeypatch.setenv("API_JWT_SECRET", "x" * 32)
     monkeypatch.setenv("API_ADMIN_AUTH_REQUIRED", "false")
-
-    from api.main import app
-    from api.auth import get_current_user
-    from db import client as db_client
 
     app.dependency_overrides[get_current_user] = lambda: {
         "user_id": "00000000-0000-0000-0000-000000000001",
@@ -46,14 +53,18 @@ def test_room_preview_image_returns_mock_without_openai(monkeypatch) -> None:
 
 def test_room_preview_image_mock_is_not_metered(monkeypatch) -> None:
     """Mock images cost nothing, so they must not consume the monthly cap."""
+    # See comment in test_room_preview_image_returns_mock_without_openai:
+    # import api.main before delenv, since its bootstrap_env() reloads .env
+    # with override=True on first import in the process.
+    from api.auth import get_current_user
+    from api.main import app
+    from db import client as db_client
+
+    monkeypatch.delenv("FAL_API_KEY", raising=False)
     monkeypatch.delenv("OPENAI_API_KEY", raising=False)
     monkeypatch.delenv("LEONARDO_API_KEY", raising=False)
     monkeypatch.setenv("API_JWT_SECRET", "x" * 32)
     monkeypatch.setenv("ROOM_IMAGE_MONTHLY_CAP", "50")
-
-    from api.auth import get_current_user
-    from api.main import app
-    from db import client as db_client
 
     app.dependency_overrides[get_current_user] = lambda: {
         "user_id": "00000000-0000-0000-0000-000000000001",
