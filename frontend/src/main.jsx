@@ -2,6 +2,7 @@ import React, { useEffect } from "react";
 import ReactDOM from "react-dom/client";
 import { BrowserRouter, Navigate, Route, Routes } from "react-router-dom";
 import App from "./App.jsx";
+import LandingPage from "./LandingPage.jsx";
 import DashboardPage from "./DashboardPage.jsx";
 import TasksPage from "./TasksPage.jsx";
 import QueryPage from "./QueryPage.jsx";
@@ -77,6 +78,10 @@ ReactDOM.createRoot(document.getElementById("root")).render(
             <Nav />
             <Routes>
           <Route path="/" element={<App />} />
+          {/* Always reachable, signed in or not -- "/" redirects a signed-in
+              user straight to /dashboard (see App.jsx), so this is the only
+              way back to the marketing page without signing out first. */}
+          <Route path="/welcome" element={<LandingPage />} />
           <Route
             path="/dashboard"
             element={

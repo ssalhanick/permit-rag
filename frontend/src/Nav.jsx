@@ -64,7 +64,15 @@ export default function Nav() {
       <nav className={`tt-site-nav ${isOpen ? "tt-site-nav-open" : ""}`}>
         {/* Brand Logo Header */}
         <div className="tt-nav-brand-section">
-          <NavLink to="/" className="tt-nav-brand-link" aria-label="ToolTime Home" onClick={closeMenu}>
+          {/* "/" redirects a signed-in user straight back to /dashboard (App.jsx)
+              -- that makes the logo a dead click while signed in, so it points
+              at /welcome instead, the always-reachable marketing page. */}
+          <NavLink
+            to={user ? "/welcome" : "/"}
+            className="tt-nav-brand-link"
+            aria-label="ToolTime Home"
+            onClick={closeMenu}
+          >
             <LogoSVG className="nav-brand-logo nav-logo-themed" aria-hidden="true" />
           </NavLink>
           <button

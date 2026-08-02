@@ -38,6 +38,11 @@ const BLANK_WIZARD = {
   latitude: null,
   longitude: null,
   name: "",
+  // True once the user has typed into the name field directly (as opposed to
+  // it being auto-derived from address/spaces) — see the auto-populate
+  // effects below. Once true, address changes stop overwriting a name the
+  // user chose on purpose.
+  nameManuallyEdited: false,
   spaces: [],
   otherSpaces: "",
   workTypes: [],
@@ -373,24 +378,29 @@ export default function ProjectKickoffPage() {
     }
   }, [wizardStep, chatHistory.length, wizard.municipality, wizard.persona, wizard.budget, steps]);
 
-  // Auto-populate project name from street + first selected space when reaching the name step
+  // Auto-populate project name from street + first selected space when reaching the name step.
+  // Keyed off nameManuallyEdited (not "is name already non-empty") so that
+  // going back and changing the address re-derives the suggestion instead of
+  // leaving a stale one — the name only ever stops following address changes
+  // once the user has actually typed into the field themselves.
   useEffect(() => {
     const currentStep = steps[wizardStep - 1];
     if (currentStep?.key !== "name") return;
-    // Only auto-populate if the user hasn't manually typed something
+    if (wizard.nameManuallyEdited) return;
     const streetWord = wizard._streetWord || "";
     const firstSpace = wizard.spaces?.[0] || wizard.otherSpaces?.trim() || "";
-    if (streetWord || firstSpace) {
-      const suggested = [streetWord, firstSpace].filter(Boolean).join(" ");
-      setWizard((w) => ({ ...w, name: w.name || suggested }));
+    const suggested = [streetWord, firstSpace].filter(Boolean).join(" ");
+    if (suggested && suggested !== wizard.name) {
+      setWizard((w) => ({ ...w, name: suggested }));
     }
   }, [wizardStep, steps]);
 
-  // Backfill name when chat flow skips name step and lands on confirm
+  // Backfill name when chat flow skips name step and lands on confirm — same
+  // "only if untouched" rule as the effect above.
   useEffect(() => {
     const currentStep = steps[wizardStep - 1];
     if (currentStep?.key !== "confirm") return;
-    if (wizard.name.trim()) return; // already set
+    if (wizard.nameManuallyEdited) return;
     const streetWord = wizard._streetWord || "";
     const spaces = [
       ...wizard.spaces,
@@ -399,8 +409,8 @@ export default function ProjectKickoffPage() {
     const spaceSuffix = spaces.length > 1 ? "Home Renovation" : spaces[0] || "";
     const derived = [streetWord, spaceSuffix].filter(Boolean).join(" ")
       || (wizard.address.split(",")[0] || "").trim();
-    if (derived) {
-      setWizard((w) => ({ ...w, name: w.name || derived }));
+    if (derived && derived !== wizard.name) {
+      setWizard((w) => ({ ...w, name: derived }));
     }
   }, [wizardStep, steps]);
 
@@ -891,7 +901,9 @@ export default function ProjectKickoffPage() {
                 type="text"
                 className="kickoff-text-input"
                 value={wizard.name}
-                onChange={(e) => setWizard((w) => ({ ...w, name: e.target.value }))}
+                onChange={(e) =>
+                  setWizard((w) => ({ ...w, name: e.target.value, nameManuallyEdited: true }))
+                }
                 placeholder="e.g. Holliday Kitchen"
                 maxLength={120}
                 autoFocus

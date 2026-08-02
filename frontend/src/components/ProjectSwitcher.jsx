@@ -11,6 +11,7 @@ export default function ProjectSwitcher({ onSelect }) {
   const [loading, setLoading] = useState(false);
   const [search, setSearch] = useState("");
   const [justSelected, setJustSelected] = useState(false);
+  const [error, setError] = useState("");
   const containerRef = useRef(null);
 
   useEffect(() => {
@@ -56,12 +57,16 @@ export default function ProjectSwitcher({ onSelect }) {
   });
 
   const handlePick = async (projectObj) => {
+    // setActiveProject expects a plain project id string, not the whole
+    // project object -- passing the object sent a nested value where the
+    // backend PATCH expects a UUID, so the switch silently never took effect.
     try {
-      await setActiveProject(projectObj);
-    } catch {
-      // Fallback local set
-      setActiveProject(projectObj);
+      await setActiveProject(projectObj.id);
+    } catch (err) {
+      setError(err.message || "Failed to switch project.");
+      return;
     }
+    setError("");
     setJustSelected(true);
     setOpen(false);
     setSearch("");
@@ -124,6 +129,12 @@ export default function ProjectSwitcher({ onSelect }) {
               />
             </div>
           </div>
+
+          {error && (
+            <p className="px-3 py-1.5 text-[11px] font-semibold text-red-400 bg-red-950/40 border-b border-slate-800">
+              {error}
+            </p>
+          )}
 
           <ul role="listbox" className="max-h-56 overflow-y-auto divide-y divide-slate-800/50 p-1">
             {loading && <li className="px-3 py-2 text-xs text-slate-400">Loading projects…</li>}

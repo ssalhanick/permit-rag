@@ -273,10 +273,10 @@ export default function DashboardPage() {
             {projects.length > 0 && (
               <button
                 type="button"
-                className="tt-btn-add-task-inline"
+                className="tt-btn-primary inline-flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-lg"
                 onClick={() => setShowAddTaskForm(!showAddTaskForm)}
               >
-                <Plus className="w-4 h-4 mr-1" /> Add Task
+                <Plus className="w-4 h-4" /> Add Task
               </button>
             )}
           </div>
@@ -336,13 +336,27 @@ export default function DashboardPage() {
 
         <div className="tt-tasks-card">
           {tasks.length === 0 ? (
-            <div className="p-6 text-center text-slate-500">
-              <CheckSquare className="w-8 h-8 text-slate-300 mx-auto mb-2" />
-              <p className="text-sm">
-                {projects.length === 0
-                  ? "Create a project to start adding tasks."
-                  : 'No tasks added yet. Click "+ Add Task" to create your first task.'}
-              </p>
+            <div className="profile-empty-state">
+              <CheckSquare className="profile-empty-state-icon" aria-hidden="true" />
+              {projects.length === 0 ? (
+                <>
+                  <p>Create a project to start adding tasks.</p>
+                  <Link to="/kickoff" className="tt-btn-primary">
+                    Start a project
+                  </Link>
+                </>
+              ) : (
+                <>
+                  <p>No tasks yet.</p>
+                  <button
+                    type="button"
+                    className="tt-btn-primary"
+                    onClick={() => setShowAddTaskForm(true)}
+                  >
+                    <Plus className="w-4 h-4" /> Add Task
+                  </button>
+                </>
+              )}
             </div>
           ) : (
             <ul className="tt-tasks-list">

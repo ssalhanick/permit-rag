@@ -4,9 +4,15 @@ import { Search, ShieldCheck, Scale, FolderKanban, Sparkles, Smartphone, ArrowRi
 import { Button } from "@/components/ui/button";
 import LogoSVG from "./components/LogoSVG.jsx";
 import { useLogoAnimation } from "./hooks/useLogoAnimation.js";
+import { useAuth } from "./context/AuthContext.jsx";
 
 export default function LandingPage() {
   const { play } = useLogoAnimation();
+  const { user } = useAuth();
+  // Reachable while signed in via /welcome (see main.jsx) so there's a way
+  // back to the marketing page without the root path's auth redirect
+  // bouncing straight to /dashboard -- CTAs point home instead of re-signup.
+  const isAuthed = Boolean(user);
 
   // Fire the logo entrance animation once on page load
   useEffect(() => {
@@ -80,9 +86,9 @@ export default function LandingPage() {
               </p>
 
               <div className="flex flex-col sm:flex-row items-center justify-center md:justify-start gap-4 pt-2">
-                <Link to="/auth">
+                <Link to={isAuthed ? "/dashboard" : "/auth"}>
                   <Button size="lg" className="w-full sm:w-auto px-8 font-semibold flex items-center gap-2 shadow-lg landing-hero-primary">
-                    Get Started Free
+                    {isAuthed ? "Go to Dashboard" : "Get Started Free"}
                     <ArrowRight className="h-4 w-4" />
                   </Button>
                 </Link>
@@ -164,12 +170,14 @@ export default function LandingPage() {
           Ready to Streamline Your Permit Approvals?
         </h2>
         <p className="text-muted-foreground max-w-xl mx-auto leading-relaxed">
-          Create an account to build projects, upload local documents, search ordinances, and run AR inspection scans.
+          {isAuthed
+            ? "Jump back into your projects, documents, and AR inspection scans."
+            : "Create an account to build projects, upload local documents, search ordinances, and run AR inspection scans."}
         </p>
         <div className="pt-4">
-          <Link to="/auth">
+          <Link to={isAuthed ? "/dashboard" : "/auth"}>
             <Button size="lg" className="px-10 font-bold text-base flex items-center gap-2 mx-auto">
-              Get Started Now
+              {isAuthed ? "Go to Dashboard" : "Get Started Now"}
               <ArrowRight className="h-5 w-5" />
             </Button>
           </Link>

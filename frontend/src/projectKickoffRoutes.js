@@ -87,6 +87,11 @@ export function projectToWizardState(project) {
     latitude: project.latitude ?? null,
     longitude: project.longitude ?? null,
     name: project.name?.trim() || "",
+    // An existing project's saved name is the user's own choice, never a
+    // stale auto-suggestion — treat it the same as if they'd just typed it,
+    // so re-visiting the address step doesn't overwrite it (see
+    // ProjectKickoffPage.jsx's name auto-populate effects).
+    nameManuallyEdited: Boolean(project.name?.trim()),
     spaces,
     otherSpaces,
     workTypes,

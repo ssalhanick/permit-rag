@@ -1788,12 +1788,20 @@ svg.tt-site-logo {
 
 .landing-hero-outline {
   border-color: #334155 !important;
-  color: #f8fafc !important;
+  /* Was hardcoded #f8fafc (unscoped to .dark) -- that's exactly the
+     light-mode --background value, so on the hero's light-mode background
+     (also --background) the text was invisible. var(--foreground) tracks
+     the current theme instead. */
+  color: var(--foreground) !important;
   background: transparent !important;
   border-radius: 8px;
 }
 
 .landing-hero-outline:hover {
+  background: rgba(15, 23, 42, 0.05) !important;
+}
+
+.dark .landing-hero-outline:hover {
   background: #1e293b !important;
 }
 

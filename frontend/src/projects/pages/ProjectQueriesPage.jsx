@@ -53,7 +53,7 @@ export default function ProjectQueriesPage() {
       params.set("m", municipality);
     }
     params.set("p", projectId);
-    navigate(`/?${params.toString()}`);
+    navigate(`/query?${params.toString()}`);
   };
 
   const handleDeleteQuery = async (queryId, e) => {

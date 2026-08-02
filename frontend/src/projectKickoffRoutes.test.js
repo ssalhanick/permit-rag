@@ -35,3 +35,17 @@ test("projectToWizardState maps persisted project fields", () => {
   assert.deepEqual(state.workTypes, ["Plumbing"]);
   assert.equal(state.otherWorkTypes, "Custom demo");
 });
+
+test("projectToWizardState marks an existing project's name as manually-edited", () => {
+  // A saved project's name is the user's own choice, not a stale
+  // auto-suggestion -- the kickoff wizard's address-change re-derivation
+  // must never overwrite it. See ProjectKickoffPage.jsx's name auto-populate
+  // effects, keyed off this flag.
+  const state = projectToWizardState({ name: "Kitchen Remodel", address: "123 Main St" });
+  assert.equal(state.nameManuallyEdited, true);
+});
+
+test("projectToWizardState leaves a blank name free to auto-populate", () => {
+  const state = projectToWizardState({ name: "", address: "123 Main St" });
+  assert.equal(state.nameManuallyEdited, false);
+});
