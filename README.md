@@ -570,9 +570,13 @@ ships — the existing corpus keeps whatever chunks and embeddings it already
 had. To measure a change's real effect, or just bring the whole corpus up to
 date, re-chunk and re-embed everything and re-run the RAGAs gate:
 
-```bash
+```powershell
+# PowerShell (Windows)
+.\scripts\reprocess_corpus.ps1 -Local
+.\scripts\reprocess_corpus.ps1 -DatabaseUrl "postgresql://..."
+
+# Bash (Linux / Git Bash)
 scripts/reprocess_corpus.sh --local
-# or, against a specific database:
 scripts/reprocess_corpus.sh --database-url='postgresql://...'
 ```
 
