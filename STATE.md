@@ -1,5 +1,7 @@
 # permit_rag — State
 
+_Updated: 2026-08-02 — system & migration health check (832 pytest green). Registered probes for migrations 002–045 in `scripts/check_migrations.py` and enforced via `tests/test_migration_integrity.py`. Fixed unbackfilled document reporting in `check_migration_details.py`, seeded RDS labor rate benchmarks, registered clean `atexit` connection pool cleanup in `db/client.py` to prevent process termination warnings, and corrected unauthenticated mobile nav sign-in button alignment in `Nav.jsx`._
+
 _Updated: 2026-08-01 — bug-triage batch (19 hand-tested findings) worked
 through in priority order on `fix/room-scan`, security first. **Security:**
 `GET /api/documents` had no auth at all (any caller, authenticated or not,
@@ -19,7 +21,7 @@ is code-complete, tests pass on machine A's mocked suite, but has NOT been
 RAGAs-verified** — this machine has no corpus. Per the sequential-gating rule
 or your usual `retrieve()`/`pipeline.py` retrieval-change discipline, run the
 migration + a fresh RAGAs pass on the corpus machine before trusting it in
-prod. **Everything else** (830 pytest / 92 frontend `node --test`, ruff +
+prod. **Everything else** (832 pytest / 92 frontend `node --test`, ruff +
 `npm run build` clean): consolidated 5 duplicated voice-input
 implementations into `frontend/src/hooks/useVoiceInput.js`; shipped a real
 Document Library (was double-broken — empty for regular users, full corpus
