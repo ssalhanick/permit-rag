@@ -748,10 +748,7 @@ export default function ProjectKickoffPage() {
                   <button
                     type="button"
                     className="kickoff-project-item"
-                    onClick={() => navigate(
-                      returnTo === "/projects" ? `/projects?projectId=${p.id}` : `/?p=${p.id}`,
-                      { replace: true },
-                    )}
+                    onClick={() => navigate(`/projects/${p.id}/dashboard`, { replace: true })}
                   >
                     <strong>{p.name}</strong>
                     {p.address && <span className="kickoff-project-address">{p.address}</span>}
