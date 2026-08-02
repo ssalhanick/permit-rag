@@ -1268,6 +1268,170 @@ svg.tt-site-logo {
   }
 }
 
+/* ── Project Layout — persistent tab strip, no toggle/backdrop needed:
+   global/account nav lives in the top Nav hamburger, this is scoped nav
+   for the current project only, always visible. ───────────────────── */
+.project-layout {
+  display: flex;
+  flex-direction: column;
+  min-height: calc(100vh - 64px);
+  background: var(--tt-bg);
+}
+
+.project-layout-header {
+  padding: 16px 24px 0;
+  background: var(--tt-card-bg);
+  border-bottom: 1px solid var(--tt-border);
+}
+
+.project-layout-title {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  margin-bottom: 4px;
+}
+
+.project-layout-title strong {
+  font-size: 0.9rem;
+  color: var(--tt-text-main);
+}
+
+.project-layout-muni {
+  font-size: 0.78rem;
+  color: var(--tt-text-muted);
+}
+
+.project-layout-header h1 {
+  font-size: 1.25rem;
+  font-weight: 700;
+  color: var(--tt-text-main);
+  margin: 0 0 12px;
+}
+
+/* ── Project Quick Actions (New Query / New Scan / New Task) ─────── */
+.project-quick-actions {
+  position: relative;
+  display: inline-flex;
+  align-items: stretch;
+  flex-shrink: 0;
+}
+
+.project-quick-actions-primary {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
+  background: var(--tt-primary);
+  color: #ffffff;
+  font-size: 0.78rem;
+  font-weight: 600;
+  text-decoration: none;
+  border-radius: 8px 0 0 8px;
+  white-space: nowrap;
+  transition: background 0.15s ease;
+}
+
+.project-quick-actions-primary:hover {
+  background: var(--tt-primary-hover);
+}
+
+.project-quick-actions-caret {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0 6px;
+  background: var(--tt-primary);
+  color: #ffffff;
+  border: none;
+  border-left: 1px solid rgba(255, 255, 255, 0.3);
+  border-radius: 0 8px 8px 0;
+  cursor: pointer;
+  transition: background 0.15s ease;
+}
+
+.project-quick-actions-caret:hover {
+  background: var(--tt-primary-hover);
+}
+
+.project-quick-actions-menu {
+  position: absolute;
+  top: calc(100% + 6px);
+  left: 0;
+  min-width: 150px;
+  background: var(--tt-card-bg);
+  border: 1px solid var(--tt-border);
+  border-radius: 10px;
+  box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.18), 0 8px 10px -6px rgba(0, 0, 0, 0.12);
+  padding: 6px;
+  z-index: 100;
+  animation: fadeInDown 0.15s ease-out;
+}
+
+.project-quick-actions-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 10px;
+  border-radius: 6px;
+  color: var(--tt-text-main);
+  font-size: 0.82rem;
+  font-weight: 500;
+  text-decoration: none;
+  white-space: nowrap;
+  transition: background 0.15s ease;
+}
+
+.project-quick-actions-item:hover {
+  background: var(--tt-border);
+}
+
+@media (max-width: 640px) {
+  .project-layout-title {
+    flex-wrap: wrap;
+    row-gap: 6px;
+  }
+}
+
+.project-tab-strip {
+  display: flex;
+  gap: 4px;
+  overflow-x: auto;
+  padding: 0 20px;
+  background: var(--tt-card-bg);
+  border-bottom: 1px solid var(--tt-border);
+  scrollbar-width: none;
+}
+
+.project-tab-strip::-webkit-scrollbar {
+  display: none;
+}
+
+.project-tab {
+  flex-shrink: 0;
+  padding: 10px 14px;
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: var(--tt-text-muted);
+  text-decoration: none;
+  border-bottom: 2px solid transparent;
+  white-space: nowrap;
+  transition: color 0.15s ease, border-color 0.15s ease;
+}
+
+.project-tab:hover {
+  color: var(--tt-text-main);
+}
+
+.project-tab--active {
+  color: var(--tt-primary);
+  border-bottom-color: var(--tt-primary);
+}
+
+.project-layout-content {
+  flex: 1;
+  min-width: 0;
+}
+
 /* ── User Dropdown Mini Menu ───────────────────────────────────── */
 .tt-user-dropdown-container {
   position: relative;

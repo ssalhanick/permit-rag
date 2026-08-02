@@ -1,15 +1,83 @@
-import React, { useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import { Link, NavLink, Outlet, useLocation } from "react-router-dom";
+import { Camera, CheckSquare, ChevronDown, Sparkles } from "lucide-react";
 import { useProject } from "./ProjectContext.jsx";
 import { getProjectNavItems, getProjectPageTitle } from "./projectNavConfig.js";
 
 /**
- * Project dashboard shell — sidebar + nested pages (like profile layout).
+ * Grouped quick-action button for the project header: "New Query" is the
+ * primary/default click target, with "New Scan" and "New Task" tucked under
+ * a caret dropdown. Replaces the standalone "New Query" tab that used to
+ * live in the tab strip below.
+ */
+function ProjectQuickActions({ projectId }) {
+  const [open, setOpen] = useState(false);
+  const containerRef = useRef(null);
+
+  useEffect(() => {
+    function handleClickOutside(event) {
+      if (containerRef.current && !containerRef.current.contains(event.target)) {
+        setOpen(false);
+      }
+    }
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, []);
+
+  return (
+    <div className="project-quick-actions" ref={containerRef}>
+      <Link
+        to={`/query?p=${projectId}`}
+        className="project-quick-actions-primary"
+        onClick={() => setOpen(false)}
+      >
+        <Sparkles className="w-3.5 h-3.5" />
+        New Query
+      </Link>
+      <button
+        type="button"
+        className="project-quick-actions-caret"
+        aria-label="More quick actions"
+        aria-expanded={open}
+        aria-haspopup="menu"
+        onClick={() => setOpen((v) => !v)}
+      >
+        <ChevronDown className="w-3.5 h-3.5" />
+      </button>
+      {open && (
+        <div className="project-quick-actions-menu" role="menu">
+          <Link
+            to={`/projects/${projectId}/scans`}
+            className="project-quick-actions-item"
+            role="menuitem"
+            onClick={() => setOpen(false)}
+          >
+            <Camera className="w-3.5 h-3.5" />
+            New Scan
+          </Link>
+          <Link
+            to="/tasks"
+            className="project-quick-actions-item"
+            role="menuitem"
+            onClick={() => setOpen(false)}
+          >
+            <CheckSquare className="w-3.5 h-3.5" />
+            New Task
+          </Link>
+        </div>
+      )}
+    </div>
+  );
+}
+
+/**
+ * Project dashboard shell — persistent tab strip + nested pages. Global/
+ * account nav lives in the top Nav hamburger; this only ever shows nav
+ * scoped to the current project, always visible, no toggle needed.
  */
 export default function ProjectLayout() {
   const { project, loading, error } = useProject();
   const location = useLocation();
-  const [sidebarOpen, setSidebarOpen] = useState(false);
   const pageTitle = getProjectPageTitle(location.pathname);
   const navItems = project ? getProjectNavItems(project.id) : [];
 
@@ -31,84 +99,31 @@ export default function ProjectLayout() {
   }
 
   return (
-    <div className="profile-dashboard-layout project-dashboard-layout">
-      {sidebarOpen && (
-        <button
-          type="button"
-          className="profile-sidebar-backdrop"
-          aria-label="Close project menu"
-          onClick={() => setSidebarOpen(false)}
-        />
-      )}
-
-      <aside
-        className={`profile-sidebar${sidebarOpen ? " profile-sidebar--open" : ""}`}
-        aria-label="Project navigation"
-      >
-        <div className="profile-sidebar-user">
-          <div className="profile-sidebar-avatar" aria-hidden="true">
-            {(project.name || "P").slice(0, 2).toUpperCase()}
-          </div>
-          <div className="profile-sidebar-user-meta">
-            <strong>{project.name}</strong>
-            <span className="profile-sidebar-role">{project.municipality || "No jurisdiction"}</span>
-          </div>
+    <div className="project-layout">
+      <header className="project-layout-header">
+        <div className="project-layout-title">
+          <strong>{project.name}</strong>
+          <ProjectQuickActions projectId={project.id} />
+          <span className="project-layout-muni">{project.municipality || "No jurisdiction"}</span>
         </div>
+        <h1>{pageTitle}</h1>
+      </header>
 
-        <nav className="profile-sidebar-nav">
-          <p className="profile-sidebar-section-label">Project</p>
-          <ul>
-            {navItems.map((item) => (
-              <li key={item.path}>
-                <NavLink
-                  to={item.path}
-                  end={item.end}
-                  className={({ isActive }) =>
-                    `profile-sidebar-link${isActive ? " profile-sidebar-link--active" : ""}`
-                  }
-                  onClick={() => setSidebarOpen(false)}
-                >
-                  {item.label}
-                </NavLink>
-              </li>
-            ))}
-          </ul>
-          <p className="profile-sidebar-section-label">App</p>
-          <ul>
-            <li>
-              <NavLink to="/projects" className="profile-sidebar-link" onClick={() => setSidebarOpen(false)}>
-                All Projects
-              </NavLink>
-            </li>
-            <li>
-              <NavLink to={`/query?p=${project.id}`} className="profile-sidebar-link" onClick={() => setSidebarOpen(false)}>
-                New Query
-              </NavLink>
-            </li>
-            <li>
-              <NavLink to="/profile/room-scans" className="profile-sidebar-link" onClick={() => setSidebarOpen(false)}>
-                My Scan Library
-              </NavLink>
-            </li>
-          </ul>
-        </nav>
-      </aside>
-
-      <div className="profile-main">
-        <header className="profile-main-header">
-          <button
-            type="button"
-            className="profile-sidebar-toggle"
-            aria-expanded={sidebarOpen}
-            onClick={() => setSidebarOpen((open) => !open)}
+      <nav className="project-tab-strip" aria-label="Project navigation">
+        {navItems.map((item) => (
+          <NavLink
+            key={item.path}
+            to={item.path}
+            end={item.end}
+            className={({ isActive }) => `project-tab${isActive ? " project-tab--active" : ""}`}
           >
-            Menu
-          </button>
-          <h1>{pageTitle}</h1>
-        </header>
-        <div className="profile-main-content">
-          <Outlet />
-        </div>
+            {item.label}
+          </NavLink>
+        ))}
+      </nav>
+
+      <div className="project-layout-content">
+        <Outlet />
       </div>
     </div>
   );
