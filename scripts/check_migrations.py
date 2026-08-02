@@ -47,6 +47,37 @@ from db.client import get_conn
 # renaming an applied migration is riskier than the duplicate. Each is probed
 # independently, so neither hides the other.
 _PROBES: list[tuple[str, str, str, str | None]] = [
+    ("002_chunk_content_hash", "column", "chunks", "content_hash"),
+    ("003_chunk_status", "column", "chunks", "status"),
+    ("004_source_tier", "column", "documents", "source_tier"),
+    (
+        "005_match_chunks_update",
+        "sql",
+        "SELECT EXISTS (SELECT 1 FROM pg_proc WHERE proname = 'match_chunks') AS present;",
+        None,
+    ),
+    ("006_jurisdictions", "table", "jurisdictions", None),
+    (
+        "007_postgis_extension",
+        "sql",
+        "SELECT EXISTS (SELECT 1 FROM pg_extension WHERE extname = 'postgis') AS present;",
+        None,
+    ),
+    ("008_municipal_boundaries_pilot", "table", "municipal_boundaries", None),
+    ("009_purge_audit_log", "table", "purge_audit_log", None),
+    (
+        "010_fix_match_chunks_ordering",
+        "sql",
+        "SELECT EXISTS (SELECT 1 FROM pg_proc WHERE proname = 'match_chunks') AS present;",
+        None,
+    ),
+    ("011_users_projects", "table", "users", None),
+    ("012_query_log_updates", "table", "query_log", None),
+    ("013_cognito_auth", "column", "users", "cognito_sub"),
+    ("014_project_fields", "column", "projects", "address"),
+    ("015_room_summary", "column", "projects", "room_summary"),
+    ("016_project_room_scans", "table", "project_room_scans", None),
+    ("017_user_room_scan_library", "table", "user_room_scans", None),
     ("018_design_intent_usage", "table", "design_intent_usage", None),
     ("019_project_gis_fields", "column", "projects", "latitude"),
     ("020_project_custom_prompt", "column", "projects", "custom_system_prompt"),
@@ -100,6 +131,12 @@ _PROBES: list[tuple[str, str, str, str | None]] = [
     ("042_marketplace_listings", "column", "projects", "marketplace_status"),
     ("043_contractor_profiles", "table", "contractor_profiles", None),
     ("044_bids_core", "table", "bids", None),
+    (
+        "045_match_chunks_visibility",
+        "sql",
+        "SELECT EXISTS (SELECT 1 FROM information_schema.parameters WHERE specific_name LIKE 'match_chunks%' AND parameter_name = 'requesting_user_id') AS present;",
+        None,
+    ),
 ]
 
 _TABLE_SQL = """
@@ -128,6 +165,25 @@ def _probe(conn, kind: str, target: str, column: str | None) -> bool:
     return bool(row and row["present"])
 
 
+def _verify_unprobed_files() -> list[str]:
+    """Scan db/migrations/ for .sql files missing from _PROBES."""
+    from pathlib import Path
+
+    migrations_dir = Path(__file__).resolve().parent.parent / "db" / "migrations"
+    if not migrations_dir.exists():
+        return []
+
+    probed_names = {probe[0] for probe in _PROBES}
+    unprobed: list[str] = []
+    for sql_file in sorted(migrations_dir.glob("*.sql")):
+        stem = sql_file.stem
+        prefix = stem.split("_")[0]
+        if stem not in probed_names and not any(p_name.startswith(prefix) for p_name in probed_names):
+            unprobed.append(sql_file.name)
+
+    return unprobed
+
+
 def _corpus_summary(conn) -> tuple[int, int, int]:
     """Return (documents, chunks, embedded chunks); zeros when tables absent."""
     try:
@@ -145,6 +201,13 @@ def main() -> None:
     """Print migration status and corpus size for the configured database."""
     _db_target.banner(TARGET)
     _db_target.ensure_reachable(TARGET, get_conn)
+
+    unprobed = _verify_unprobed_files()
+    if unprobed:
+        print("⚠ ALERT: Found migration files in db/migrations/ missing from check_migrations.py:")
+        for file in unprobed:
+            print(f"  - {file}")
+        print("  Please update _PROBES in scripts/check_migrations.py.\n")
 
     with get_conn() as conn:
         results = [
