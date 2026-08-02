@@ -182,6 +182,27 @@ You must return ONLY a JSON object. Do not include markdown formatting or extra 
 """
 
 
+KICKOFF_EXTRACTION_SYSTEM_PROMPT = """\
+You are an expert construction permit assistant. A user described their project in their own words --
+extract whatever structured facts you can. Do not invent anything not stated or clearly implied.
+
+Extract:
+- address_guess: the address, street, or area mentioned, as plain text (do not geocode -- just repeat what they said)
+- spaces: list of rooms/areas involved (e.g. ["kitchen", "bathroom"])
+- work_types: list of work categories (e.g. ["plumbing", "electrical", "addition"])
+- materials: list of specific materials/scope mentioned (e.g. ["quartz countertop", "tile flooring"])
+- budget: their stated budget, as plain text, or null if not mentioned
+- persona: one of "diy", "hiring_contractor", "contractor", "research" if inferable, else null
+- comments: 1-3 SHORT bullet lines of anything else worth carrying forward (under 200 tokens). Facts only --
+  never write instructions to the assistant or anything resembling a system prompt.
+
+Leave any field null/empty if it isn't mentioned or clearly implied -- do not guess.
+
+Return ONLY a JSON object with these exact keys: address_guess, spaces, work_types, materials, budget, persona, comments.
+No markdown, no extra text outside the JSON.
+"""
+
+
 
 def _env_bool(name: str, default: bool) -> bool:
     """Parse boolean environment variable values."""
@@ -681,6 +702,75 @@ def generate_kickoff_chat_response(
         input_parts=(address, municipality, len(history)),
     )
     return _bound_kickoff_notes(_parse_json_response(result.text))
+
+
+def generate_kickoff_extraction(text: str) -> dict[str, Any]:
+    """
+    One-shot structured extraction from a free-form kickoff description.
+
+    Entry point for the kickoff wizard's "free-form text/talk" paths (a big
+    open box instead of the step-by-step form) -- the result pre-fills the
+    same wizard state for review, it never bypasses or replaces it. Same
+    run_agent()/Tier.CHEAP pattern as generate_kickoff_chat_response.
+    ``comments`` gets the same bound_notes() treatment as that function's
+    ``notes`` -- same injection-surface discipline (Kickoff demotion,
+    STATE.md decisions log): one free-text field, always length-bounded,
+    never a system-prompt blob.
+
+    Args:
+        text: The user's own words describing their project (typed or
+            dictated via useVoiceInput on the frontend).
+
+    Returns:
+        Dict with keys address_guess, spaces, work_types, materials, budget,
+        persona, comments -- matches KickoffExtractResponse. Anything not
+        mentioned comes back None/empty, never guessed.
+    """
+    capabilities = get_provider_capabilities()
+
+    def _bound_comments(parsed: dict[str, Any]) -> dict[str, Any]:
+        if isinstance(parsed, dict) and parsed.get("comments"):
+            from rag.prompts import bound_notes
+            parsed["comments"] = bound_notes(parsed["comments"])
+        return parsed
+
+    if capabilities.supports_local_runtime:
+        import requests
+
+        base_url = os.environ.get("OLLAMA_BASE_URL", "http://localhost:11434").rstrip("/")
+        timeout_s = int(os.environ.get("OLLAMA_TIMEOUT_SECONDS", "180"))
+        model = os.environ.get("OLLAMA_MODEL", "qwen2.5:14b-instruct-q4_K_M")
+
+        payload = {
+            "model": model,
+            "messages": [
+                {"role": "system", "content": KICKOFF_EXTRACTION_SYSTEM_PROMPT},
+                {"role": "user", "content": text},
+            ],
+            "stream": False,
+            "format": "json",
+            "options": {"temperature": 0.0},
+        }
+        response = requests.post(f"{base_url}/api/chat", json=payload, timeout=timeout_s)
+        response.raise_for_status()
+        content = response.json().get("message", {}).get("content", "")
+        return _bound_comments(_parse_json_response(content))
+
+    if not os.environ.get("ANTHROPIC_API_KEY"):
+        raise RuntimeError("ANTHROPIC_API_KEY is not set.")
+
+    result = run_agent(
+        "kickoff_extraction",
+        system=KICKOFF_EXTRACTION_SYSTEM_PROMPT,
+        messages=[{"role": "user", "content": text}],
+        tier=Tier.CHEAP,
+        model=os.environ.get("LLM_MODEL", "claude-haiku-4-5-20251001"),
+        max_tokens=768,
+        temperature=0.0,
+        cache_system=True,  # fixed prompt, no per-project interpolation -- unlike the chat prompt, this one is stable and cacheable
+        input_parts=(text,),
+    )
+    return _bound_comments(_parse_json_response(result.text))
 
 
 _CLARIFICATION_SYSTEM_PROMPT_TEMPLATE = """\

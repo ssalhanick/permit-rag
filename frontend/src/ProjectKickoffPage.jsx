@@ -11,8 +11,13 @@ import React, { useEffect, useMemo, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import AddressAutocomplete from "./components/AddressAutocomplete.jsx";
 import PermitTags from "./components/PermitTags.jsx";
-import { createProject, fetchProjects, getProject, updateProject, postKickoffChat } from "./api.js";
-import { projectToWizardState } from "./projectKickoffRoutes.js";
+import { createProject, fetchProjects, getProject, updateProject, postKickoffChat, extractKickoffFromText } from "./api.js";
+import {
+  projectToWizardState,
+  splitKnownAndOther,
+  canonicalizeLabels,
+  ALL_SPACE_OPTIONS,
+} from "./projectKickoffRoutes.js";
 import { useVoiceInput } from "./hooks/useVoiceInput.js";
 import MicPermissionHelp from "./components/MicPermissionHelp.jsx";
 import {
@@ -221,10 +226,11 @@ export default function ProjectKickoffPage() {
   const editProjectId = searchParams.get("projectId");
   const returnTo = searchParams.get("returnTo") || "/";
 
-  // "landing" | "wizard" | "basic" | "existing"
+  // "landing" | "start-choice" | "freeform" | "wizard" | "basic" | "existing"
   const [mode, setMode] = useState(
     ["wizard", "basic", "existing"].includes(initialMode) ? initialMode : "landing",
   );
+  const [freeformSource, setFreeformSource] = useState("text"); // "text" | "talk" -- which big button got them here
   const [wizardStep, setWizardStep] = useState(1);
   const [wizard, setWizard] = useState(BLANK_WIZARD);
   const [editingProjectId, setEditingProjectId] = useState(editProjectId || null);
@@ -292,6 +298,14 @@ export default function ProjectKickoffPage() {
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState("");
   const [prefillLoading, setPrefillLoading] = useState(Boolean(editProjectId));
+
+  // Free-form text/talk entry (mode === "freeform")
+  const [freeformText, setFreeformText] = useState("");
+  const [freeformSubmitting, setFreeformSubmitting] = useState(false);
+  const freeformVoice = useVoiceInput({
+    onTranscript: (transcript) =>
+      setFreeformText((prev) => (prev.trim() ? `${prev.trim()} ${transcript}` : transcript)),
+  });
 
   const finishNavigation = (projectId) => {
     if (wizard.doRoomScan && projectId) {
@@ -397,6 +411,51 @@ export default function ProjectKickoffPage() {
     }
   }, [wizardStep, steps]);
 
+
+  /**
+   * Free-form text/talk entry: one blurb, AI-extracted into a best-effort
+   * guess, which pre-fills the same step-by-step wizard for review -- never
+   * bypasses it, never creates a project directly. address_guess is plain
+   * text, not geocoded, so it lands on step 1 with the field pre-filled but
+   * still needing the user to pick a real AddressAutocomplete suggestion.
+   */
+  const handleFreeformSubmit = async () => {
+    if (!freeformText.trim() || freeformSubmitting) return;
+    setFreeformSubmitting(true);
+    setError("");
+    try {
+      const res = await extractKickoffFromText(freeformText.trim());
+      const extracted = res.data;
+      const { known: spaces, other: otherSpaces } = splitKnownAndOther(
+        canonicalizeLabels(extracted.spaces, ALL_SPACE_OPTIONS), ALL_SPACE_OPTIONS,
+      );
+      const { known: workTypes, other: otherWorkTypes } = splitKnownAndOther(
+        canonicalizeLabels(extracted.work_types, WORK_TYPE_OPTIONS), WORK_TYPE_OPTIONS,
+      );
+      const { known: materials, other: otherMaterials } = splitKnownAndOther(
+        canonicalizeLabels(extracted.materials, MATERIAL_OPTIONS), MATERIAL_OPTIONS,
+      );
+      setWizard((w) => ({
+        ...w,
+        address: extracted.address_guess || w.address,
+        spaces,
+        otherSpaces,
+        workTypes,
+        otherWorkTypes,
+        materials,
+        otherMaterials,
+        budget: extracted.budget || w.budget,
+        persona: extracted.persona || w.persona,
+        comments: extracted.comments || w.comments,
+      }));
+      setMode("wizard");
+      setWizardStep(1);
+    } catch (err) {
+      setError(err.message || "Couldn't process that — try again, or use the guided form instead.");
+    } finally {
+      setFreeformSubmitting(false);
+    }
+  };
 
   const handleChatSend = async (e) => {
     e?.preventDefault();
@@ -654,25 +713,23 @@ export default function ProjectKickoffPage() {
             <button
               type="button"
               className="kickoff-mode-card kickoff-mode-card--primary"
-              onClick={() => { setMode("wizard"); setWizardStep(1); }}
+              onClick={() => setMode("start-choice")}
             >
               <span className="kickoff-mode-icon" aria-hidden="true">🆕</span>
               <strong>Start a new project</strong>
               <span>Walk through a quick setup to describe the work and get permit guidance.</span>
             </button>
-
-            {projects.length > 0 && (
-              <button
-                type="button"
-                className="kickoff-mode-card"
-                onClick={() => setMode("existing")}
-              >
-                <span className="kickoff-mode-icon" aria-hidden="true">📂</span>
-                <strong>Continue an existing project</strong>
-                <span>Pick up where you left off on one of your {projects.length} project{projects.length !== 1 ? "s" : ""}.</span>
-              </button>
-            )}
           </div>
+
+          {projects.length > 0 && (
+            <button
+              type="button"
+              className="kickoff-existing-link"
+              onClick={() => setMode("existing")}
+            >
+              📂 Continue an existing project ({projects.length})
+            </button>
+          )}
 
           <div className="kickoff-footer-actions">
             <button
@@ -685,6 +742,131 @@ export default function ProjectKickoffPage() {
             <span className="kickoff-divider" aria-hidden="true">·</span>
             <button type="button" className="text-button" onClick={skip}>
               Skip for now
+            </button>
+          </div>
+        </section>
+      </main>
+    );
+  }
+
+  // ── Start-a-new-project sub-choice: form / free-form text / free-form talk ──
+
+  if (mode === "start-choice") {
+    return (
+      <main className="page kickoff-page">
+        <section className="panel kickoff-panel">
+          <KickoffCloseButton onClick={skip} />
+          <button
+            type="button"
+            className="text-button kickoff-back-link"
+            onClick={() => setMode("landing")}
+          >
+            ← Back
+          </button>
+          <h1 className="kickoff-heading">How do you want to start?</h1>
+          <p className="muted kickoff-subheading">
+            Fill out a quick form, or just describe the project in your own words — either way you'll
+            review everything before it's saved.
+          </p>
+
+          <div className="kickoff-mode-cards">
+            <button
+              type="button"
+              className="kickoff-mode-card"
+              onClick={() => { setMode("wizard"); setWizardStep(1); }}
+            >
+              <span className="kickoff-mode-icon" aria-hidden="true">📝</span>
+              <strong>Fill out a form</strong>
+              <span>Step-by-step questions about address, spaces, and work type.</span>
+            </button>
+
+            <button
+              type="button"
+              className="kickoff-mode-card"
+              onClick={() => { setFreeformSource("text"); setMode("freeform"); }}
+            >
+              <span className="kickoff-mode-icon" aria-hidden="true">⌨️</span>
+              <strong>Free-form text</strong>
+              <span>Type a description of your project and we'll fill in the details.</span>
+            </button>
+
+            <button
+              type="button"
+              className="kickoff-mode-card"
+              onClick={() => { setFreeformSource("talk"); setMode("freeform"); }}
+            >
+              <span className="kickoff-mode-icon" aria-hidden="true">🎙️</span>
+              <strong>Free-form talk</strong>
+              <span>Talk through your project out loud and we'll fill in the details.</span>
+            </button>
+          </div>
+        </section>
+      </main>
+    );
+  }
+
+  // ── Free-form text/talk entry — extraction pre-fills the wizard below ──
+
+  if (mode === "freeform") {
+    return (
+      <main className="page kickoff-page">
+        <section className="panel kickoff-panel">
+          <KickoffCloseButton onClick={skip} disabled={freeformSubmitting} />
+          <button
+            type="button"
+            className="text-button kickoff-back-link"
+            onClick={() => setMode("start-choice")}
+            disabled={freeformSubmitting}
+          >
+            ← Back
+          </button>
+          <h1 className="kickoff-heading">
+            {freeformSource === "talk" ? "Talk through your project" : "Describe your project"}
+          </h1>
+          <p className="muted kickoff-subheading">
+            Address, spaces, work type, materials, budget — whatever you mention, we'll fill in on the
+            next screen for you to review.
+          </p>
+
+          <div className="kickoff-form-group">
+            <label htmlFor="freeform-text" className="kickoff-sr-label">Project description</label>
+            <div className="kickoff-voice-input-box">
+              <textarea
+                id="freeform-text"
+                className="kickoff-other-input kickoff-other-textarea"
+                rows={6}
+                placeholder="e.g. Redoing my kitchen and half bath at 123 Main St, Dallas. Quartz countertops, new tile floor, budget around $25k, I'm doing most of it myself but hiring an electrician."
+                value={freeformText}
+                onChange={(e) => setFreeformText(e.target.value)}
+                maxLength={4000}
+                autoFocus={freeformSource === "text"}
+                disabled={freeformSubmitting}
+              />
+              <button
+                type="button"
+                className={`kickoff-mic-button${freeformVoice.listening ? " kickoff-mic-button--listening" : ""}`}
+                onClick={freeformVoice.startListening}
+                disabled={freeformVoice.listening || freeformSubmitting}
+                aria-label={freeformVoice.listening ? "Listening…" : "Dictate with voice"}
+                title={freeformVoice.listening ? "Listening…" : "Dictate with voice"}
+              >
+                {freeformVoice.listening ? "…" : "🎙"}
+              </button>
+            </div>
+            {freeformVoice.error && <p className="kickoff-voice-error">{freeformVoice.error}</p>}
+            <MicPermissionHelp errorCode={freeformVoice.errorCode} />
+          </div>
+
+          {error && <p className="kickoff-voice-error">{error}</p>}
+
+          <div className="kickoff-wizard-nav">
+            <button
+              type="button"
+              className="primary-button"
+              onClick={handleFreeformSubmit}
+              disabled={!freeformText.trim() || freeformSubmitting}
+            >
+              {freeformSubmitting ? "Reading through that…" : "Continue"}
             </button>
           </div>
         </section>

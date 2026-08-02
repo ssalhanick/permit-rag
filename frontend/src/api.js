@@ -348,6 +348,13 @@ export async function postKickoffChat(payload) {
   });
 }
 
+export async function extractKickoffFromText(text) {
+  return await requestJson("/projects/kickoff/extract", {
+    method: "POST",
+    body: { text },
+  });
+}
+
 export async function updateProject(projectId, payload) {
   return await requestJson(`/projects/${projectId}`, {
     method: "PATCH",

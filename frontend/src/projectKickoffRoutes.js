@@ -4,7 +4,11 @@
 
 import { MATERIAL_OPTIONS, SPACE_OPTIONS, WORK_TYPE_OPTIONS } from "./projectPermitRules.js";
 
-const ALL_SPACE_OPTIONS = [...SPACE_OPTIONS.indoor, ...SPACE_OPTIONS.outdoor];
+// SPACE_OPTIONS is grouped {indoor, outdoor} for the checkbox-grid UI;
+// splitKnownAndOther needs a flat list to match against. Exported so other
+// callers reconciling free-form/LLM-extracted space labels (e.g. the
+// kickoff wizard's free-form-text/talk entry) don't have to re-flatten it.
+export const ALL_SPACE_OPTIONS = [...SPACE_OPTIONS.indoor, ...SPACE_OPTIONS.outdoor];
 
 /**
  * Build a kickoff wizard URL with optional project edit context.
@@ -39,6 +43,27 @@ export function splitKnownAndOther(values, knownOptions) {
   const known = labels.filter((label) => knownOptions.includes(label));
   const other = labels.filter((label) => !knownOptions.includes(label)).join(", ");
   return { known, other };
+}
+
+/**
+ * Case-insensitively map free-form labels (e.g. AI-extracted from the
+ * kickoff wizard's free-form text/talk entry) onto their canonically-cased
+ * checkbox option, so "kitchen" lands as the checked "Kitchen" box instead
+ * of free text just because the casing didn't match splitKnownAndOther's
+ * exact-string comparison. Anything with no case-insensitive match passes
+ * through unchanged, so it still lands in "other" rather than being dropped.
+ *
+ * @param {string[] | null | undefined} labels
+ * @param {string[]} knownOptions
+ * @returns {string[]}
+ */
+export function canonicalizeLabels(labels, knownOptions) {
+  if (!Array.isArray(labels)) return [];
+  return labels.map((label) => {
+    const trimmed = String(label).trim();
+    const match = knownOptions.find((opt) => opt.toLowerCase() === trimmed.toLowerCase());
+    return match || trimmed;
+  });
 }
 
 /**

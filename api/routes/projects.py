@@ -21,6 +21,10 @@ from api.schemas import (
     DesignIntentRequest,
     DesignIntentResponse,
     DocumentSummaryResponse,
+    KickoffChatRequest,
+    KickoffChatResponse,
+    KickoffExtractRequest,
+    KickoffExtractResponse,
     LinkRoomScansRequest,
     PermitStrategyResponse,
     ProjectLinkedRoomScanResponse,
@@ -35,8 +39,6 @@ from api.schemas import (
     UpdateProjectRequest,
     UpsertRoomScansRequest,
     UserRoomScanResponse,
-    KickoffChatRequest,
-    KickoffChatResponse,
 )
 from db import client as db_client
 
@@ -135,6 +137,20 @@ def kickoff_chat(body: KickoffChatRequest, current_user: CurrentUser) -> dict:
         return res
     except Exception as exc:
         raise HTTPException(status_code=500, detail=f"LLM Chat Error: {exc}") from exc
+
+
+@router.post("/kickoff/extract", response_model=KickoffExtractResponse)
+def kickoff_extract(body: KickoffExtractRequest, current_user: CurrentUser) -> dict:
+    """One-shot extraction from free-form kickoff text (the wizard's
+    "free-form text/talk" entry paths) -- pre-fills the step-by-step wizard
+    for review, never bypasses it."""
+    from rag.generator import generate_kickoff_extraction
+
+    del current_user  # auth-gate only; extraction has no per-user state
+    try:
+        return generate_kickoff_extraction(body.text)
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=f"LLM Extraction Error: {exc}") from exc
 
 
 @router.get("/", response_model=list[ProjectResponse])

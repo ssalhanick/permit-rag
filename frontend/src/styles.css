@@ -2301,6 +2301,43 @@ textarea::placeholder {
   display: inline-block;
 }
 
+/* Was referenced (combined with .text-button) but never defined -- the base
+   button still worked, it just never got the spacing/positioning this was
+   meant to add. */
+.kickoff-back-link {
+  display: inline-block;
+  margin-bottom: 12px;
+}
+
+/* "Continue an existing project" — deliberately smaller than the primary
+   "Start a new project" card, a plain link rather than another big card. */
+.kickoff-existing-link {
+  display: block;
+  width: 100%;
+  text-align: left;
+  background: none;
+  border: none;
+  padding: 8px 2px;
+  margin: -8px 0 8px;
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: var(--tt-text-muted);
+  cursor: pointer;
+  transition: color 0.15s ease;
+}
+
+.kickoff-existing-link:hover {
+  color: var(--tt-primary);
+}
+
+.dark .kickoff-existing-link {
+  color: #94a3b8 !important;
+}
+
+.dark .kickoff-existing-link:hover {
+  color: #60a5fa !important;
+}
+
 .kickoff-project-list {
   list-style: none;
   padding: 0;

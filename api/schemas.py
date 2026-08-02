@@ -711,6 +711,31 @@ class KickoffChatResponse(BaseModel):
 
 
 
+class KickoffExtractRequest(BaseModel):
+    """Free-form text (typed or dictated) describing a new project, for
+    one-shot extraction -- the kickoff wizard's "free-form text/talk" entry
+    paths, as opposed to the step-by-step form."""
+    text: str = Field(..., min_length=1, max_length=4000, description="User's own words describing their project")
+
+
+class KickoffExtractResponse(BaseModel):
+    """Best-effort structured guess extracted from free-form kickoff text.
+
+    Pre-fills the step-by-step wizard for review -- never bypasses it. Unmentioned
+    fields are null/empty, never guessed. address_guess is plain text, not
+    geocoded; the user still confirms it via AddressAutocomplete on step 1.
+    """
+    address_guess: str | None = Field(default=None, description="Address/area mentioned, as plain text")
+    spaces: list[str] = Field(default_factory=list, description="Guessed spaces/rooms involved")
+    work_types: list[str] = Field(default_factory=list, description="Guessed work categories")
+    materials: list[str] = Field(default_factory=list, description="Guessed materials/scope")
+    budget: str | None = Field(default=None, description="Guessed budget description")
+    persona: str | None = Field(default=None, description="diy | hiring_contractor | contractor | research")
+    comments: str | None = Field(
+        default=None, description="Bounded notes (<=200 tokens), same discipline as kickoff chat's notes field"
+    )
+
+
 class AssetSyncAckRequest(BaseModel):
     """Mobile asset lifecycle sync acknowledgement."""
     asset_id: str = Field(..., min_length=1, max_length=120)
