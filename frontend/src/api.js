@@ -285,6 +285,9 @@ function buildDocumentQuery(filters = {}) {
   if (filters.doc_type) {
     params.set("doc_type", filters.doc_type);
   }
+  if (filters.scope) {
+    params.set("scope", filters.scope);
+  }
   const query = params.toString();
   return query ? `?${query}` : "";
 }
@@ -415,6 +418,55 @@ export async function shareDocumentToProject(projectId, documentId) {
 
 export async function fetchProjectDocuments(projectId) {
   return await requestJson(`/projects/${projectId}/documents`);
+}
+
+export async function deleteProjectDocument(projectId, documentId) {
+  return await requestJson(`/projects/${projectId}/documents/upload/${documentId}`, {
+    method: "DELETE",
+  });
+}
+
+// Multipart upload — requestJson always JSON.stringifies its body, so file
+// uploads use a raw fetch instead (same pattern as ProjectDocumentUploadPage.jsx).
+export async function replaceProjectDocument(projectId, documentId, file) {
+  const body = new FormData();
+  body.append("file", file);
+  const accessToken = localStorage.getItem("access_token");
+  const res = await fetch(
+    `${API_BASE_URL}${API_PREFIX}/projects/${projectId}/documents/upload/${documentId}/replace`,
+    {
+      method: "POST",
+      headers: accessToken ? { Authorization: `Bearer ${accessToken}` } : {},
+      body,
+    },
+  );
+  const data = await res.json();
+  if (!res.ok) {
+    throw new Error(data?.detail || `HTTP ${res.status}`);
+  }
+  return data;
+}
+
+// Binary response — requestJson assumes JSON, so this downloads via blob and
+// triggers a normal browser save instead of returning parsed JSON.
+export async function downloadDocument(docId, filenameHint) {
+  const accessToken = localStorage.getItem("access_token");
+  const res = await fetch(`${API_BASE_URL}${API_PREFIX}/documents/${encodeURIComponent(docId)}/download`, {
+    headers: accessToken ? { Authorization: `Bearer ${accessToken}` } : {},
+  });
+  if (!res.ok) {
+    const data = safeJsonParse(await res.text());
+    throw new Error(data?.detail || `HTTP ${res.status}`);
+  }
+  const blob = await res.blob();
+  const disposition = res.headers.get("content-disposition") || "";
+  const filename = /filename="?([^"]+)"?/.exec(disposition)?.[1] || filenameHint || docId;
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = filename;
+  link.click();
+  URL.revokeObjectURL(url);
 }
 
 // ── Contractor Endpoints ─────────────────────────────────────
@@ -600,6 +652,40 @@ export async function listCorpusDocuments({ status = null, municipality = null }
   if (municipality) params.set("municipality", municipality);
   const qs = params.toString();
   return await requestJson(`/admin/agents/documents${qs ? `?${qs}` : ""}`);
+}
+
+// ── Petition review (Document Governance — Type 1 ordinances, Type 3 overlays) ──
+export async function listPendingDocumentPetitions() {
+  return await requestJson("/admin/documents/pending");
+}
+
+export async function approveDocumentPetition(docId) {
+  return await requestJson(`/admin/documents/${encodeURIComponent(docId)}/approve`, {
+    method: "PATCH",
+  });
+}
+
+export async function rejectDocumentPetition(docId) {
+  return await requestJson(`/admin/documents/${encodeURIComponent(docId)}/reject`, {
+    method: "POST",
+  });
+}
+
+export async function listPendingOverlayPetitions() {
+  return await requestJson("/admin/overlays/pending");
+}
+
+export async function approveOverlayPetition(overlayId, body = {}) {
+  return await requestJson(`/admin/overlays/${overlayId}/approve`, {
+    method: "PATCH",
+    body,
+  });
+}
+
+export async function rejectOverlayPetition(overlayId) {
+  return await requestJson(`/admin/overlays/${overlayId}/reject`, {
+    method: "POST",
+  });
 }
 
 // ── Dashboard v2 (Phase 5) ──────────────────────────────────

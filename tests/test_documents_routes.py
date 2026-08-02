@@ -23,6 +23,25 @@ def _admin_auth_defaults(monkeypatch) -> None:
     monkeypatch.delenv("API_ADMIN_ALLOWED_ROLES", raising=False)
 
 
+def _override_user(user_id=None, role: str = "member") -> dict:
+    """Install a fake authenticated user for GET /documents* routes (migration 045's
+    auth-gate — these were previously reachable unauthenticated)."""
+    from api.routes import documents as documents_route
+
+    user = {"user_id": user_id or uuid4(), "role": role, "username": "tester"}
+    app.dependency_overrides[documents_route.get_current_user] = lambda: user
+    return user
+
+
+@pytest.fixture(autouse=True)
+def _default_authenticated_user():
+    """Every test in this file gets some authenticated (non-staff) user by
+    default; tests needing a specific user_id/role call _override_user again."""
+    _override_user()
+    yield
+    app.dependency_overrides.clear()
+
+
 def _document_row(doc_id: str = "dallas-building-code") -> dict:
     """Build a realistic documents table row for route tests."""
     return {
@@ -49,9 +68,11 @@ def _document_row(doc_id: str = "dallas-building-code") -> dict:
 
 
 def test_list_documents_applies_all_filters(monkeypatch) -> None:
-    """GET /documents should pass municipality/status/authority/doc_type filters."""
+    """GET /documents (superadmin) should pass municipality/status/authority/doc_type
+    filters through to the full-corpus query."""
     from api.routes import documents as documents_route
 
+    _override_user(role="superadmin")
     captured: dict = {}
     row = _document_row()
 
@@ -82,6 +103,65 @@ def test_list_documents_applies_all_filters(monkeypatch) -> None:
         "authority_level": "municipal",
         "doc_type": "building_code",
     }
+
+
+def test_list_documents_requires_auth() -> None:
+    """GET /documents with no credentials returns 401 (migration-045 auth-gate —
+    this route had no auth at all before this fix)."""
+    app.dependency_overrides.clear()  # remove this file's autouse default user
+    client = TestClient(app)
+    response = client.get("/api/documents")
+    assert response.status_code == 401
+
+
+def test_list_documents_scopes_to_own_library_for_regular_user(monkeypatch) -> None:
+    """A non-staff caller gets list_documents_for_user, never the full corpus —
+    the exposure this migration closes."""
+    from api.routes import documents as documents_route
+
+    user = _override_user(role="member")
+    captured: dict = {}
+
+    def _fake_list_for_user(user_id, **kwargs):
+        captured["user_id"] = user_id
+        captured.update(kwargs)
+        return [_document_row("my-project-doc")]
+
+    monkeypatch.setattr(documents_route.db_client, "list_documents", lambda **_k: (_ for _ in ()).throw(
+        AssertionError("regular user must not hit the unscoped full-corpus query")
+    ))
+    monkeypatch.setattr(documents_route.db_client, "list_documents_for_user", _fake_list_for_user)
+
+    client = TestClient(app)
+    response = client.get("/api/documents", params={"municipality": "dallas"})
+
+    assert response.status_code == 200
+    assert captured["user_id"] == user["user_id"]
+    assert captured["municipality"] == "dallas"
+
+
+def test_list_documents_scope_mine_forces_personal_view_for_superadmin(monkeypatch) -> None:
+    """?scope=mine makes a superadmin's own Document Library show their own
+    documents, not the entire corpus (the corpus browser is a separate page)."""
+    from api.routes import documents as documents_route
+
+    user = _override_user(role="superadmin")
+    captured: dict = {}
+
+    monkeypatch.setattr(documents_route.db_client, "list_documents", lambda **_k: (_ for _ in ()).throw(
+        AssertionError("scope=mine must bypass the superadmin full-corpus path")
+    ))
+    monkeypatch.setattr(
+        documents_route.db_client,
+        "list_documents_for_user",
+        lambda user_id, **kwargs: captured.update({"user_id": user_id}) or [],
+    )
+
+    client = TestClient(app)
+    response = client.get("/api/documents", params={"scope": "mine"})
+
+    assert response.status_code == 200
+    assert captured["user_id"] == user["user_id"]
 
 
 def test_list_documents_rejects_invalid_authority_filter() -> None:
@@ -127,6 +207,129 @@ def test_get_document_detail_404_when_missing(monkeypatch) -> None:
 
     assert response.status_code == 404
     assert "Document not found" in response.json()["detail"]
+
+
+def _tier3_row(*, uploaded_by, visibility: str, project_id=None) -> dict:
+    row = _document_row("project-private-doc")
+    row["source_tier"] = 3
+    row["uploaded_by"] = uploaded_by
+    row["visibility"] = visibility
+    row["project_id"] = project_id or uuid4()
+    return row
+
+
+def test_get_document_detail_403_for_others_private_tier3_doc(monkeypatch) -> None:
+    """A 'private' tier-3 doc is invisible to anyone but its uploader — the
+    exact cross-tenant exposure migration 045 closes."""
+    from api.routes import documents as documents_route
+
+    viewer = _override_user(role="member")
+    row = _tier3_row(uploaded_by=uuid4(), visibility="private")
+    monkeypatch.setattr(documents_route.db_client, "get_document_by_doc_id", lambda _doc_id: row)
+
+    client = TestClient(app)
+    response = client.get("/api/documents/project-private-doc")
+
+    assert response.status_code == 403
+    assert viewer["user_id"] != row["uploaded_by"]
+
+
+def test_get_document_detail_allows_owner_for_private_tier3_doc(monkeypatch) -> None:
+    """The uploader can always see their own private document."""
+    from api.routes import documents as documents_route
+
+    viewer = _override_user(role="member")
+    row = _tier3_row(uploaded_by=viewer["user_id"], visibility="private")
+    monkeypatch.setattr(documents_route.db_client, "get_document_by_doc_id", lambda _doc_id: row)
+    monkeypatch.setattr(documents_route.db_client, "count_chunks", lambda _uuid: 3)
+
+    client = TestClient(app)
+    response = client.get("/api/documents/project-private-doc")
+
+    assert response.status_code == 200
+
+
+def test_get_document_detail_allows_team_member_for_team_visibility_doc(monkeypatch) -> None:
+    """A 'team' tier-3 doc is visible to a fellow project member (not just the uploader)."""
+    from api.routes import documents as documents_route
+
+    _override_user(role="member")
+    row = _tier3_row(uploaded_by=uuid4(), visibility="team")
+    monkeypatch.setattr(documents_route.db_client, "get_document_by_doc_id", lambda _doc_id: row)
+    monkeypatch.setattr(documents_route.db_client, "count_chunks", lambda _uuid: 3)
+    monkeypatch.setattr(
+        documents_route.db_client, "get_project_role", lambda _pid, _uid: "editor"
+    )
+
+    client = TestClient(app)
+    response = client.get("/api/documents/project-private-doc")
+
+    assert response.status_code == 200
+
+
+def test_get_document_detail_403_for_non_member_on_team_visibility_doc(monkeypatch) -> None:
+    """'team' visibility means the project team, not everyone — a non-member is still blocked."""
+    from api.routes import documents as documents_route
+
+    _override_user(role="member")
+    row = _tier3_row(uploaded_by=uuid4(), visibility="team")
+    monkeypatch.setattr(documents_route.db_client, "get_document_by_doc_id", lambda _doc_id: row)
+    monkeypatch.setattr(documents_route.db_client, "get_project_role", lambda _pid, _uid: None)
+
+    client = TestClient(app)
+    response = client.get("/api/documents/project-private-doc")
+
+    assert response.status_code == 403
+
+
+def test_download_document_success(monkeypatch, tmp_path) -> None:
+    """GET /documents/{doc_id}/download streams the stored file for a visible doc."""
+    from api.routes import documents as documents_route
+
+    stored = tmp_path / "plan.pdf"
+    stored.write_bytes(b"%PDF-1.4 fake content")
+    row = _document_row("dallas-building-code")
+    row["local_path"] = str(stored)
+    monkeypatch.setattr(documents_route.db_client, "get_document_by_doc_id", lambda _doc_id: row)
+
+    client = TestClient(app)
+    response = client.get("/api/documents/dallas-building-code/download")
+
+    assert response.status_code == 200
+    assert response.content == b"%PDF-1.4 fake content"
+
+
+def test_download_document_403_for_private_others_doc(monkeypatch, tmp_path) -> None:
+    """Download follows the same visibility rule as the detail route — no
+    bypassing the visibility check via the file endpoint."""
+    from api.routes import documents as documents_route
+
+    stored = tmp_path / "private.pdf"
+    stored.write_bytes(b"secret")
+    row = _tier3_row(uploaded_by=uuid4(), visibility="private")
+    row["local_path"] = str(stored)
+    _override_user(role="member")
+    monkeypatch.setattr(documents_route.db_client, "get_document_by_doc_id", lambda _doc_id: row)
+
+    client = TestClient(app)
+    response = client.get("/api/documents/project-private-doc/download")
+
+    assert response.status_code == 403
+
+
+def test_download_document_404_when_no_local_file(monkeypatch) -> None:
+    """A document with no stored file (e.g. tier-1 scraped from a URL) 404s
+    rather than erroring on a missing path."""
+    from api.routes import documents as documents_route
+
+    row = _document_row("dallas-building-code")
+    row["local_path"] = None
+    monkeypatch.setattr(documents_route.db_client, "get_document_by_doc_id", lambda _doc_id: row)
+
+    client = TestClient(app)
+    response = client.get("/api/documents/dallas-building-code/download")
+
+    assert response.status_code == 404
 
 
 def test_document_status_counts_response_shape(monkeypatch) -> None:

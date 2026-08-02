@@ -1900,6 +1900,177 @@ textarea::placeholder {
   border-color: #166534 !important;
 }
 
+/* ── Empty-state CTA — reusable big "add the first thing" pattern.
+   Used by the Document Library and (Phase 1) the empty task list, so both
+   read as the same design language instead of one being a plain text hint. */
+.profile-empty-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+  text-align: center;
+  padding: 48px 24px;
+  color: var(--tt-text-muted);
+}
+
+.profile-empty-state-icon {
+  width: 40px;
+  height: 40px;
+  color: var(--tt-text-muted);
+  opacity: 0.6;
+}
+
+.profile-empty-state p {
+  margin: 0 0 4px;
+  font-size: 0.95rem;
+}
+
+.profile-empty-state .tt-btn-primary {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+/* ── Document Library table ────────────────────────────────────── */
+.profile-doc-library-header {
+  display: flex;
+  justify-content: flex-end;
+  margin-bottom: 12px;
+}
+
+.doc-table-wrap {
+  overflow-x: auto;
+}
+
+.profile-doc-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.85rem;
+}
+
+.profile-doc-table th {
+  text-align: left;
+  padding: 10px 12px;
+  color: var(--tt-text-muted);
+  font-weight: 600;
+  font-size: 0.75rem;
+  text-transform: uppercase;
+  letter-spacing: 0.02em;
+  border-bottom: 1px solid var(--tt-border);
+  white-space: nowrap;
+}
+
+.profile-doc-table td {
+  padding: 10px 12px;
+  border-bottom: 1px solid var(--tt-border);
+  color: var(--tt-text-main);
+  vertical-align: middle;
+}
+
+.profile-doc-status {
+  display: inline-block;
+  padding: 3px 10px;
+  border-radius: 999px;
+  font-size: 0.72rem;
+  font-weight: 600;
+  white-space: nowrap;
+  background: #f1f5f9;
+  color: #475569;
+}
+
+.profile-doc-status--active {
+  background: #f0fdf4;
+  color: #166534;
+}
+
+.profile-doc-status--draft {
+  background: #fffbeb;
+  color: #92400e;
+}
+
+.profile-doc-status--superseded,
+.profile-doc-status--repealed {
+  background: #f1f5f9;
+  color: #475569;
+}
+
+.profile-doc-status--needs_ocr {
+  background: #fef2f2;
+  color: #991b1b;
+}
+
+.dark .profile-doc-status--active {
+  background: #052e16 !important;
+  color: #bbf7d0 !important;
+}
+
+.dark .profile-doc-status--draft {
+  background: #451a03 !important;
+  color: #fde68a !important;
+}
+
+.dark .profile-doc-status--superseded,
+.dark .profile-doc-status--repealed {
+  background: #1e293b !important;
+  color: #cbd5e1 !important;
+}
+
+.dark .profile-doc-status--needs_ocr {
+  background: #450a0a !important;
+  color: #fecaca !important;
+}
+
+.profile-doc-share-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.profile-doc-share-row select {
+  border: 1px solid var(--tt-border-strong);
+  border-radius: 6px;
+  padding: 6px 8px;
+  font-size: 0.8rem;
+  background: var(--tt-card-bg);
+  color: var(--tt-text-main);
+}
+
+.profile-doc-share-feedback {
+  margin-top: 4px;
+  font-size: 0.75rem;
+  color: var(--tt-text-muted);
+}
+
+.profile-doc-actions-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.profile-doc-actions-row .secondary-button {
+  padding: 6px 8px;
+  line-height: 0;
+}
+
+.profile-btn-danger {
+  color: #b91c1c;
+  border-color: #fca5a5 !important;
+}
+
+.profile-btn-danger:hover:not(:disabled) {
+  background: #fef2f2 !important;
+  border-color: #ef4444 !important;
+}
+
+.dark .profile-btn-danger {
+  color: #fca5a5 !important;
+  border-color: #7f1d1d !important;
+}
+
+.dark .profile-btn-danger:hover:not(:disabled) {
+  background: #450a0a !important;
+}
+
 /* 5. Interactive Link & Subtext Contrast */
 .text-button {
   color: #2563eb;

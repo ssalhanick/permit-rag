@@ -52,13 +52,26 @@ def test_cors_middleware_uses_localhost_regex(monkeypatch) -> None:
 
 
 def test_validation_error_handler_returns_string_detail() -> None:
-    """Validation errors should use compact string detail payloads."""
-    client = TestClient(app)
-    response = client.get("/api/documents", params={"authority": "city"})
-    assert response.status_code == 422
-    body = response.json()
-    assert isinstance(body.get("detail"), str)
-    assert body["detail"].startswith("Validation error")
+    """Validation errors should use compact string detail payloads.
+
+    Reuses GET /documents as a convenient example of query-param validation;
+    it now requires auth (migration 045), so a fake user is installed to
+    reach the validation logic this test actually cares about.
+    """
+    from api.routes import documents as documents_route
+
+    app.dependency_overrides[documents_route.get_current_user] = lambda: {
+        "user_id": "00000000-0000-0000-0000-000000000000", "role": "member",
+    }
+    try:
+        client = TestClient(app)
+        response = client.get("/api/documents", params={"authority": "city"})
+        assert response.status_code == 422
+        body = response.json()
+        assert isinstance(body.get("detail"), str)
+        assert body["detail"].startswith("Validation error")
+    finally:
+        app.dependency_overrides.clear()
 
 
 def test_http_exception_handler_returns_string_detail(monkeypatch) -> None:

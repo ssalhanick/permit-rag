@@ -180,6 +180,65 @@ async def upload_project_document(
     )
 
 
+def _get_own_project_document(project_id: UUID, document_id: UUID) -> dict:
+    """Fetch a tier-3 document row for this project, or raise 404."""
+    doc = db_client.get_document_by_uuid(document_id)
+    if not doc or doc.get("source_tier") != 3 or str(doc.get("project_id")) != str(project_id):
+        raise HTTPException(status_code=404, detail="Project document not found.")
+    return doc
+
+
+@router.post(
+    "/projects/{project_id}/documents/upload/{document_id}/replace",
+    response_model=UploadResponse,
+    status_code=201,
+    summary="Upload a new version of a project document, superseding the old one",
+)
+async def replace_project_document(
+    project_id: UUID,
+    document_id: UUID,
+    current_user: CurrentUser,
+    background_tasks: BackgroundTasks,
+    file: UploadFile = File(..., description="Replacement file."),
+) -> UploadResponse:
+    """
+    Self-service "replace" for the Document Library: never a hard delete of
+    the old row (AGENTS.md Document Governance Rules — supersede/repeal
+    only). Uploads the new file through the exact same pipeline as
+    upload_project_document (reusing it directly, not duplicating its body),
+    keeping the old document's visibility/tags, then marks the old doc_id
+    superseded once the new one actually exists as a row.
+
+    Artifact-only files (images/CAD/spreadsheets) insert synchronously, so
+    upload_project_document already returns status="active" and the new row
+    is there immediately. Chunkable files (PDF/DOCX/...) insert their row
+    inside the background _process_upload task, which upload_project_document
+    already queued on this same `background_tasks` — appending the supersede
+    call here queues it *after*, in the same FIFO background-task list, so it
+    only runs once the new doc_id row actually exists.
+    """
+    _require_role(project_id, current_user["user_id"], {"owner", "editor"}, current_user)
+    old_doc = _get_own_project_document(project_id, document_id)
+
+    subject_tags = ",".join(old_doc.get("subject_tags") or [])
+    result = await upload_project_document(
+        project_id,
+        current_user,
+        background_tasks,
+        file=file,
+        visibility=old_doc.get("visibility", "team"),
+        subject_tags=subject_tags,
+    )
+
+    if result.status == "active":
+        db_client.supersede_document(old_doc["doc_id"], result.doc_id)
+    else:
+        background_tasks.add_task(
+            db_client.supersede_document, old_doc["doc_id"], result.doc_id
+        )
+    return result
+
+
 @router.delete(
     "/projects/{project_id}/documents/upload/{document_id}",
     summary="Permanently delete a project document and its chunks",
@@ -201,10 +260,7 @@ def delete_project_document(
     by other means (e.g. re-uploading over it).
     """
     _require_role(project_id, current_user["user_id"], {"owner", "editor"}, current_user)
-
-    doc = db_client.get_document_by_uuid(document_id)
-    if not doc or doc.get("source_tier") != 3 or str(doc.get("project_id")) != str(project_id):
-        raise HTTPException(status_code=404, detail="Project document not found.")
+    _get_own_project_document(project_id, document_id)
 
     if not db_client.delete_project_document(document_id):
         raise HTTPException(status_code=404, detail="Project document not found.")

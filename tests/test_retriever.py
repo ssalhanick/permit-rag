@@ -167,6 +167,51 @@ def test_retrieve_without_municipality_skips_chain_lookup(
 
 
 @patch("ingestion.embedder.embed_query", return_value=[0.1, 0.2, 0.3])
+@patch("db.client.match_chunks", return_value=[])
+def test_retrieve_passes_requesting_user_id_to_match_chunks(
+    mock_match_chunks, _mock_embed_query, monkeypatch,
+) -> None:
+    """requesting_user_id must reach match_chunks — migration 045's tier-3
+    visibility filter is a no-op if the caller's identity never arrives."""
+    from rag.retriever import retrieve
+
+    monkeypatch.setenv("RETRIEVAL_HYBRID_ENABLED", "false")
+
+    retrieve("permit question", top_k=3, requesting_user_id="user-123")
+
+    assert mock_match_chunks.call_args.kwargs["requesting_user_id"] == "user-123"
+
+
+@patch("ingestion.embedder.embed_query", return_value=[0.1, 0.2, 0.3])
+@patch("db.client.get_jurisdiction_chain", return_value=["dallas"])
+@patch("db.client.search_chunks_bm25", return_value=[])
+@patch("db.client.match_chunks", return_value=[])
+@patch("db.client.get_project", return_value=None)
+@patch("rag.mini_rag.retrieve_project_chunks", return_value=[])
+def test_retrieve_with_project_threads_requesting_user_id_through_to_match_chunks(
+    _mock_project_chunks, _mock_get_project, mock_match_chunks, _mock_bm25, _mock_chain, _mock_embed,
+) -> None:
+    """Regression: retrieve_with_project already threaded requesting_user_id
+    into the project mini-RAG call, but silently dropped it on its own call
+    to retrieve() -- so the general corpus search (which is where a tier-3
+    document actually leaked, since match_chunks has no source_tier filter of
+    its own) never saw the querying user's identity at all. Covers both
+    project_id=None (plain retrieve()) and a real project_id."""
+    from uuid import uuid4
+
+    from rag.retriever import retrieve_with_project
+
+    retrieve_with_project("permit question", project_id=None, top_k=3, requesting_user_id="user-123")
+    assert mock_match_chunks.call_args.kwargs["requesting_user_id"] == "user-123"
+
+    mock_match_chunks.reset_mock()
+    retrieve_with_project(
+        "permit question", project_id=str(uuid4()), top_k=3, requesting_user_id="user-123",
+    )
+    assert mock_match_chunks.call_args.kwargs["requesting_user_id"] == "user-123"
+
+
+@patch("ingestion.embedder.embed_query", return_value=[0.1, 0.2, 0.3])
 @patch("db.client.get_jurisdiction_chain", return_value=["dallas"])
 @patch("db.client.search_chunks_bm25", return_value=[])
 @patch("db.client.match_chunks", return_value=[])

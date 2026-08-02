@@ -6,6 +6,7 @@ import AgentScorecard from "./AgentScorecard.jsx";
 import AutonomyPanel from "./AutonomyPanel.jsx";
 import CorrectionQueue from "./CorrectionQueue.jsx";
 import AgentGlossary from "./AgentGlossary.jsx";
+import PetitionReviewPane from "./PetitionReviewPane.jsx";
 
 const TABS = [
   { key: "queue", label: "Action Queue" },
@@ -15,6 +16,7 @@ const TABS = [
   { key: "autonomy", label: "Autonomy" },
   { key: "metadata", label: "Metadata Review" },
   { key: "documents", label: "Documents" },
+  { key: "petitions", label: "Petition Review" },
 ];
 
 /**
@@ -59,6 +61,7 @@ export default function AgentDashboardPage() {
       {tab === "autonomy" && <AutonomyPanel />}
       {tab === "metadata" && <MetadataReviewPane />}
       {tab === "documents" && <DocumentMetadataTable />}
+      {tab === "petitions" && <PetitionReviewPane />}
     </div>
   );
 }

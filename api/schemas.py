@@ -470,6 +470,15 @@ class DocumentSummaryResponse(BaseModel):
     review_due: date | None = Field(description="Review due date if tracked.")
     retrieval_weight: float = Field(description="Retrieval weighting factor.")
     updated_at: datetime = Field(description="Last update timestamp.")
+    uploaded_by: UUID | None = Field(
+        default=None, description="Uploader user id, for tier-3 project documents."
+    )
+    project_id: UUID | None = Field(
+        default=None, description="Owning project id, for tier-3 project documents."
+    )
+    source_tier: int | None = Field(
+        default=None, description="1=shared corpus, 2=pending petition, 3=project document."
+    )
 
 
 class DocumentDetailResponse(DocumentSummaryResponse):

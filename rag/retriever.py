@@ -264,6 +264,7 @@ def retrieve(
     top_k: int = 5,
     municipality: str | None = None,
     min_similarity: float = 0.0,
+    requesting_user_id: str | None = None,
 ) -> RetrievalResult:
     """
     Embed query and retrieve top-k chunks via dense cosine search.
@@ -278,6 +279,9 @@ def retrieve(
         top_k: Maximum chunks to retrieve.
         municipality: Optional filter (e.g. "dallas").
         min_similarity: Discard results below this threshold.
+        requesting_user_id: The querying user, for match_chunks' tier-3
+            'private' vs 'team' visibility filter (migration 045). None
+            (e.g. unauthenticated) sees 'team' tier-3 docs only.
 
     Returns:
         RetrievalResult with ranked chunks and diagnostics.
@@ -304,6 +308,7 @@ def retrieve(
         top_k=dense_top_n if hybrid_enabled else top_k,
         municipalities=municipalities,
         min_similarity=min_similarity,
+        requesting_user_id=requesting_user_id,
     )
     if hybrid_enabled:
         bm25_chunks = search_chunks_bm25(
@@ -426,6 +431,7 @@ def retrieve_with_project(
         top_k=top_k,
         municipality=municipality,
         min_similarity=min_similarity,
+        requesting_user_id=requesting_user_id,
     )
     if not project_id:
         return result

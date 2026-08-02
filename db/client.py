@@ -285,6 +285,72 @@ def list_documents(
         return conn.execute(sql, params).fetchall()
 
 
+def list_documents_for_user(
+    user_id: UUID,
+    *,
+    municipality: str | None = None,
+    status: str | None = None,
+    authority_level: str | None = None,
+    doc_type: str | None = None,
+) -> list[dict[str, Any]]:
+    """
+    List documents visible to one user's personal "Document Library".
+
+    Unlike :func:`list_documents` (the full corpus, staff-only), this scopes
+    to documents the user actually owns or is a teammate on: rows where
+    ``uploaded_by = user_id``, or ``visibility = 'team'`` on a tier-3 project
+    the user is a member of. A globally 'team'-visible tier-3 doc from a
+    project this user isn't on is deliberately excluded here even though
+    match_chunks' retrieval filter (045) would still allow it to be cited —
+    "can this ground an answer" and "does this belong in your library" are
+    different questions; library scoping is ownership/membership, retrieval
+    scoping is the broader documented visibility intent.
+
+    Args:
+        user_id: The library owner.
+        municipality: Optional filter.
+        status: Optional document_status filter.
+        authority_level: Optional filter.
+        doc_type: Optional filter.
+
+    Returns:
+        Document rows (all columns), most recently updated first.
+    """
+    clauses: list[str] = [
+        """(
+            d.uploaded_by = %(user_id)s
+            OR (
+                d.visibility = 'team'
+                AND d.project_id IN (
+                    SELECT project_id FROM project_members WHERE user_id = %(user_id)s
+                )
+            )
+        )"""
+    ]
+    params: dict[str, Any] = {"user_id": user_id}
+
+    if municipality:
+        clauses.append("d.municipality = %(municipality)s")
+        params["municipality"] = municipality
+    if status:
+        clauses.append("d.document_status = %(status)s::document_status")
+        params["status"] = status
+    if authority_level:
+        clauses.append("d.authority_level = %(authority_level)s::authority_level")
+        params["authority_level"] = authority_level
+    if doc_type:
+        clauses.append("d.doc_type = %(doc_type)s::doc_type")
+        params["doc_type"] = doc_type
+
+    sql = f"""
+        SELECT d.* FROM documents d
+        WHERE {' AND '.join(clauses)}
+        ORDER BY d.updated_at DESC;
+    """
+    with get_conn() as conn:
+        return conn.execute(sql, params).fetchall()
+
+
 def list_covered_municipalities() -> list[dict[str, Any]]:
     """City-level jurisdictions with >=1 active, current, authority-class document.
 
@@ -857,6 +923,7 @@ def match_chunks(
     top_k: int = 5,
     municipalities: list[str] | None = None,
     min_similarity: float = 0.0,
+    requesting_user_id: UUID | str | None = None,
 ) -> list[dict[str, Any]]:
     """
     Dense vector similarity search via the match_chunks() SQL function.
@@ -866,9 +933,13 @@ def match_chunks(
     how-to video transcripts are excluded from compliance retrieval **in SQL**.
     As of migration 037, ``filter_municipality`` is a jurisdiction chain
     (``text[]``) rather than a single string, so a city-scoped query also
-    matches its county/state/federal documents instead of excluding them.
-    Returns up to *top_k* chunks ordered by source_tier ASC then descending
-    similarity.
+    matches its county/state/federal documents instead of excluding them. As
+    of migration 045, tier-3 (project) documents are additionally gated by
+    ``visibility``: 'team' docs are always included, 'private' docs only when
+    ``requesting_user_id`` matches ``uploaded_by`` — mirrors
+    ``match_project_chunks``'s existing tier-3 filter (040). Tiers 1/2 are
+    unaffected. Returns up to *top_k* chunks ordered by source_tier ASC then
+    descending similarity.
 
     Args:
         query_embedding: 768-dim float vector (nomic-embed-text query).
@@ -877,6 +948,9 @@ def match_chunks(
             ``["dallas", "dallas-county", "texas", "federal"]``. Pass None for
             no filter.
         min_similarity: Discard results below this cosine similarity.
+        requesting_user_id: The querying user, for the tier-3 'private' vs
+            'team' visibility filter (migration 045). None (e.g.
+            unauthenticated) sees 'team' tier-3 docs only.
 
     Returns:
         List of dicts with keys: id, document_id, doc_id, content,
@@ -888,13 +962,15 @@ def match_chunks(
         SELECT * FROM match_chunks(
             %(query_embedding)s::vector,
             %(match_count)s,
-            %(filter_municipality)s
+            %(filter_municipality)s,
+            %(requesting_user_id)s
         );
     """
     params = {
         "query_embedding": str(query_embedding),
         "match_count": top_k,
         "filter_municipality": municipalities,
+        "requesting_user_id": str(requesting_user_id) if requesting_user_id else None,
     }
     with get_conn() as conn:
         rows = conn.execute(sql, params).fetchall()

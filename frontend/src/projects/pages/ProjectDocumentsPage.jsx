@@ -60,7 +60,7 @@ export default function ProjectDocumentsPage() {
         </div>
 
         <Link
-          to="/documents"
+          to="/profile/documents"
           className="tt-btn-primary text-xs px-4 py-2.5 rounded-xl flex items-center gap-1.5 self-start sm:self-auto"
         >
           <Plus className="w-3.5 h-3.5" /> Share More Documents
@@ -90,10 +90,10 @@ export default function ProjectDocumentsPage() {
               Link building codes and municipal guidelines to provide context for AI responses.
             </p>
             <Link
-              to="/documents"
+              to="/profile/documents"
               className="inline-flex items-center gap-1.5 text-xs font-bold text-blue-600 dark:text-blue-400 hover:underline pt-2"
             >
-              Browse Global Document Vault <ExternalLink className="w-3.5 h-3.5" />
+              Go to your Document Library <ExternalLink className="w-3.5 h-3.5" />
             </Link>
           </div>
         ) : (

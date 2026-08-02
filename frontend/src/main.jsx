@@ -113,7 +113,9 @@ ReactDOM.createRoot(document.getElementById("root")).render(
             path="/documents"
             element={
               <ProtectedRoute>
-                <DocumentBrowserPage />
+                <SuperadminRoute>
+                  <DocumentBrowserPage />
+                </SuperadminRoute>
               </ProtectedRoute>
             }
           />
