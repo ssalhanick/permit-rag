@@ -1,5 +1,49 @@
 # permit_rag — State
 
+_Updated: 2026-08-01 — bug-triage batch (19 hand-tested findings) worked
+through in priority order on `fix/room-scan`, security first. **Security:**
+`GET /api/documents` had no auth at all (any caller, authenticated or not,
+got the full corpus incl. other users' private/pending docs); separately
+`match_chunks` never filtered on the `visibility` column migration 040 added
+for exactly this, so a tier-3 private document's content could surface
+verbatim in another user's chat answer. Fixed both — auth-gate + a real
+per-user scoped listing (`db_client.list_documents_for_user`), plus migration
+**045** extending `match_chunks` with the visibility predicate. The
+Python-level plumbing for this (`requesting_user_id` threaded from
+`api/routes/query.py` down through `manager.py` → `retrieve_with_project`)
+already existed and was already correctly used for the project-scoped
+mini-RAG path (`match_project_chunks`) — this closed the *other* gap, the
+general corpus path, by finishing three hops that had been left disconnected
+(`retrieve_with_project` → `retrieve()` → `match_chunks()`). **Migration 045
+is code-complete, tests pass on machine A's mocked suite, but has NOT been
+RAGAs-verified** — this machine has no corpus. Per the sequential-gating rule
+or your usual `retrieve()`/`pipeline.py` retrieval-change discipline, run the
+migration + a fresh RAGAs pass on the corpus machine before trusting it in
+prod. **Everything else** (830 pytest / 92 frontend `node --test`, ruff +
+`npm run build` clean): consolidated 5 duplicated voice-input
+implementations into `frontend/src/hooks/useVoiceInput.js`; shipped a real
+Document Library (was double-broken — empty for regular users, full corpus
+for admins) + a staff petition-review UI (backend was already properly
+gated, had zero frontend); fixed the project switcher (`ProjectSwitcher.jsx`
+was passing the whole project object where the backend PATCH expects a
+plain id string, so switching silently never worked) and a sticky-default
+bug in the kickoff project-name field; superadmin project visibility (other
+users' projects render inert with owner identity in the dashboard + nav
+switcher, not hidden), unifying two previously-inconsistent superadmin
+checks into `useIsSuperAdmin`; browser-specific mic-permission-denied
+instructions (`MicPermissionHelp.jsx` — no browser exposes a URL a page can
+navigate to for its own permission settings, so this is the click-path
+instead of the deep link that can't exist); kickoff flow gets a free-form
+text/talk entry path (new `POST /projects/kickoff/extract` +
+`generate_kickoff_extraction`, same `run_agent()`/`bound_notes()` discipline
+as the existing kickoff chat) that pre-fills the existing step wizard for
+review — never bypasses it. Full session detail:
+`journals/session_20260801.md`. Room-scan-specific work (native AR
+presenter, room-design action-bar reorder, commerce/material-prompt fixes,
+project-layout tab-strip redesign) split into separate `[ROOMSCAN]`-prefixed
+commits per Scott's instruction — not pushed; he pushes the non-roomscan
+commits himself._
+
 _Updated: 2026-07-30 — jurisdiction accuracy overhaul, all 5 phases coded +
 tested on machine A (662 passing, up from 605; ruff/frontend build clean),
 **migrations 037/038 not yet applied, no real boundaries loaded** (needs
@@ -106,7 +150,11 @@ Full detail: `journals/session_20260726_phase5.md`,
 > + `contractor_licenses`).
 > **044** — contractor marketplace, `044_bids_core.sql` (`bids` + `bid_line_items`
 > + `labor_rate_benchmarks`).
-> **Next unclaimed number is 045.**
+> **045** — security fix, `045_match_chunks_visibility.sql` (extends `match_chunks`
+> with the tier-3 `visibility` predicate migration 040 documented but never
+> implemented; **code-complete, NOT yet RAGAs-verified or applied to any real
+> DB** — this repo machine has no corpus, see 2026-08-01 header note).
+> **Next unclaimed number is 046.**
 
 ## Verification — which machine runs what
 
@@ -168,6 +216,15 @@ AGENTS.md "completed work → journal only."_
    `ragas_20260725_011651.json`, avg 0.843) — don't gate on one number.
 4. **Mobile OAuth deep links (deferred)** — M0-6/M0-7 device Google/Apple
    roundtrip.
+5. **Migration 045 (match_chunks visibility fix) needs a RAGAs run on the
+   corpus machine before it's trusted.** Code-complete + mocked-tests-green
+   only (2026-08-01, this repo machine has no corpus). Run
+   `check_migration_details.py --local` first, then `apply_migration.py`,
+   then `py -m evaluation.ragas_eval --export --no-answer-cache` and compare
+   against the pre-045 baseline — same sequential-gating discipline as the
+   chunking-step evals. This is a real security fix (closes a cross-tenant
+   private-document leak into chat answers), so don't leave it sitting
+   unverified longer than necessary.
 
 ## Next tasks
 
@@ -264,7 +321,7 @@ should have been 027. Recorded, not renamed. The dedupe correction is
 | rag/agents/guardrail | **Phase 4 slice.** `check_truncation` → action item on `stop_reason == 'max_tokens'`. **Media B1:** `check_media_sources` — zero-unsourced-URL gate |
 | rag/agents/media | **Media B1.** Media Curator (#17). Deterministic diy-only curator; never fabricates a URL |
 | ingestion/transcript | **Media C1.** `fetch_transcript(url)` — YouTube transcript pull (public captions, no API cost) |
-| db.client match_chunks / retrieval | **Media C1:** migration 031 scopes `match_chunks` to `content_class='authority'` in SQL (unchanged 3-arg signature); new `match_how_to_chunks` (diy path) |
+| db.client match_chunks / retrieval | **Media C1:** migration 031 scopes `match_chunks` to `content_class='authority'` in SQL (unchanged 3-arg signature); new `match_how_to_chunks` (diy path). **Jurisdiction (037):** `filter_municipality` became a jurisdiction-chain `text[]` (this row predates recording that — 037 is the actual latest signature prior to 045, see that migration's own header). **Security fix (045, 2026-08-01):** added a 4th `requesting_user_id` param + a tier-3 `visibility` predicate in the WHERE clause, closing the gap `match_project_chunks` (040) already closed for the project-scoped mini-RAG path but the general corpus path never got. Threading fix was mostly Python: `retrieve_with_project()` already received `requesting_user_id` and already passed it to `match_project_chunks`, but silently dropped it on its own call to `retrieve()` — `retrieve()` didn't even accept the param. Both fixed; `db_client.match_chunks()` now takes and forwards `requesting_user_id` too. **RAGAs-unverified as of this entry** — see punch list #5. |
 | rag/agent_runtime | Single Anthropic call site. `_dispatch` learns models that reject `temperature` and retries without it |
 | rag/generator | Folded into the runtime. Optional `routed` RoutedPrompt (composed system + persona `max_tokens` + fragment ids); un-routed default unchanged. **2026-07-28: `PROMPT_VERSION` v1→v3** — rule 7 now requires real markdown lists (was ambiguous "bullet points," rendered as inline `•` in prod); rule 1 forbids a standalone "Limitations" header. `rag/prompts/fragments/base.md` bumped to version 3 in lockstep (shared grounding rules) |
 | rag/design_intent | Folded in Phase 1; contract unchanged |
@@ -323,6 +380,10 @@ should have been 027. Recorded, not renamed. The dedupe correction is
 | **Perf Review never silent-blames** | Every review writes an *unconfirmed* `agent_corrections` row; a superadmin confirms attribution. Below `CONFIDENCE_FLOOR=0.6` the row carries no `attributed_agent` — a human assigns blame |
 | **Query sessions are custom, not LangChain** | The `session_id` grouping query-history threads is a plain Postgres column + client-generated UUID, unrelated to LangChain's own memory/session abstractions (not used in this codebase — only LangSmith, for tracing, is). The same `session_id` also tags the LangSmith trace for that thread — see `docs/langsmith_session_tracing.md` |
 | **q4's 0.000 RAGAs relevancy is a known judge blind spot, not a quality bug (2026-07-28)** | `PROMPT_VERSION` v2 fixed a real prod bug (inline `•` bullets instead of markdown — rule 7 was ambiguous) but exposed a same-day, reproducible A/B regression: q4 ("building permit requirements") scored relevancy 1.000 under `v1` and 0.000 under `v2` twice. Root-caused to the model appending an explicit "consult the City of Plano Building Inspection Department directly" redirect when corpus coverage is partial — RAGAs' `answer_relevancy` metric hard-zeroes anything it reads as noncommittal, regardless of faithfulness or context precision (q4 hit 0.933 faithfulness / perfect citations the same run it scored 0 relevancy). `v3` tried suppressing the standalone "Limitations" header (rule 1) — didn't fix it, proving the header was never the mechanism; the redirect sentence itself is what trips the judge. **Not fixing further:** that redirect sentence is the same pattern as the existing AHJ disclaimer (`_AHJ_DISCLAIMER_TEXT`) — intentional, appropriate caution for a compliance app, not a hedge to prompt away. Treated like q6 in the original baseline: measure, don't gate, on this one query's relevancy score. Full investigation: `journals/session_20260728.md` |
+| **Document visibility bulk-vs-single distinction (2026-08-01)** | `GET /documents` (bulk listing) is superadmin-only (`is_superadmin`, not the broader `is_staff`) — "only super users can see the document corpus" was an explicit product call, bulk corpus browsing being the sensitive operation. `GET /documents/{doc_id}` (single lookup by doc_id, e.g. a citation drill-down from an already-received answer) stays on the broader `is_staff` bypass for tier-3 docs — a regular user already implicitly learns a cited doc_id exists from the answer itself, so gating the single-doc-detail route more tightly than the bulk list doesn't add real protection, just friction. |
+| **Voice input: one shared hook, not five more patches (2026-08-01)** | 5 independent copy-pasted voice-input implementations had each drifted into a different subset of bugs (hardcoded-blue mic icon with no listening state, inconsistent "no speech" error mapping, a self-contradictory "not supported: no speech detected" message) because `RoomCaptureWeb.js` emitted two different strings for the same no-speech condition and each call site only ever checked one of them. Concrete proof duplication was the actual bug, not just style debt — patching five call sites again would leave the same fragmentation for the next bug. `frontend/src/hooks/useVoiceInput.js` owns the state machine and error mapping once; callers only control what happens with a transcript/error via `onTranscript`/`onError` callbacks. |
+| **Kickoff free-form entry pre-fills the wizard, never bypasses it (2026-08-01)** | Confirmed with Scott directly (not the two options originally offered): free-form text/talk isn't a parallel fast-path to project creation — it's AI extraction (`generate_kickoff_extraction`) that pre-fills the *same* step-by-step wizard fields for the user to review and complete. `address_guess` is deliberately plain text, not geocoded — the user still picks a real `AddressAutocomplete` suggestion on step 1, since municipality/lat-lng can't come from raw text. |
+| **Kickoff extraction reuses bound_notes(), never a second free-text blob (2026-08-01)** | The existing kickoff chat deliberately emits bounded, sanitized `notes` instead of a free-text system-prompt blob specifically to close an injection surface (see the "Kickoff demotion" decision above). `generate_kickoff_extraction`'s `comments` field is the same kind of free-text output and gets the identical `bound_notes()` treatment — a new LLM entry point is exactly where that discipline is easiest to forget. |
 
 ## Canonical validation
 
