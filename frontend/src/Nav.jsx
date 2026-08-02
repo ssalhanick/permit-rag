@@ -251,10 +251,10 @@ export default function Nav() {
                 </div>
               </div>
             ) : (
-              <div className="flex items-center gap-3 w-full sm:w-auto mt-3 sm:mt-0 pt-3 sm:pt-0 border-t sm:border-t-0 border-slate-800 flex-nowrap shrink-0 whitespace-nowrap">
+              <div className="flex flex-col min-[901px]:flex-row items-stretch min-[901px]:items-center gap-2.5 w-full min-[901px]:w-auto mt-3 min-[901px]:mt-0 pt-3 min-[901px]:pt-0 border-t min-[901px]:border-t-0 border-slate-800 shrink-0">
                 <NavLink
                   to="/auth"
-                  className="tt-nav-item flex items-center justify-center gap-1.5 whitespace-nowrap shrink-0"
+                  className="tt-nav-item flex items-center justify-center gap-1.5 whitespace-nowrap shrink-0 w-full min-[901px]:w-auto"
                   onClick={closeMenu}
                 >
                   <LogIn className="w-4 h-4 text-slate-400" />
@@ -262,7 +262,7 @@ export default function Nav() {
                 </NavLink>
                 <NavLink
                   to="/auth"
-                  className="tt-btn-primary flex items-center justify-center gap-1.5 text-xs px-4 py-2 whitespace-nowrap shrink-0"
+                  className="tt-btn-primary flex items-center justify-center gap-1.5 text-xs px-4 py-2 whitespace-nowrap shrink-0 w-full min-[901px]:w-auto"
                   onClick={closeMenu}
                 >
                   Get Started
