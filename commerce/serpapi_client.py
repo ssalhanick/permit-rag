@@ -197,6 +197,19 @@ def search_home_depot(
             import json
 
             payload = json.loads(resp.read().decode("utf-8"))
+    except urllib.error.HTTPError as exc:
+        # HTTPError is a URLError subclass, so a bare `except URLError` here
+        # would silently swallow the response body — surfacing it because a
+        # SerpApi plan/quota rejection (e.g. an engine not included on the
+        # free tier) looks identical to a network failure otherwise.
+        detail = exc.read().decode("utf-8", errors="replace")
+        log.warning(
+            "SerpApi Home Depot search failed: HTTP %s %s — %s; using mock products",
+            exc.code, exc.reason, detail,
+        )
+        products = _mock_products(query, zip_code)[:limit]
+        _cache_set(cache_key, products)
+        return products
     except (urllib.error.URLError, TimeoutError, ValueError) as exc:
         log.warning("SerpApi Home Depot search failed (%s); using mock products", exc)
         products = _mock_products(query, zip_code)[:limit]
@@ -216,6 +229,13 @@ def search_home_depot(
             break
 
     if not products:
+        # Request succeeded (200 OK) but nothing usable came out of it —
+        # log what SerpApi actually sent back so a shape mismatch is
+        # diagnosable instead of looking identical to "key not working."
+        log.warning(
+            "SerpApi Home Depot search returned 0 usable products for %r (top-level response keys: %s); using mock products",
+            query, list(payload.keys()),
+        )
         products = _mock_products(query, zip_code)[:limit]
 
     _cache_set(cache_key, products)

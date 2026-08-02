@@ -236,6 +236,37 @@ def build_room_image_prompt(
     )
 
 
+def _material_descriptor(overlay: dict[str, Any]) -> str:
+    """Human-readable material description from one overlay's own fields."""
+    product = overlay.get("product_ref") or {}
+    title = product.get("title")
+    if title:
+        return str(title)
+    mid = overlay.get("material_id") or overlay.get("type") or "finish"
+    hex_color = overlay.get("color_hex") or ""
+    return f"{mid.replace('_', ' ')} {hex_color}".strip()
+
+
+def build_material_prompt(*, utterance: str, overlays: list[dict[str, Any]]) -> str:
+    """
+    Compose a material/texture-only prompt for fal's PATINA endpoint.
+
+    PATINA generates a tileable PBR material swatch, not a photographic
+    scene — feeding it build_room_image_prompt's "photoreal interior photo of
+    a room" framing (right for Leonardo/OpenAI, which ARE scene generators)
+    gives it nothing to actually render, so it returns a near-flat color
+    blob. Describing just the material/texture itself is what this endpoint
+    expects.
+    """
+    materials = [_material_descriptor(o) for o in overlays] if overlays else []
+    material_text = "; ".join(m for m in materials[:3] if m) or utterance
+    return (
+        f"{material_text}, seamless tileable PBR material swatch, "
+        "close-up texture detail, realistic surface, studio lighting, "
+        "no room, no furniture, no people, no text or logos."
+    )
+
+
 def _openai_generate(prompt: str, model: str) -> str:
     """Call OpenAI images.generations; return base64 PNG/JPEG payload."""
     api_key = os.environ.get("OPENAI_API_KEY", "").strip()
@@ -314,14 +345,15 @@ def generate_room_preview_image(
 
     fal_key = os.environ.get("FAL_API_KEY", "").strip()
     if fal_key:
+        material_prompt = build_material_prompt(utterance=utterance, overlays=overlay_rows)
         try:
-            b64 = _fal_generate(prompt)
+            b64 = _fal_generate(material_prompt)
             return {
                 "image_base64": b64,
                 "mime_type": "image/png",
                 "provider": "fal",
                 "model": "patina/material",
-                "prompt": prompt,
+                "prompt": material_prompt,
                 "mock": False,
             }
         except Exception as exc:

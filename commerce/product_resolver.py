@@ -18,13 +18,25 @@ _CATEGORY_QUERIES: dict[str, str] = {
 }
 
 
-def build_product_search(overlay: dict[str, Any], utterance: str = "") -> dict[str, Any]:
+def build_product_search(
+    overlay: dict[str, Any],
+    utterance: str = "",
+    *,
+    is_sole_overlay: bool = False,
+) -> dict[str, Any]:
     """
     Build product_search attributes from an overlay patch.
 
     Args:
         overlay: Overlay with type and material_id.
         utterance: Original user instruction for query hints.
+        is_sole_overlay: True when this is the only overlay in the request.
+            The raw utterance then unambiguously describes this one material
+            (and often carries nuance a material_id can't, e.g. "tile that
+            looks like wood"), so it's safe to use verbatim. A multi-material
+            request passes the SAME utterance to every overlay — using it
+            verbatim there sends Home Depot the whole compound sentence for
+            each material instead of a query targeted at that one overlay.
 
     Returns:
         product_search dict with category, attributes, and query string.
@@ -47,8 +59,9 @@ def build_product_search(overlay: dict[str, Any], utterance: str = "") -> dict[s
         category = "interior_paint"
         attributes["color"] = "white"
 
-    query = _CATEGORY_QUERIES.get(category, utterance or category.replace("_", " "))
-    if utterance and len(utterance) > 5:
+    descriptive_id = material_id.replace("_", " ").strip() if material_id != "generic_paint" else ""
+    query = descriptive_id or _CATEGORY_QUERIES.get(category, category.replace("_", " "))
+    if is_sole_overlay and utterance and len(utterance) > 5:
         query = utterance
 
     return {
@@ -79,10 +92,13 @@ def resolve_products_for_overlays(
     """
     enriched: list[dict[str, Any]] = []
     all_candidates: list[dict[str, Any]] = []
+    is_sole_overlay = len(overlays) == 1
 
     for overlay in overlays:
         row = dict(overlay)
-        product_search = row.get("product_search") or build_product_search(row, utterance)
+        product_search = row.get("product_search") or build_product_search(
+            row, utterance, is_sole_overlay=is_sole_overlay
+        )
         row["product_search"] = product_search
 
         candidates = search_home_depot(
