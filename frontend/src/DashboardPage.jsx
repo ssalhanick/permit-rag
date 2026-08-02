@@ -118,6 +118,8 @@ export default function DashboardPage() {
     navigate(`/projects/${projectId}/dashboard`);
   };
 
+  const [activeTab, setActiveTab] = useState("overview");
+
   return (
     <main className="tt-dashboard-container">
       {/* ── Top Header Section ── */}
@@ -135,6 +137,49 @@ export default function DashboardPage() {
           New Project
         </Link>
       </header>
+
+      {/* ── Secondary Dashboard Navigation Bar ── */}
+      <nav className="border-b border-slate-200 dark:border-slate-700 mb-6 flex flex-wrap items-center gap-4 sm:gap-6 text-sm font-semibold">
+        <button
+          type="button"
+          onClick={() => setActiveTab("overview")}
+          className={`pb-2.5 transition-colors border-b-2 ${
+            activeTab === "overview"
+              ? "border-blue-600 text-blue-600 dark:text-blue-400 dark:border-blue-400"
+              : "border-transparent text-slate-500 hover:text-slate-900 dark:text-slate-400 dark:hover:text-slate-200"
+          }`}
+        >
+          Overview & Profile
+        </button>
+        <button
+          type="button"
+          onClick={() => setActiveTab("projects")}
+          className={`pb-2.5 transition-colors border-b-2 ${
+            activeTab === "projects"
+              ? "border-blue-600 text-blue-600 dark:text-blue-400 dark:border-blue-400"
+              : "border-transparent text-slate-500 hover:text-slate-900 dark:text-slate-400 dark:hover:text-slate-200"
+          }`}
+        >
+          My Projects ({projects.length})
+        </button>
+        <button
+          type="button"
+          onClick={() => setActiveTab("tasks")}
+          className={`pb-2.5 transition-colors border-b-2 ${
+            activeTab === "tasks"
+              ? "border-blue-600 text-blue-600 dark:text-blue-400 dark:border-blue-400"
+              : "border-transparent text-slate-500 hover:text-slate-900 dark:text-slate-400 dark:hover:text-slate-200"
+          }`}
+        >
+          Tasks ({tasks.filter((t) => !t.completed).length})
+        </button>
+        <Link
+          to="/query"
+          className="pb-2.5 transition-colors border-b-2 border-transparent text-slate-500 hover:text-slate-900 dark:text-slate-400 dark:hover:text-slate-200"
+        >
+          AI Query Assistant
+        </Link>
+      </nav>
 
       {/* ── Summary Stats Grid (4 Cards) ── */}
       <section className="tt-stats-grid" aria-label="Summary Statistics">
@@ -273,7 +318,7 @@ export default function DashboardPage() {
                 <div className="tt-project-footer">
                   <div className="tt-project-budget">
                     <span className="tt-budget-label">Municipality:</span>{" "}
-                    <strong>{p.municipality || "Local"}</strong>
+                    <strong className="uppercase tracking-wider font-semibold text-[11px]">{p.municipality || "Local"}</strong>
                   </div>
                   {isOtherUsersProject ? (
                     <div className="tt-project-duedate text-slate-400 font-medium flex items-center">
@@ -375,16 +420,16 @@ export default function DashboardPage() {
                   </Link>
                 </>
               ) : (
-                <>
-                  <p>No tasks yet.</p>
+                <div className="py-6 text-center">
+                  <p className="text-sm text-slate-500 mb-4">No tasks found for your projects.</p>
                   <button
                     type="button"
-                    className="tt-btn-primary"
+                    className="tt-btn-primary text-sm px-6 py-3 rounded-xl font-bold inline-flex items-center gap-2 shadow-md hover:shadow-lg transition-all"
                     onClick={() => setShowAddTaskForm(true)}
                   >
-                    <Plus className="w-4 h-4" /> Add Task
+                    <Plus className="w-5 h-5 stroke-[2.5]" /> Add Task
                   </button>
-                </>
+                </div>
               )}
             </div>
           ) : (

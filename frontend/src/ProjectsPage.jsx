@@ -266,7 +266,7 @@ export default function ProjectsPage() {
                     </div>
                     <div>
                       <h3 className="tt-grid-card-title">{p.name}</h3>
-                      <span className="tt-grid-card-subtitle">{p.category}</span>
+                      <span className="tt-grid-card-subtitle uppercase tracking-wider font-semibold text-[11px]">{p.category}</span>
                     </div>
                   </div>
                   <span className={`tt-status-badge ${getStatusBadgeStyle(p.status)}`}>

@@ -99,7 +99,7 @@ export default function ProjectSettingsPage() {
           {project?.name || "Dashboard"}
         </Link>
         <span>/</span>
-        <span className="text-slate-900 dark:text-slate-100 font-bold">Settings</span>
+        <span className="text-slate-900 dark:text-slate-100 font-bold">Edit</span>
       </nav>
 
       {/* ── Header ── */}
@@ -109,10 +109,10 @@ export default function ProjectSettingsPage() {
         </div>
         <div>
           <h1 className="text-2xl font-extrabold text-slate-900 dark:text-slate-100 tracking-tight">
-            Project Settings
+            Edit Project
           </h1>
           <p className="text-xs text-slate-500 dark:text-slate-300 mt-0.5">
-            Configure jurisdiction codes, contractor roles, and municipal scope parameters.
+            Configure project parameters, jurisdiction codes, contractor roles, and target budget.
           </p>
         </div>
       </div>
@@ -268,7 +268,7 @@ export default function ProjectSettingsPage() {
               className="tt-btn-primary text-xs flex items-center gap-1.5 px-5 py-2.5 rounded-xl disabled:opacity-50"
             >
               <Save className="w-4 h-4" />
-              {saving ? "Saving…" : "Save Settings"}
+              {saving ? "Saving…" : "Save"}
             </button>
             <button
               type="button"
@@ -277,7 +277,7 @@ export default function ProjectSettingsPage() {
               className="tt-btn-secondary text-xs flex items-center gap-1.5 px-4 py-2.5 rounded-xl disabled:opacity-50"
             >
               <RotateCcw className="w-3.5 h-3.5 text-slate-400" />
-              Reset Changes
+              Reset
             </button>
           </div>
         </form>

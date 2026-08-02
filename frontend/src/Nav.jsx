@@ -273,10 +273,18 @@ export default function Nav() {
           </div>
         </div>
       </nav>
-      {/* Floating Corner AI Assistant Modal — hidden on /query (already the full chat,
-          the widget covers the submit button there) and on /kickoff (the intake wizard
-          has its own guided flow; the assistant is a distraction mid-setup) */}
-      {location.pathname !== "/query" && !location.pathname.startsWith("/kickoff") && <AiAssistantWidget />}
+      {/* Floating Corner AI Assistant Modal — hidden on /query, /kickoff, form pages (petitions),
+          project settings, and project dashboard pages */}
+      {(() => {
+        const p = location.pathname;
+        const isQuery = p === "/query";
+        const isKickoff = p.startsWith("/kickoff");
+        const isFormPage = p.includes("/petition") || p.includes("/petitions");
+        const isSettingsPage = p.endsWith("/settings");
+        const isDashboard = p === "/dashboard" || p.match(/\/projects\/[^/]+\/?(dashboard)?$/);
+        if (isQuery || isKickoff || isFormPage || isSettingsPage || isDashboard) return null;
+        return <AiAssistantWidget />;
+      })()}
     </header>
   );
 }

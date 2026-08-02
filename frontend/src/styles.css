@@ -40,6 +40,21 @@ html.light {
   background-color: var(--tt-bg);
 }
 
+/* Prevent iOS & mobile browser auto-zoom on input focus */
+@media (max-width: 768px) {
+  input[type="text"],
+  input[type="number"],
+  input[type="email"],
+  input[type="password"],
+  input[type="search"],
+  textarea,
+  select,
+  .tt-input,
+  .tt-select {
+    font-size: 16px !important;
+  }
+}
+
 html.dark,
 .dark {
   color-scheme: dark;

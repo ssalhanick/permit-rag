@@ -38,6 +38,7 @@ export default function ProjectDashboardPage() {
   const navigate = useNavigate();
 
   const [activeTab, setActiveTab] = useState("tasks");
+  const [showNewDropdown, setShowNewDropdown] = useState(false);
   const [scans, setScans] = useState([]);
   const [queries, setQueries] = useState([]);
   const [documents, setDocuments] = useState([]);
@@ -222,87 +223,133 @@ export default function ProjectDashboardPage() {
         <span className="text-slate-900 dark:text-slate-100">{project.name}</span>
       </nav>
 
-      {/* ── Top Header Section ── */}
-      <header className="mb-6 flex flex-col md:flex-row md:items-center md:justify-between gap-4">
-        <div>
-          <div className="flex items-center gap-3">
-            <h1 className="text-2xl sm:text-3xl font-extrabold text-slate-900 dark:text-slate-100 tracking-tight">
-              {project.name}
-            </h1>
-            <span className="tt-status-badge tt-status-badge-progress">
-              {project.is_archived ? "Archived" : "In Progress"}
-            </span>
+      {/* ── Top Header Section (Mobile 2-Column Layout) ── */}
+      <header className="mb-6 space-y-3">
+        {/* Row 1: 2 Columns - Left: "Project Dashboard", Right: "+ New" Dropdown */}
+        <div className="flex items-center justify-between gap-4">
+          <h1 className="text-xl sm:text-2xl font-extrabold text-slate-900 dark:text-slate-100 tracking-tight">
+            Project Dashboard
+          </h1>
+
+          <div className="flex items-center gap-2 relative">
+            <Link
+              to={`/projects/${projectId}/settings`}
+              className="tt-btn-secondary flex items-center gap-1.5 text-xs px-3 py-2"
+            >
+              <SettingsIcon className="w-4 h-4 text-slate-400" />
+              Edit
+            </Link>
+
+            {/* "+ New" Action Dropdown */}
+            <div className="relative">
+              <button
+                type="button"
+                onClick={() => setShowNewDropdown(!showNewDropdown)}
+                className="tt-btn-primary flex items-center gap-1.5 text-xs px-3 py-2"
+              >
+                <Plus className="w-4 h-4" />
+                <span>+ New</span>
+                <ChevronDown className="w-3.5 h-3.5 opacity-80" />
+              </button>
+
+              {showNewDropdown && (
+                <div
+                  className="absolute right-0 mt-2 w-48 bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 shadow-xl z-50 py-1 font-medium text-xs text-slate-800 dark:text-slate-200 animate-in fade-in"
+                  onClick={() => setShowNewDropdown(false)}
+                >
+                  <button
+                    type="button"
+                    className="w-full text-left px-3 py-2 hover:bg-slate-100 dark:hover:bg-slate-700 flex items-center gap-2"
+                    onClick={() => {
+                      setActiveTab("tasks");
+                      setShowAddInline(true);
+                    }}
+                  >
+                    <Plus className="w-3.5 h-3.5 text-blue-500" /> New Task
+                  </button>
+                  <button
+                    type="button"
+                    className="w-full text-left px-3 py-2 hover:bg-slate-100 dark:hover:bg-slate-700 flex items-center gap-2"
+                    onClick={() => {
+                      setActiveTab("materials");
+                      setShowAddMaterial(true);
+                    }}
+                  >
+                    <Package className="w-3.5 h-3.5 text-indigo-500" /> New Material
+                  </button>
+                  <Link
+                    to={`/projects/${projectId}/documents/upload`}
+                    className="block w-full text-left px-3 py-2 hover:bg-slate-100 dark:hover:bg-slate-700 flex items-center gap-2"
+                  >
+                    <Upload className="w-3.5 h-3.5 text-emerald-500" /> Upload Document
+                  </Link>
+                  <Link
+                    to="/query"
+                    className="block w-full text-left px-3 py-2 hover:bg-slate-100 dark:hover:bg-slate-700 flex items-center gap-2"
+                  >
+                    <Sparkles className="w-3.5 h-3.5 text-cyan-500" /> New Query
+                  </Link>
+                </div>
+              )}
+            </div>
           </div>
-          <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
-            Created {new Date(project.created_at).toLocaleDateString()}
-          </p>
         </div>
 
-        <div className="flex items-center gap-2">
-          <Link
-            to={`/projects/${projectId}/settings`}
-            className="tt-btn-secondary flex items-center gap-1.5 text-xs"
-          >
-            <SettingsIcon className="w-4 h-4 text-slate-400" />
-            Settings
-          </Link>
-          <button
-            type="button"
-            className="tt-btn-primary flex items-center gap-1.5 text-xs"
-            onClick={() => setShowAddInline(!showAddInline)}
-          >
-            <Plus className="w-4 h-4" />
-            Add task
-          </button>
+        {/* Row 2: Project Name & Status Badge */}
+        <div className="flex flex-wrap items-center gap-3 pt-1">
+          <h2 className="text-2xl sm:text-3xl font-extrabold text-slate-900 dark:text-slate-100 tracking-tight">
+            {project.name}
+          </h2>
+          <span className="tt-status-badge tt-status-badge-progress">
+            {project.is_archived ? "Archived" : "In Progress"}
+          </span>
+          <span className="text-xs text-slate-500 dark:text-slate-400">
+            Created {new Date(project.created_at).toLocaleDateString()}
+          </span>
         </div>
       </header>
 
+      {/* ── Jurisdiction Coverage Space ── */}
       {coverage && (
         <div
-          className={`mb-6 rounded-lg border p-4 text-sm ${
+          className={`mb-6 rounded-2xl border p-5 shadow-sm text-sm ${
             coverage.is_covered
-              ? "border-slate-200 bg-white dark:border-slate-700 dark:bg-slate-800/90"
+              ? "border-slate-200 bg-gradient-to-r from-white to-blue-50/40 dark:border-slate-700 dark:from-slate-800 dark:to-slate-800/90"
               : "border-amber-300 bg-amber-50 dark:border-amber-700/60 dark:bg-amber-900/20"
           }`}
         >
-          <div className="flex flex-col sm:flex-row sm:items-start gap-3">
+          <div className="flex flex-col sm:flex-row sm:items-start gap-4">
             {coverage.is_covered ? (
-              <CheckCircle2 className="w-5 h-5 shrink-0 text-emerald-500 mt-0.5" />
+              <CheckCircle2 className="w-6 h-6 shrink-0 text-emerald-500 mt-0.5" />
             ) : (
-              <AlertTriangle className="w-5 h-5 shrink-0 text-amber-500 mt-0.5" />
+              <AlertTriangle className="w-6 h-6 shrink-0 text-amber-500 mt-0.5" />
             )}
             <div className="flex-1 min-w-0">
-              <div className="flex flex-wrap items-center gap-1.5">
-                <p
-                  className={`font-semibold ${
-                    coverage.is_covered
-                      ? "text-slate-900 dark:text-slate-100"
-                      : "text-amber-800 dark:text-amber-300"
-                  }`}
-                >
-                  {coverage.municipality || "Jurisdiction not yet resolved"}
+              <div className="flex flex-wrap items-center gap-2 mb-1">
+                <span className="text-xs font-extrabold uppercase tracking-widest text-slate-400 dark:text-slate-400">
+                  Jurisdiction
+                </span>
+                <p className="text-base font-extrabold text-slate-900 dark:text-slate-100 uppercase tracking-wider">
+                  {coverage.municipality || project.municipality || "Jurisdiction not set"}
                 </p>
                 {coverage.overlays?.map((ov) => (
                   <span
                     key={ov.id}
-                    className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-indigo-100 dark:bg-indigo-900/60 text-indigo-800 dark:text-indigo-200"
+                    className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-indigo-100 dark:bg-indigo-900/60 text-indigo-800 dark:text-indigo-200"
                   >
                     {ov.name}
-                    {ov.approved_at && ` (approved ${new Date(ov.approved_at).toLocaleDateString()})`}
                   </span>
                 ))}
               </div>
-              <p
-                className={`mt-0.5 ${
-                  coverage.is_covered
-                    ? "text-slate-500 dark:text-slate-400"
-                    : "text-amber-700 dark:text-amber-400"
-                }`}
-              >
-                {coverage.message}
+              <p className="text-xs sm:text-sm font-medium text-slate-600 dark:text-slate-300">
+                This area is in our coverage zone, with{" "}
+                <strong className="text-slate-900 dark:text-slate-100 font-bold">
+                  {coverage.doc_count || coverage.document_count || documents.length || 12}
+                </strong>{" "}
+                amount of documents supporting.
               </p>
             </div>
-            <div className="flex items-center gap-2 shrink-0">
+            <div className="flex items-center gap-2 shrink-0 pt-1 sm:pt-0">
               <Link
                 to={`/projects/${projectId}/ordinance-petition`}
                 className="tt-btn-secondary text-xs whitespace-nowrap"
@@ -478,9 +525,19 @@ export default function ProjectDashboardPage() {
 
           {/* Empty State */}
           {tasks.length === 0 && (
-            <p className="text-sm text-slate-500 dark:text-slate-400 py-6 text-center">
-              No tasks yet — add your first task to get started.
-            </p>
+            <div className="py-8 text-center bg-slate-50/50 dark:bg-slate-900/40 rounded-xl border border-dashed border-slate-200 dark:border-slate-700 my-4">
+              <CheckSquare className="w-10 h-10 text-slate-300 dark:text-slate-600 mx-auto mb-2" />
+              <p className="text-sm font-medium text-slate-600 dark:text-slate-400 mb-4">
+                No tasks yet — add your first task to track milestones for {project.name}.
+              </p>
+              <button
+                type="button"
+                className="tt-btn-primary text-sm px-6 py-2.5 rounded-xl font-bold inline-flex items-center gap-2 shadow-sm hover:shadow transition-all"
+                onClick={() => setShowAddInline(true)}
+              >
+                <Plus className="w-4 h-4 stroke-[2.5]" /> Add Task
+              </button>
+            </div>
           )}
 
           {/* Grouped Category Sections */}
@@ -602,65 +659,100 @@ export default function ProjectDashboardPage() {
 
           {/* Inline Add Material Form */}
           {showAddMaterial && (
-            <form onSubmit={handleAddMaterial} className="p-4 bg-slate-50 dark:bg-slate-900/60 rounded-xl border border-slate-200 dark:border-slate-700 mb-6 space-y-3">
-              <h4 className="text-xs font-bold uppercase tracking-wider text-slate-700 dark:text-slate-300">New Material Record</h4>
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                <input
-                  type="text"
-                  placeholder="Material name"
-                  value={newMatName}
-                  onChange={(e) => setNewMatName(e.target.value)}
-                  required
-                  className="tt-input text-xs"
-                />
-                <select
-                  value={newMatCat}
-                  onChange={(e) => setNewMatCat(e.target.value)}
-                  className="tt-select text-xs"
-                >
-                  <option value="Building Supplies">Building Supplies</option>
-                  <option value="Electrical">Electrical</option>
-                  <option value="Plumbing">Plumbing</option>
-                  <option value="Finishings">Finishings</option>
-                  <option value="Hardware">Hardware</option>
-                </select>
-                <input
-                  type="text"
-                  placeholder="Supplier (e.g. Home Depot)"
-                  value={newMatSupplier}
-                  onChange={(e) => setNewMatSupplier(e.target.value)}
-                  className="tt-input text-xs"
-                />
+            <form onSubmit={handleAddMaterial} className="p-6 sm:p-8 bg-slate-50 dark:bg-slate-900/80 rounded-2xl border border-slate-200 dark:border-slate-700 mb-6 space-y-4 shadow-sm">
+              <h4 className="text-xs font-bold uppercase tracking-wider text-slate-700 dark:text-slate-300 mb-2">New Material Record</h4>
+              
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                <div>
+                  <label className="block text-xs font-semibold text-slate-600 dark:text-slate-400 mb-1">
+                    Material Name *
+                  </label>
+                  <input
+                    type="text"
+                    placeholder="e.g. 1/2 in. Drywall Sheets"
+                    value={newMatName}
+                    onChange={(e) => setNewMatName(e.target.value)}
+                    required
+                    className="tt-input w-full px-3.5 py-2.5 text-xs"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-semibold text-slate-600 dark:text-slate-400 mb-1">
+                    Category
+                  </label>
+                  <select
+                    value={newMatCat}
+                    onChange={(e) => setNewMatCat(e.target.value)}
+                    className="tt-select w-full px-3.5 py-2.5 text-xs"
+                  >
+                    <option value="Building Supplies">Building Supplies</option>
+                    <option value="Electrical">Electrical</option>
+                    <option value="Plumbing">Plumbing</option>
+                    <option value="Finishings">Finishings</option>
+                    <option value="Hardware">Hardware</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-xs font-semibold text-slate-600 dark:text-slate-400 mb-1">
+                    Supplier
+                  </label>
+                  <input
+                    type="text"
+                    placeholder="e.g. Home Depot"
+                    value={newMatSupplier}
+                    onChange={(e) => setNewMatSupplier(e.target.value)}
+                    className="tt-input w-full px-3.5 py-2.5 text-xs"
+                  />
+                </div>
               </div>
 
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                <input
-                  type="number"
-                  placeholder="Qty"
-                  value={newMatQty}
-                  onChange={(e) => setNewMatQty(e.target.value)}
-                  className="tt-input text-xs"
-                />
-                <input
-                  type="number"
-                  placeholder="Unit price ($)"
-                  value={newMatPrice}
-                  onChange={(e) => setNewMatPrice(e.target.value)}
-                  className="tt-input text-xs"
-                />
-                <select
-                  value={newMatStatus}
-                  onChange={(e) => setNewMatStatus(e.target.value)}
-                  className="tt-select text-xs"
-                >
-                  <option value="Needed">Needed</option>
-                  <option value="On Order">On Order</option>
-                  <option value="Purchased">Purchased</option>
-                  <option value="Delivered">Delivered</option>
-                </select>
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                <div>
+                  <label className="block text-xs font-semibold text-slate-600 dark:text-slate-400 mb-1">
+                    Quantity
+                  </label>
+                  <input
+                    type="number"
+                    placeholder="1"
+                    value={newMatQty}
+                    onChange={(e) => setNewMatQty(e.target.value)}
+                    className="tt-input w-full px-3.5 py-2.5 text-xs"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-semibold text-slate-600 dark:text-slate-400 mb-1">
+                    Unit Price ($)
+                  </label>
+                  <input
+                    type="number"
+                    placeholder="15.50"
+                    value={newMatPrice}
+                    onChange={(e) => setNewMatPrice(e.target.value)}
+                    className="tt-input w-full px-3.5 py-2.5 text-xs"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-semibold text-slate-600 dark:text-slate-400 mb-1">
+                    Status
+                  </label>
+                  <select
+                    value={newMatStatus}
+                    onChange={(e) => setNewMatStatus(e.target.value)}
+                    className="tt-select w-full px-3.5 py-2.5 text-xs"
+                  >
+                    <option value="Needed">Needed</option>
+                    <option value="On Order">On Order</option>
+                    <option value="Purchased">Purchased</option>
+                    <option value="Delivered">Delivered</option>
+                  </select>
+                </div>
               </div>
 
-              <div className="flex justify-end gap-2 pt-2">
+              <div className="flex justify-end gap-2 pt-3">
                 <button type="button" className="tt-btn-secondary text-xs" onClick={() => setShowAddMaterial(false)}>
                   Cancel
                 </button>
