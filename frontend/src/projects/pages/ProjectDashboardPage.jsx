@@ -29,7 +29,8 @@ import {
   ShoppingCart,
   Box,
   ArrowRight,
-  AlertTriangle
+  AlertTriangle,
+  CheckSquare
 } from "lucide-react";
 
 export default function ProjectDashboardPage() {
