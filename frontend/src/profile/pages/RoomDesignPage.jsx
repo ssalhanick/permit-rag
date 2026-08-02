@@ -32,7 +32,8 @@ import {
   saveDesignPreview,
 } from "../../services/roomDesignIntent.js";
 import { generateAndAttachRoomPreview } from "../../services/roomPreviewImage.js";
-import { openRoomARForScan, previewRoomModel, startSpeechRecognition } from "../../services/roomCapture.js";
+import { openRoomARForScan, previewRoomModel } from "../../services/roomCapture.js";
+import { useVoiceInput } from "../../hooks/useVoiceInput.js";
 import { findRoomFilesystemLocation } from "../../services/roomScanFilesystem.js";
 import { buildRoomDxf } from "../../services/roomCadExport.js";
 import { loadUserLibrary } from "../../services/roomScanStorage.js";
@@ -250,6 +251,11 @@ export default function RoomDesignPage({ libraryMode = false }) {
     }
   };
 
+  const voice = useVoiceInput({
+    onTranscript: (transcript) => setUtterance(transcript),
+    onError: (message) => setError(message),
+  });
+
   const handleMic = async () => {
     if (!isNativePlatform() || busy) {
       return;
@@ -257,14 +263,7 @@ export default function RoomDesignPage({ libraryMode = false }) {
     setBusy(true);
     setError("");
     try {
-      const speech = await startSpeechRecognition();
-      const transcript = speech?.transcript?.trim();
-      if (!transcript) {
-        throw new Error("No speech detected.");
-      }
-      setUtterance(transcript);
-    } catch (err) {
-      setError(err.message || "Speech input failed.");
+      await voice.startListening();
     } finally {
       setBusy(false);
     }
@@ -500,12 +499,16 @@ export default function RoomDesignPage({ libraryMode = false }) {
             {isNativePlatform() && (
               <button
                 type="button"
-                className="tt-btn-secondary flex items-center gap-1.5 text-xs px-4 py-2.5 rounded-xl"
+                className={`flex items-center gap-1.5 text-xs px-4 py-2.5 rounded-xl ${
+                  voice.listening
+                    ? "bg-red-600 text-white"
+                    : "tt-btn-secondary"
+                }`}
                 onClick={handleMic}
                 disabled={busy}
               >
-                <Mic className="w-3.5 h-3.5" />
-                Mic
+                <Mic className={`w-3.5 h-3.5 ${voice.listening ? "animate-pulse" : ""}`} />
+                {voice.listening ? "Listening…" : "Mic"}
               </button>
             )}
             <button
