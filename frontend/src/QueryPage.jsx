@@ -736,8 +736,16 @@ export default function QueryPage() {
                         </div>
                       )}
 
-                      {/* Feedback Rating Controls */}
-                      {turn.run_id && (() => {
+                      {/* Feedback Rating Controls.
+                          run_id can legitimately be missing -- audit/logger.py's
+                          start_run() deliberately lets a request succeed
+                          untraced if opening the trace row fails ("tracing
+                          must not break the request"), so there's nothing to
+                          attach feedback to. That used to mean this whole
+                          row silently vanished, which looked like the
+                          feature itself was missing rather than unavailable
+                          for this one response. */}
+                      {turn.run_id ? (() => {
                         const fb = feedbackByRun[turn.run_id] || {};
                         return (
                           <div className="pt-3 border-t border-slate-100 dark:border-slate-800 flex flex-wrap items-center justify-between gap-3 text-xs">
@@ -770,7 +778,11 @@ export default function QueryPage() {
                             </div>
                           </div>
                         );
-                      })()}
+                      })() : (
+                        <div className="pt-3 border-t border-slate-100 dark:border-slate-800 text-[11px] text-slate-400 dark:text-slate-500">
+                          Feedback isn't available for this response.
+                        </div>
+                      )}
                     </div>
                   </div>
                 </React.Fragment>
