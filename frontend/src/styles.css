@@ -1931,6 +1931,41 @@ textarea::placeholder {
   border-color: #166534 !important;
 }
 
+/* ── Mic permission help — browser can't be deep-linked into its own
+   settings, so this is the exact click-path instead. ─────────────── */
+.mic-permission-help {
+  background-color: #fffbeb;
+  border: 1px solid #fcd34d;
+  border-radius: 8px;
+  padding: 10px 14px;
+  margin-top: 6px;
+  font-size: 0.8rem;
+  color: #92400e;
+}
+
+.dark .mic-permission-help {
+  background-color: #451a03 !important;
+  border-color: #92400e !important;
+  color: #fde68a !important;
+}
+
+.mic-permission-help-title {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-weight: 700;
+  margin-bottom: 4px;
+}
+
+.mic-permission-help-steps {
+  margin: 0;
+  padding-left: 18px;
+}
+
+.mic-permission-help-steps li {
+  margin: 2px 0;
+}
+
 /* ── Empty-state CTA — reusable big "add the first thing" pattern.
    Used by the Document Library and (Phase 1) the empty task list, so both
    read as the same design language instead of one being a plain text hint. */

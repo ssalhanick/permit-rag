@@ -14,6 +14,7 @@ import PermitTags from "./components/PermitTags.jsx";
 import { createProject, fetchProjects, getProject, updateProject, postKickoffChat } from "./api.js";
 import { projectToWizardState } from "./projectKickoffRoutes.js";
 import { useVoiceInput } from "./hooks/useVoiceInput.js";
+import MicPermissionHelp from "./components/MicPermissionHelp.jsx";
 import {
   SPACE_OPTIONS,
   WORK_TYPE_OPTIONS,
@@ -148,6 +149,7 @@ function VoiceTextarea({ id, label, value, onChange, placeholder, rows = 2, maxL
         </button>
       </div>
       {voice.error && <p className="kickoff-voice-error">{voice.error}</p>}
+      <MicPermissionHelp errorCode={voice.errorCode} />
     </div>
   );
 }

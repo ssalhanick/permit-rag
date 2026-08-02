@@ -5,6 +5,7 @@ import remarkGfm from "remark-gfm";
 import { fetchAnswer, fetchProjects, fetchQueryHistory, submitAnswerFeedback } from "./api.js";
 import { useAuth } from "./context/AuthContext.jsx";
 import { useVoiceInput } from "./hooks/useVoiceInput.js";
+import MicPermissionHelp from "./components/MicPermissionHelp.jsx";
 import {
   MessageSquare,
   Send,
@@ -857,6 +858,7 @@ export default function QueryPage() {
                 <span>{error}</span>
               </div>
             )}
+            <MicPermissionHelp errorCode={voice.errorCode} />
           </div>
         </div>
       </main>

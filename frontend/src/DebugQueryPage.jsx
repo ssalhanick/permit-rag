@@ -3,6 +3,7 @@ import { Link } from "react-router-dom";
 import { API_BASE_URL, DEFAULT_BASE_URL, fetchAnswer, fetchHealth, fetchProjects } from "./api.js";
 import { useAuth } from "./context/AuthContext.jsx";
 import { useVoiceInput } from "./hooks/useVoiceInput.js";
+import MicPermissionHelp from "./components/MicPermissionHelp.jsx";
 import AddressAutocomplete from "./components/AddressAutocomplete.jsx";
 
 // shadcn component imports
@@ -468,6 +469,7 @@ export default function DebugQueryPage() {
                   {error}
                 </div>
               )}
+              <MicPermissionHelp errorCode={voice.errorCode} />
             </CardContent>
           </Card>
 
