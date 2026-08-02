@@ -57,9 +57,9 @@ else
   PY="python3"
 fi
 
-REPORT_DIR="evaluation/results"
-mkdir -p "$REPORT_DIR"
 TIMESTAMP="$(date +%Y%m%d_%H%M%S)"
+REPORT_DIR="evaluation/results/reprocess/${TIMESTAMP}"
+mkdir -p "$REPORT_DIR"
 LOG_FILE="$REPORT_DIR/reprocess_${TIMESTAMP}.log"
 REPORT_FILE="$REPORT_DIR/reprocess_${TIMESTAMP}_report.txt"
 

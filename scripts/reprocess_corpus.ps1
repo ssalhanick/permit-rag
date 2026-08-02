@@ -15,7 +15,8 @@ param(
     [string]$DatabaseUrl
 )
 
-$ErrorActionPreference = "Stop"
+# Set ErrorActionPreference to Continue so stderr output from Python logging doesn't trip terminating exceptions
+$ErrorActionPreference = "Continue"
 
 if (-not (Test-Path "pyproject.toml")) {
     Write-Error "Run this script from the repo root (pyproject.toml not found in $(Get-Location))."
@@ -38,12 +39,12 @@ if ($Local) {
     $dbArgs += $DatabaseUrl
 }
 
-$reportDir = "evaluation/results"
+$timestamp = Get-Date -Format "yyyyMMdd_HHmmss"
+$reportDir = "evaluation/results/reprocess/$timestamp"
 if (-not (Test-Path $reportDir)) {
     New-Item -ItemType Directory -Path $reportDir -Force | Out-Null
 }
 
-$timestamp = Get-Date -Format "yyyyMMdd_HHmmss"
 $logFile = "$reportDir/reprocess_$timestamp.log"
 $reportFile = "$reportDir/reprocess_${timestamp}_report.txt"
 
@@ -99,60 +100,41 @@ if ($env:ENVIRONMENT) {
 
 # Step 1: Re-chunk
 Write-Log "--- Step 1: re-chunk (scripts.ingest_documents --include-existing) ---"
-try {
-    & py -m scripts.ingest_documents --include-existing @dbArgs *>&1 | Tee-Object -FilePath $logFile -Append
-    if ($LASTEXITCODE -eq 0) {
-        $step1Status = "OK"
-        Write-Log "Step 1 OK"
-    } else {
-        $step1Status = "FAILED (exit $LASTEXITCODE)"
-        Write-Log "Step 1 FAILED (exit $LASTEXITCODE) -- see $logFile."
-        Write-Log "Stopping before re-embed: re-embedding stale chunking data would waste the run."
-        Write-Report
-        exit 1
-    }
-} catch {
-    $step1Status = "FAILED ($($_))"
-    Write-Log "Step 1 FAILED ($($_))"
+py -m scripts.ingest_documents --include-existing @dbArgs 2>&1 | Tee-Object -FilePath $logFile -Append
+if ($LASTEXITCODE -eq 0) {
+    $step1Status = "OK"
+    Write-Log "Step 1 OK"
+} else {
+    $step1Status = "FAILED (exit $LASTEXITCODE)"
+    Write-Log "Step 1 FAILED (exit $LASTEXITCODE) -- see $logFile."
+    Write-Log "Stopping before re-embed: re-embedding stale chunking data would waste the run."
     Write-Report
     exit 1
 }
 
 # Step 2: Force re-embed
 Write-Log "--- Step 2: force re-embed (ingestion.embedder --force) ---"
-try {
-    & py -m ingestion.embedder --force @dbArgs *>&1 | Tee-Object -FilePath $logFile -Append
-    if ($LASTEXITCODE -eq 0) {
-        $step2Status = "OK"
-        Write-Log "Step 2 OK"
-    } else {
-        $step2Status = "FAILED (exit $LASTEXITCODE)"
-        Write-Log "Step 2 FAILED (exit $LASTEXITCODE) -- see $logFile."
-        Write-Log "Stopping before RAGAs: scoring against stale embeddings would be a misleading comparison."
-        Write-Report
-        exit 1
-    }
-} catch {
-    $step2Status = "FAILED ($($_))"
-    Write-Log "Step 2 FAILED ($($_))"
+py -m ingestion.embedder --force @dbArgs 2>&1 | Tee-Object -FilePath $logFile -Append
+if ($LASTEXITCODE -eq 0) {
+    $step2Status = "OK"
+    Write-Log "Step 2 OK"
+} else {
+    $step2Status = "FAILED (exit $LASTEXITCODE)"
+    Write-Log "Step 2 FAILED (exit $LASTEXITCODE) -- see $logFile."
+    Write-Log "Stopping before RAGAs: scoring against stale embeddings would be a misleading comparison."
     Write-Report
     exit 1
 }
 
 # Step 3: RAGAs eval
 Write-Log "--- Step 3: RAGAs eval (--no-answer-cache --export) ---"
-try {
-    & py -m evaluation.ragas_eval --no-answer-cache --export @dbArgs *>&1 | Tee-Object -FilePath $logFile -Append
-    if ($LASTEXITCODE -eq 0) {
-        $step3Status = "OK"
-        Write-Log "Step 3 OK"
-    } else {
-        $step3Status = "FAILED (exit $LASTEXITCODE)"
-        Write-Log "Step 3 FAILED (exit $LASTEXITCODE) -- see $logFile."
-    }
-} catch {
-    $step3Status = "FAILED ($($_))"
-    Write-Log "Step 3 FAILED ($($_))"
+py -m evaluation.ragas_eval --no-answer-cache --export @dbArgs 2>&1 | Tee-Object -FilePath $logFile -Append
+if ($LASTEXITCODE -eq 0) {
+    $step3Status = "OK"
+    Write-Log "Step 3 OK"
+} else {
+    $step3Status = "FAILED (exit $LASTEXITCODE)"
+    Write-Log "Step 3 FAILED (exit $LASTEXITCODE) -- see $logFile."
 }
 
 Write-Report
