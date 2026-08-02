@@ -58,13 +58,18 @@ else
 fi
 
 TIMESTAMP="$(date +%Y%m%d_%H%M%S)"
+sanitize_text() {
+  echo "$1" | sed -E 's|(postgresql://[^:]+):[^@]+@|\1:***@|g'
+}
+
 REPORT_DIR="evaluation/results/reprocess/${TIMESTAMP}"
 mkdir -p "$REPORT_DIR"
 LOG_FILE="$REPORT_DIR/reprocess_${TIMESTAMP}.log"
 REPORT_FILE="$REPORT_DIR/reprocess_${TIMESTAMP}_report.txt"
 
 log() {
-  echo "[$(date '+%Y-%m-%d %H:%M:%S')] $*" | tee -a "$LOG_FILE"
+  CLEAN_MSG="$(sanitize_text "$*")"
+  echo "[$(date '+%Y-%m-%d %H:%M:%S')] $CLEAN_MSG" | tee -a "$LOG_FILE"
 }
 
 STEP1_STATUS="SKIPPED"
@@ -72,10 +77,11 @@ STEP2_STATUS="SKIPPED"
 STEP3_STATUS="SKIPPED"
 
 write_report() {
+  CLEAN_ARGS="$(sanitize_text "${DB_ARGS[*]}")"
   {
     echo "Corpus reprocess report -- $TIMESTAMP"
     echo "Python: $PY"
-    echo "DB target args: ${DB_ARGS[*]}"
+    echo "DB target args: $CLEAN_ARGS"
     echo ""
     echo "Step 1 (re-chunk, scripts.ingest_documents --include-existing): $STEP1_STATUS"
     echo "Step 2 (force re-embed, ingestion.embedder --force):            $STEP2_STATUS"

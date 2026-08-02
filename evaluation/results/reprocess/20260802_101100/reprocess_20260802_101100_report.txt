@@ -1,5 +1,5 @@
 Corpus reprocess report -- 20260802_101100
-DB target args: --database-url postgresql://postgres:R6Wy98fCAXC9K7d@permit-rag-postgres.cilq6mc8qbw3.us-east-1.rds.amazonaws.com:5432/permit_rag?sslmode=require
+DB target args: --database-url postgresql://postgres:***@permit-rag-postgres.cilq6mc8qbw3.us-east-1.rds.amazonaws.com:5432/permit_rag?sslmode=require
 
 Step 1 (re-chunk, scripts.ingest_documents --include-existing): FAILED (2026-08-02 10:11:07,929 [INFO] NumExpr defaulting to 8 threads.)
 Step 2 (force re-embed, ingestion.embedder --force):            SKIPPED

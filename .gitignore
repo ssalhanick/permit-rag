@@ -29,8 +29,9 @@ backups/
 .idea/
 *.swp
 
-# ── Cache ────────────────────────────────────────────────
+# ── Cache & Local Reprocess Logs ───────────────────────────
 evaluation/cache/
+evaluation/results/reprocess/
 
 # ── Terraform ─────────────────────────────────────────────
 .terraform/
