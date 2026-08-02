@@ -175,14 +175,14 @@ export default function TasksPage() {
           <h3 className="text-base font-bold text-slate-900">All Tasks</h3>
 
           <div className="flex items-center gap-4">
-            <div className="tt-search-box max-w-xs py-1">
-              <Search className="w-3.5 h-3.5 text-slate-400 mr-1.5" />
+            <div className="relative w-full max-w-xs">
+              <Search className="w-4 h-4 absolute left-3 top-2.5 text-slate-400" />
               <input
                 type="text"
                 placeholder="Search tasks..."
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
-                className="tt-search-input text-xs"
+                className="w-full pl-9 pr-4 py-2 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl text-xs text-slate-900 dark:text-slate-100 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500"
               />
             </div>
 

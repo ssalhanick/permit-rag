@@ -117,15 +117,15 @@ export default function ProjectSwitcher({ onSelect }) {
       {open && (
         <div className="absolute left-0 right-0 sm:right-auto top-full z-50 mt-1.5 w-full sm:min-w-[260px] max-w-[calc(100vw-2.5rem)] rounded-xl border border-slate-700 bg-slate-900 shadow-2xl overflow-hidden animate-in fade-in slide-in-from-top-1">
           <div className="p-2 border-b border-slate-800">
-            <div className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-slate-800 border border-slate-700">
-              <Search className="w-3.5 h-3.5 text-slate-400 flex-shrink-0" />
+            <div className="relative w-full">
+              <Search className="w-3.5 h-3.5 absolute left-3 top-2.5 text-slate-400" />
               <input
                 type="text"
                 autoFocus
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
                 placeholder="Search projects..."
-                className="w-full bg-transparent text-xs text-slate-100 placeholder-slate-400 focus:outline-none"
+                className="w-full pl-8 pr-3 py-2 bg-slate-800 border border-slate-700 rounded-xl text-xs text-slate-100 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500"
               />
             </div>
           </div>

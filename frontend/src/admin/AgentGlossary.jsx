@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect, useState } from "react";
+import { Search } from "lucide-react";
 import { fetchAgentGlossary } from "../api.js";
 
 // Static fallback data in case the API call fails or runs offline
@@ -415,19 +416,33 @@ export default function AgentGlossary() {
 
       {/* Controls: Search & Category Filters */}
       <div style={{ display: "flex", justifyContent: "space-between", gap: "1rem", flexWrap: "wrap", alignItems: "center" }}>
-        <input
-          type="text"
-          placeholder="Search agents by name, function, or metric..."
-          value={search}
-          onChange={(e) => setSearch(e.target.value)}
-          style={{
-            flex: "1 1 300px",
-            padding: "0.5rem 0.875rem",
-            borderRadius: "6px",
-            border: "1px solid #cbd5e1",
-            fontSize: "0.9rem",
-          }}
-        />
+        <div style={{ position: "relative", flex: "1 1 300px" }}>
+          <Search
+            size={14}
+            style={{
+              position: "absolute",
+              left: "0.75rem",
+              top: "50%",
+              transform: "translateY(-50%)",
+              color: "#94a3b8",
+              pointerEvents: "none",
+            }}
+          />
+          <input
+            type="text"
+            placeholder="Search agents by name, function, or metric..."
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            style={{
+              width: "100%",
+              boxSizing: "border-box",
+              padding: "0.5rem 0.875rem 0.5rem 2rem",
+              borderRadius: "6px",
+              border: "1px solid #cbd5e1",
+              fontSize: "0.9rem",
+            }}
+          />
+        </div>
         <div style={{ display: "flex", gap: "0.375rem", flexWrap: "wrap" }}>
           {CATEGORIES.map((cat) => (
             <button
