@@ -136,7 +136,9 @@ enum RoomCaptureEncoder {
         // surface, same space `dimensions` is in; the AR viewer applies
         // transform_matrix on the parent entity to place it in the room.
         if #available(iOS 17.0, *) {
-            payload["polygon_corners"] = surface.polygonCorners.map { corner in
+            let corners = surface.polygonCorners
+            print("[RoomCaptureEncoder] \(category) \(prefix)-\(index): \(corners.count) polygon corners")
+            payload["polygon_corners"] = corners.map { corner in
                 ["x": Double(corner.x), "y": Double(corner.y), "z": Double(corner.z)]
             }
         }

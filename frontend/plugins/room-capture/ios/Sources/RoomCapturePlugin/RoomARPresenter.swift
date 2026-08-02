@@ -25,6 +25,12 @@ final class RoomARPresenter: NSObject, UITableViewDelegate, UITableViewDataSourc
     private weak var plugin: RoomCapturePlugin?
     private var dictateButton: UIButton?
     private var selectedSurfaceId: String? = nil
+    /// Tracks the last wall a material was applied to, independent of
+    /// selectedSurfaceId (which gets cleared after applying so the wall
+    /// shows its real material instead of staying stuck on the blue
+    /// "selected" tint) — nudge falls back to this so it still knows what
+    /// to adjust without requiring a re-tap.
+    private var lastEditedSurfaceId: String? = nil
     private var pointedSurfaceId: String? = nil
     private var raycastTimer: Timer? = nil
     private var hudLabel: UILabel? = nil
@@ -387,14 +393,20 @@ final class RoomARPresenter: NSObject, UITableViewDelegate, UITableViewDataSourc
     private func updatePlacementPreview() {
         guard let arView = arView else { return }
         let center = CGPoint(x: arView.bounds.midX, y: arView.bounds.midY)
-        let results = arView.raycast(from: center, allowing: .estimatedPlane, alignment: .horizontal)
+        // .existingPlaneGeometry only hits a real, ARKit-confirmed ARPlaneAnchor
+        // (formed after panning across a surface for a moment), not just a
+        // rough continuous SLAM guess like .estimatedPlane — that guess was
+        // enabling Lock Anchor too early against unstable placement.
+        let results = arView.raycast(from: center, allowing: .existingPlaneGeometry, alignment: .horizontal)
         guard let hit = results.first else {
             latestPlacementTransform = nil
             lockAnchorButton?.isEnabled = false
+            hudLabel?.text = " Scanning for a surface — slowly move your phone across the floor or a table until it's found"
             return
         }
         latestPlacementTransform = hit.worldTransform
         lockAnchorButton?.isEnabled = true
+        hudLabel?.text = " Surface found — tap Lock Anchor"
         updatePlacementPreviewEntity(worldTransform: hit.worldTransform)
     }
 
@@ -428,8 +440,7 @@ final class RoomARPresenter: NSObject, UITableViewDelegate, UITableViewDataSourc
     private func buildPlacementFootprintEntity() -> Entity {
         let size = estimatedFootprintSize()
         let mesh = MeshResource.generateBox(width: size.x, height: 0.02, depth: size.y)
-        var material = UnlitMaterial()
-        material.color = .init(tint: UIColor.systemBlue.withAlphaComponent(0.35))
+        let material = translucentMaterial(UIColor.systemBlue.withAlphaComponent(0.35))
         return ModelEntity(mesh: mesh, materials: [material])
     }
 
@@ -474,7 +485,21 @@ final class RoomARPresenter: NSObject, UITableViewDelegate, UITableViewDataSourc
         }
         let centroid = calculateCentroid()
         let floorY = estimatedFloorY()
-        let anchor = AnchorEntity(world: worldTransform)
+        // AnchorEntity(world:) anchors at the FULL transform, rotation
+        // included — for a horizontal-plane raycast hit, that rotation has
+        // an arbitrary heading (tied to whichever way the phone happened to
+        // face when the plane was first detected), not the room's own
+        // captured heading. Using it wholesale silently rotated the entire
+        // captured room by that arbitrary amount, which is why the result
+        // only looked right from the one angle that happened to match (phone
+        // held parallel to the floor) and came out mirrored/distorted from
+        // any other angle. Anchor to the hit's POSITION only, with a fixed
+        // identity rotation, so the room keeps the same orientation it was
+        // captured in regardless of which way the user faced when locking.
+        let hitPosition = SIMD3<Float>(worldTransform.columns.3.x, worldTransform.columns.3.y, worldTransform.columns.3.z)
+        var anchorTransform = matrix_identity_float4x4
+        anchorTransform.columns.3 = SIMD4<Float>(hitPosition.x, hitPosition.y, hitPosition.z, 1)
+        let anchor = AnchorEntity(world: anchorTransform)
         anchor.position -= SIMD3<Float>(centroid.x, floorY, centroid.z)
         populateRoomEntities(in: anchor)
         arView.scene.addAnchor(anchor)
@@ -517,23 +542,27 @@ final class RoomARPresenter: NSObject, UITableViewDelegate, UITableViewDataSourc
     }
 
     /// Detected fixtures/appliances (sinks, refrigerators, etc.) — read-only:
-    /// no collision shapes, not addressable by surfaceId, so they never enter
-    /// the tap-to-select/paint-picker/nudge flow that surfaces use.
+    /// not addressable by surfaceId, so they never enter the tap-to-select/
+    /// paint-picker/nudge flow that surfaces use. Collision shapes ARE needed
+    /// here even though they're read-only, so a tap on an object stops there
+    /// (occluding it) instead of passing through to whatever's behind it —
+    /// entity(at:) hit-tests render geometry, not just collidable objects.
     private func buildObjectEntity(object: [String: Any], index: Int) -> Entity {
         let dims = object["dimensions"] as? [String: Double] ?? [:]
         let width = Float(dims["width"] ?? 0.3)
         let height = Float(dims["height"] ?? 0.3)
         let depth = Float(dims["depth"] ?? 0.3)
         let objectId = object["id"] as? String ?? "object_\(index)"
+        let category = object["category"] as? String ?? ""
 
         let parent = Entity()
         parent.name = objectId
 
         let mesh = MeshResource.generateBox(width: width, height: height, depth: depth)
-        var material = UnlitMaterial()
-        material.color = .init(tint: UIColor.systemOrange.withAlphaComponent(0.45))
+        let material = translucentMaterial(objectCategoryTint(category).withAlphaComponent(0.3))
         let child = ModelEntity(mesh: mesh, materials: [material])
         child.name = objectId
+        child.generateCollisionShapes(recursive: true)
         parent.addChild(child)
 
         if let matrixArray = object["transform_matrix"] as? [Double],
@@ -542,6 +571,23 @@ final class RoomARPresenter: NSObject, UITableViewDelegate, UITableViewDataSourc
         }
 
         return parent
+    }
+
+    /// Rough category grouping so adjacent fixtures (e.g. a fridge next to a
+    /// countertop) read as different kinds of thing rather than uniform
+    /// orange boxes. Category strings match RoomCaptureEncoder's snake_case
+    /// mapping of CapturedRoom.Object.Category.
+    private func objectCategoryTint(_ category: String) -> UIColor {
+        switch category {
+        case "sink", "toilet", "bathtub":
+            return .systemTeal
+        case "refrigerator", "stove", "oven", "dishwasher", "washer_dryer":
+            return .systemOrange
+        case "bed", "table", "sofa", "chair":
+            return .systemPurple
+        default:
+            return .systemYellow
+        }
     }
 
     /// Reconciles existing entities against current surfaces/overlays in
@@ -569,8 +615,15 @@ final class RoomARPresenter: NSObject, UITableViewDelegate, UITableViewDataSourc
             for (i, spec) in specs.enumerated() {
                 if i < existingChildren.count {
                     let child = existingChildren[i]
-                    child.model?.mesh = spec.mesh
-                    child.model?.materials = [spec.material]
+                    // Reassign the whole ModelComponent rather than mutating
+                    // .mesh/.materials in place. RealityKit has a documented
+                    // issue where visual updates (including transparency)
+                    // don't reliably take effect from a sub-property mutation
+                    // on an existing component — very likely why nudge's
+                    // position/size changes weren't visible in the scene
+                    // despite the underlying data (HUD x_min/x_max) updating
+                    // correctly every time.
+                    child.model = ModelComponent(mesh: spec.mesh, materials: [spec.material])
                     child.position = spec.localPosition
                     child.generateCollisionShapes(recursive: true)
                 } else {
@@ -585,6 +638,11 @@ final class RoomARPresenter: NSObject, UITableViewDelegate, UITableViewDataSourc
                 for extra in existingChildren[specs.count...] {
                     extra.removeFromParent()
                 }
+            }
+
+            if cat == "wall" {
+                let dims = surface["dimensions"] as? [String: Double] ?? [:]
+                applySelectionOutline(to: parent, isSelected: isSelected, width: Float(dims["width"] ?? 1), height: Float(dims["height"] ?? 2.4))
             }
         }
         preloadOverlayTextures()
@@ -646,25 +704,23 @@ final class RoomARPresenter: NSObject, UITableViewDelegate, UITableViewDataSourc
                 let overlays = activeOverlays().filter { ($0["surface_id"] as? String) == surfaceId }
                 
                 for (idx, subEntity) in parentEntity.children.enumerated() {
-                    guard let modelEntity = subEntity as? ModelEntity else { continue }
-                    
+                    guard let modelEntity = subEntity as? ModelEntity, let existingMesh = modelEntity.model?.mesh else { continue }
+
                     let material: Material
                     if category == "door" {
-                        var unlit = UnlitMaterial()
-                        unlit.color = .init(tint: isSelected ? UIColor.systemBlue.withAlphaComponent(0.65) : (isPointed ? UIColor.systemGreen.withAlphaComponent(0.35) : (UIColor(hex: "#8B5A2B")?.withAlphaComponent(0.4) ?? .brown.withAlphaComponent(0.4))))
-                        material = unlit
+                        material = translucentMaterial(isPointed ? UIColor.systemGreen.withAlphaComponent(0.35) : (UIColor(hex: "#8B5A2B")?.withAlphaComponent(0.4) ?? .brown.withAlphaComponent(0.4)))
                     } else if category == "window" {
-                        var unlit = UnlitMaterial()
-                        unlit.color = .init(tint: isSelected ? UIColor.systemBlue.withAlphaComponent(0.65) : (isPointed ? UIColor.systemGreen.withAlphaComponent(0.35) : (UIColor(hex: "#ADD8E6")?.withAlphaComponent(0.3) ?? .blue.withAlphaComponent(0.3))))
-                        material = unlit
+                        material = translucentMaterial(isPointed ? UIColor.systemGreen.withAlphaComponent(0.35) : (UIColor(hex: "#ADD8E6")?.withAlphaComponent(0.3) ?? .blue.withAlphaComponent(0.3)))
                     } else if category == "opening" {
-                        var unlit = UnlitMaterial()
-                        unlit.color = .init(tint: isSelected ? UIColor.systemBlue.withAlphaComponent(0.65) : (isPointed ? UIColor.systemGreen.withAlphaComponent(0.35) : UIColor.lightGray.withAlphaComponent(0.15)))
-                        material = unlit
+                        material = translucentMaterial(isPointed ? UIColor.systemGreen.withAlphaComponent(0.35) : UIColor.lightGray.withAlphaComponent(0.15))
                     } else if category == "floor" {
-                        var unlit = UnlitMaterial()
-                        unlit.color = .init(tint: isSelected ? UIColor.systemBlue.withAlphaComponent(0.65) : (isPointed ? UIColor.systemGreen.withAlphaComponent(0.35) : (UIColor(hex: "#C2A878")?.withAlphaComponent(0.35) ?? .gray.withAlphaComponent(0.35))))
-                        material = unlit
+                        if isPointed {
+                            material = translucentMaterial(UIColor.systemGreen.withAlphaComponent(0.35))
+                        } else if let overlay = overlayForSurface(surfaceId) {
+                            material = materialForOverlay(overlay, texture: textureForOverlay(overlay), isSelected: isSelected, isPointed: isPointed)
+                        } else {
+                            material = translucentMaterial(UIColor(hex: "#C2A878")?.withAlphaComponent(0.35) ?? .gray.withAlphaComponent(0.35))
+                        }
                     } else {
                         // Wall
                         if overlays.isEmpty {
@@ -672,20 +728,20 @@ final class RoomARPresenter: NSObject, UITableViewDelegate, UITableViewDataSourc
                             if let overlay {
                                 material = materialForOverlay(overlay, texture: textureForOverlay(overlay), isSelected: isSelected, isPointed: isPointed)
                             } else {
-                                var unlit = UnlitMaterial()
-                                unlit.color = .init(tint: isSelected ? UIColor.systemBlue.withAlphaComponent(0.6) : (isPointed ? UIColor.systemGreen.withAlphaComponent(0.35) : UIColor.white.withAlphaComponent(0.2)))
-                                material = unlit
+                                material = translucentMaterial(isPointed ? UIColor.systemGreen.withAlphaComponent(0.35) : UIColor.white.withAlphaComponent(0.2))
                             }
                         } else if idx < overlays.count {
                             let overlay = overlays[idx]
                             material = materialForOverlay(overlay, texture: textureForOverlay(overlay), isSelected: isSelected, isPointed: isPointed)
                         } else {
-                            var unlit = UnlitMaterial()
-                            unlit.color = .init(tint: isSelected ? UIColor.systemBlue.withAlphaComponent(0.6) : (isPointed ? UIColor.systemGreen.withAlphaComponent(0.35) : UIColor.white.withAlphaComponent(0.2)))
-                            material = unlit
+                            material = translucentMaterial(isPointed ? UIColor.systemGreen.withAlphaComponent(0.35) : UIColor.white.withAlphaComponent(0.2))
                         }
                     }
-                    modelEntity.model?.materials = [material]
+                    // Reassign the whole ModelComponent rather than mutating
+                    // .materials in place — see translucentMaterial's comment;
+                    // RealityKit doesn't reliably pick up transparency changes
+                    // from a sub-property mutation on an existing component.
+                    modelEntity.model = ModelComponent(mesh: existingMesh, materials: [material])
                 }
             }
         }
@@ -787,26 +843,78 @@ final class RoomARPresenter: NSObject, UITableViewDelegate, UITableViewDataSourc
         return nil
     }
 
-    private func materialForOverlay(_ overlay: [String: Any], texture: TextureResource? = nil, isSelected: Bool = false, isPointed: Bool = false) -> Material {
-        if isSelected {
-            var material = UnlitMaterial()
-            material.color = .init(tint: UIColor.systemBlue.withAlphaComponent(0.65))
-            return material
+    /// UnlitMaterial with real alpha blending applied. Tint alpha alone does
+    /// not make a RealityKit material transparent — UnlitMaterial defaults to
+    /// opaque blending regardless of the tint color's alpha channel (this
+    /// silent no-op is a documented RealityKit behavior, worse on iOS 18+
+    /// where an alpha:0 tint with no explicit blending mode renders fully
+    /// opaque rather than invisible). opacityThreshold is set alongside
+    /// blending because of a separate documented RealityKit culling bug that
+    /// only resolves once opacityThreshold has an explicit value, even 0.0.
+    /// This is the root cause of every overlay/object rendering as a full-
+    /// opacity blob regardless of alpha or the HUD opacity slider.
+    private func translucentMaterial(_ color: UIColor, texture: TextureResource? = nil) -> UnlitMaterial {
+        var material = UnlitMaterial()
+        if let texture {
+            material.color = .init(tint: color, texture: .init(texture))
+        } else {
+            material.color = .init(tint: color)
         }
+        let alpha = Float(color.cgColor.alpha)
+        material.blending = .transparent(opacity: .init(floatLiteral: alpha))
+        material.opacityThreshold = 0.0
+        return material
+    }
+
+    /// isSelected no longer overrides color to solid blue here — that made a
+    /// selected wall's real applied material unreadable, and stayed stuck
+    /// blue-looking even right after a new material was applied. Selection
+    /// is shown via applySelectionOutline's border frame instead, so the
+    /// wall's actual material/texture always renders.
+    private func materialForOverlay(_ overlay: [String: Any], texture: TextureResource? = nil, isSelected: Bool = false, isPointed: Bool = false) -> Material {
         if isPointed {
-            var material = UnlitMaterial()
-            material.color = .init(tint: UIColor.systemGreen.withAlphaComponent(0.35))
-            return material
+            return translucentMaterial(UIColor.systemGreen.withAlphaComponent(0.35))
         }
         if let texture {
-            var material = UnlitMaterial()
-            material.color = .init(tint: .white.withAlphaComponent(CGFloat(overlayOpacity)), texture: .init(texture))
-            return material
+            return translucentMaterial(.white.withAlphaComponent(CGFloat(overlayOpacity)), texture: texture)
         }
         let hex = overlay["color_hex"] as? String ?? "#FFFFFF"
-        var material = UnlitMaterial()
-        material.color = .init(tint: (UIColor(hex: hex) ?? .white).withAlphaComponent(CGFloat(overlayOpacity)))
-        return material
+        return translucentMaterial((UIColor(hex: hex) ?? .white).withAlphaComponent(CGFloat(overlayOpacity)))
+    }
+
+    /// Thin bright border frame around a wall's real footprint, shown while
+    /// selected — replaces tinting the whole surface solid blue (which hid
+    /// the wall's actual material and looked "stuck selected" even after a
+    /// new material was applied). Scoped to walls only for now: door/window/
+    /// opening/floor just stop being forced blue when selected, without a
+    /// replacement highlight, since their border geometry/orientation would
+    /// need separate handling (floor's border would need to lie flat in the
+    /// XZ plane, not stand upright in XY like a wall's).
+    private func applySelectionOutline(to parent: Entity, isSelected: Bool, width: Float, height: Float) {
+        let outlineName = "\(parent.name)_outline"
+        for existing in parent.children where existing.name == outlineName {
+            existing.removeFromParent()
+        }
+        guard isSelected else { return }
+
+        let thickness: Float = 0.02
+        let barDepth: Float = 0.06
+        let material = UnlitMaterial(color: .cyan)
+
+        func bar(width w: Float, height h: Float, x: Float, y: Float) -> ModelEntity {
+            let mesh = MeshResource.generateBox(width: max(w, 0.001), height: max(h, 0.001), depth: barDepth)
+            let entity = ModelEntity(mesh: mesh, materials: [material])
+            entity.position = SIMD3<Float>(x, y, 0)
+            return entity
+        }
+
+        let outline = Entity()
+        outline.name = outlineName
+        outline.addChild(bar(width: width, height: thickness, x: 0, y: height / 2))
+        outline.addChild(bar(width: width, height: thickness, x: 0, y: -height / 2))
+        outline.addChild(bar(width: thickness, height: height, x: -width / 2, y: 0))
+        outline.addChild(bar(width: thickness, height: height, x: width / 2, y: 0))
+        parent.addChild(outline)
     }
 
     func applyMaterial(
@@ -830,6 +938,9 @@ final class RoomARPresenter: NSObject, UITableViewDelegate, UITableViewDataSourc
         }
         if let imageUrl {
             overlay["image_url"] = imageUrl
+        }
+        if let surfaceId {
+            lastEditedSurfaceId = surfaceId
         }
 
         if let version = redesign["schema_version"] as? String, version == "2.0",
@@ -1063,6 +1174,12 @@ final class RoomARPresenter: NSObject, UITableViewDelegate, UITableViewDataSourc
                     colorHex: preset.colorHex,
                     type: preset.type
                 )
+                // Same as showMaterialPicker: clear selection so the wall
+                // shows its real material instead of staying stuck blue.
+                // This path never did this even before today's changes.
+                self.selectedSurfaceId = nil
+                self.updateWallMaterials()
+                self.updateDictateButtonTitle()
             }
             alert.addAction(action)
         }
@@ -1114,6 +1231,10 @@ final class RoomARPresenter: NSObject, UITableViewDelegate, UITableViewDataSourc
                     colorHex: preset.colorHex,
                     type: preset.type
                 )
+                // Clear selection so the wall shows its real applied material
+                // instead of staying stuck on the blue "selected" tint —
+                // applyMaterial already recorded lastEditedSurfaceId, so
+                // nudge still works on this wall without needing a re-tap.
                 self.selectedSurfaceId = nil
                 self.updateWallMaterials()
                 self.updateDictateButtonTitle()
@@ -1128,13 +1249,22 @@ final class RoomARPresenter: NSObject, UITableViewDelegate, UITableViewDataSourc
         viewController?.present(alert, animated: true)
     }
 
-    /// Builds a flat mesh from RoomPlan's real wall polygon (iOS 17+) instead
-    /// of a rectangular box — nil if unavailable (older scan, pre-iOS 17
-    /// capture, or too few points), so callers fall back to generateBox.
-    /// Emits both triangle windings so the wall renders from either side
-    /// regardless of material face-culling defaults.
+    /// Builds a flat mesh from RoomPlan's real footprint polygon (iOS 17+) —
+    /// only ever populated for floors (confirmed on-device: walls/doors/
+    /// windows/openings always report 0 corners, since they're simple
+    /// rectangles already fully described by dimensions). Nil if unavailable,
+    /// so the floor case falls back to generateBox. Emits both triangle
+    /// windings so it renders from either side regardless of material
+    /// face-culling defaults.
     private func polygonMesh(from corners: [[String: Any]]?) -> MeshResource? {
-        guard let corners, corners.count >= 3 else { return nil }
+        guard let corners else {
+            print("[RoomAR] polygonMesh: surface has no polygon_corners field at all")
+            return nil
+        }
+        guard corners.count >= 3 else {
+            print("[RoomAR] polygonMesh: only \(corners.count) corner(s), need >= 3")
+            return nil
+        }
         let points: [SIMD3<Float>] = corners.map {
             SIMD3<Float>(
                 Float($0["x"] as? Double ?? 0),
@@ -1142,8 +1272,22 @@ final class RoomARPresenter: NSObject, UITableViewDelegate, UITableViewDataSourc
                 Float($0["z"] as? Double ?? 0)
             )
         }
+        // Diagnostic for the reported floor offset: this mesh is placed at
+        // localPosition .zero under a parent positioned by the surface's own
+        // transform_matrix, which only renders in sync with the real floor
+        // if polygon_corners are already centered on that same local origin.
+        // If this bbox center isn't ~(0,0), RoomPlan's polygonCorners aren't
+        // centered the way dimensions/transform assume, and that delta is
+        // the offset — logging it beats guessing at a coordinate fix blind.
+        let cornerMinX = points.map(\.x).min() ?? 0
+        let cornerMaxX = points.map(\.x).max() ?? 0
+        let cornerMinZ = points.map(\.z).min() ?? 0
+        let cornerMaxZ = points.map(\.z).max() ?? 0
+        print("[RoomAR] polygonMesh: corner bbox center = (\((cornerMinX + cornerMaxX) / 2), \((cornerMinZ + cornerMaxZ) / 2)) — should be ~(0, 0) if corners are centered on the surface's local origin")
         var descriptor = MeshDescriptor(name: "wallPolygon")
         descriptor.positions = MeshBuffers.Positions(points)
+        let normals = Array(repeating: SIMD3<Float>(0, 0, 1), count: points.count)
+        descriptor.normals = MeshBuffers.Normals(normals)
         var indices: [UInt32] = []
         for i in 1..<(points.count - 1) {
             indices.append(0)
@@ -1154,7 +1298,12 @@ final class RoomARPresenter: NSObject, UITableViewDelegate, UITableViewDataSourc
             indices.append(UInt32(i))
         }
         descriptor.primitives = .triangles(indices)
-        return try? MeshResource.generate(from: [descriptor])
+        do {
+            return try MeshResource.generate(from: [descriptor])
+        } catch {
+            print("[RoomAR] polygonMesh: MeshResource.generate failed for \(corners.count) corners: \(error.localizedDescription)")
+            return nil
+        }
     }
 
     private struct WallSegmentSpec {
@@ -1183,39 +1332,47 @@ final class RoomARPresenter: NSObject, UITableViewDelegate, UITableViewDataSourc
         case "floor":
             // Floor surfaces are flat: RoomPlan reports the second planar extent
             // in the "depth" field rather than a vertical height, so swap axes
-            // and use a thin fixed thickness for visibility.
-            let mesh = MeshResource.generateBox(width: width, height: 0.02, depth: depth)
-            var unlit = UnlitMaterial()
-            unlit.color = .init(tint: isSelected ? UIColor.systemBlue.withAlphaComponent(0.65) : (isPointed ? UIColor.systemGreen.withAlphaComponent(0.35) : (UIColor(hex: "#C2A878")?.withAlphaComponent(0.35) ?? .gray.withAlphaComponent(0.35))))
-            return [WallSegmentSpec(mesh: mesh, material: unlit, localPosition: .zero)]
+            // and use a thin fixed thickness for visibility. Floors are also
+            // the one category that can be genuinely non-rectangular (an
+            // L-shaped or notched room), so use the real footprint polygon
+            // when RoomPlan reports one — confirmed on-device that walls/
+            // doors/windows/openings never populate polygon_corners at all
+            // (they're always simple rectangles), only floors do.
+            let polygon = polygonMesh(from: surface["polygon_corners"] as? [[String: Any]])
+            let mesh = polygon ?? MeshResource.generateBox(width: width, height: 0.02, depth: depth)
+            print("[RoomAR] Floor mesh source for \(surfaceId ?? "?"): \(polygon != nil ? "real polygon" : "box fallback")")
+            let floorMaterial: Material
+            if isPointed {
+                floorMaterial = translucentMaterial(UIColor.systemGreen.withAlphaComponent(0.35))
+            } else if let overlay = overlayForSurface(surfaceId) {
+                floorMaterial = materialForOverlay(overlay, texture: textureForOverlay(overlay), isSelected: isSelected, isPointed: isPointed)
+            } else {
+                floorMaterial = translucentMaterial(UIColor(hex: "#C2A878")?.withAlphaComponent(0.35) ?? .gray.withAlphaComponent(0.35))
+            }
+            return [WallSegmentSpec(mesh: mesh, material: floorMaterial, localPosition: .zero)]
         case "door":
             let mesh = MeshResource.generateBox(width: width, height: height, depth: 0.05)
-            var unlit = UnlitMaterial()
-            unlit.color = .init(tint: isSelected ? UIColor.systemBlue.withAlphaComponent(0.65) : (isPointed ? UIColor.systemGreen.withAlphaComponent(0.35) : (UIColor(hex: "#8B5A2B")?.withAlphaComponent(0.4) ?? .brown.withAlphaComponent(0.4))))
-            return [WallSegmentSpec(mesh: mesh, material: unlit, localPosition: SIMD3<Float>(0, 0, 0.005))]
+            let material = translucentMaterial(isPointed ? UIColor.systemGreen.withAlphaComponent(0.35) : (UIColor(hex: "#8B5A2B")?.withAlphaComponent(0.4) ?? .brown.withAlphaComponent(0.4)))
+            return [WallSegmentSpec(mesh: mesh, material: material, localPosition: SIMD3<Float>(0, 0, 0.005))]
         case "window":
             let mesh = MeshResource.generateBox(width: width, height: height, depth: 0.05)
-            var unlit = UnlitMaterial()
-            unlit.color = .init(tint: isSelected ? UIColor.systemBlue.withAlphaComponent(0.65) : (isPointed ? UIColor.systemGreen.withAlphaComponent(0.35) : (UIColor(hex: "#ADD8E6")?.withAlphaComponent(0.3) ?? .blue.withAlphaComponent(0.3))))
-            return [WallSegmentSpec(mesh: mesh, material: unlit, localPosition: SIMD3<Float>(0, 0, 0.005))]
+            let material = translucentMaterial(isPointed ? UIColor.systemGreen.withAlphaComponent(0.35) : (UIColor(hex: "#ADD8E6")?.withAlphaComponent(0.3) ?? .blue.withAlphaComponent(0.3)))
+            return [WallSegmentSpec(mesh: mesh, material: material, localPosition: SIMD3<Float>(0, 0, 0.005))]
         case "opening":
             let mesh = MeshResource.generateBox(width: width, height: height, depth: 0.05)
-            var unlit = UnlitMaterial()
-            unlit.color = .init(tint: isSelected ? UIColor.systemBlue.withAlphaComponent(0.65) : (isPointed ? UIColor.systemGreen.withAlphaComponent(0.35) : UIColor.lightGray.withAlphaComponent(0.15)))
-            return [WallSegmentSpec(mesh: mesh, material: unlit, localPosition: SIMD3<Float>(0, 0, 0.005))]
+            let material = translucentMaterial(isPointed ? UIColor.systemGreen.withAlphaComponent(0.35) : UIColor.lightGray.withAlphaComponent(0.15))
+            return [WallSegmentSpec(mesh: mesh, material: material, localPosition: SIMD3<Float>(0, 0, 0.005))]
         default:
-            // Wall category
+            // Wall category — always a simple rectangle in RoomPlan's model
+            // (never populates polygon_corners), so a box is the real,
+            // complete geometry here, not a stand-in for something better.
             if overlays.isEmpty {
-                let polygon = polygonMesh(from: surface["polygon_corners"] as? [[String: Any]])
-                let mesh = polygon ?? MeshResource.generateBox(width: width, height: height, depth: 0.05)
-                print("[RoomAR] Wall mesh source for \(surfaceId ?? "?"): \(polygon != nil ? "real polygon" : "box fallback")")
+                let mesh = MeshResource.generateBox(width: width, height: height, depth: 0.05)
                 let material: Material
                 if let overlay = overlayForSurface(surfaceId) {
                     material = materialForOverlay(overlay, texture: textureForOverlay(overlay), isSelected: isSelected, isPointed: isPointed)
                 } else {
-                    var unlit = UnlitMaterial()
-                    unlit.color = .init(tint: isSelected ? UIColor.systemBlue.withAlphaComponent(0.6) : (isPointed ? UIColor.systemGreen.withAlphaComponent(0.35) : UIColor.white.withAlphaComponent(0.2)))
-                    material = unlit
+                    material = translucentMaterial(isPointed ? UIColor.systemGreen.withAlphaComponent(0.35) : UIColor.white.withAlphaComponent(0.2))
                 }
                 return [WallSegmentSpec(mesh: mesh, material: material, localPosition: .zero)]
             }
@@ -1257,6 +1414,11 @@ final class RoomARPresenter: NSObject, UITableViewDelegate, UITableViewDataSourc
             child.position = spec.localPosition
             child.generateCollisionShapes(recursive: true)
             parent.addChild(child)
+        }
+
+        if category == "wall" {
+            let dims = surface["dimensions"] as? [String: Double] ?? [:]
+            applySelectionOutline(to: parent, isSelected: isSelected, width: Float(dims["width"] ?? 1), height: Float(dims["height"] ?? 2.4))
         }
 
         if let matrixArray = surface["transform_matrix"] as? [Double],
@@ -1329,7 +1491,7 @@ final class RoomARPresenter: NSObject, UITableViewDelegate, UITableViewDataSourc
     }
 
     private func updateOverlayValue(xShift: Float = 0, yShift: Float = 0, wScale: Float = 1, hScale: Float = 1) {
-        guard let selectedId = selectedSurfaceId else { return }
+        guard let selectedId = selectedSurfaceId ?? lastEditedSurfaceId else { return }
         
         var overlays = activeOverlays()
         
