@@ -650,6 +650,12 @@ class ProjectResponse(BaseModel):
     name: str
     description: str | None = None
     owner_user_id: UUID
+    owner_username: str | None = Field(
+        default=None, description="Owner's username — only populated for staff (list_all_projects)."
+    )
+    owner_email: str | None = Field(
+        default=None, description="Owner's email — only populated for staff (list_all_projects)."
+    )
     municipality: str | None = None
     is_archived: bool
     deleted_at: datetime | None = None

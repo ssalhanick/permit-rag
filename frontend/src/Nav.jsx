@@ -1,6 +1,7 @@
 import React, { useState, useRef, useEffect } from "react";
 import { NavLink, useLocation } from "react-router-dom";
 import { useAuth } from "./context/AuthContext.jsx";
+import { useIsSuperAdmin } from "./hooks/useIsSuperAdmin.js";
 import {
   LayoutDashboard,
   FolderKanban,
@@ -57,7 +58,7 @@ export default function Nav() {
     .substring(0, 2)
     .toUpperCase();
 
-  const isSuperAdmin = user?.role === "superadmin" || user?.is_superadmin;
+  const isSuperAdmin = useIsSuperAdmin();
 
   return (
     <header className="tt-nav-wrapper">

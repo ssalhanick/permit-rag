@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { useAuth } from "./context/AuthContext.jsx";
+import { useIsSuperAdmin } from "./hooks/useIsSuperAdmin.js";
 import { fetchProjects } from "./api.js";
 import { loadProjectTasks, saveProjectTasks } from "./services/taskStorage.js";
 import { parseMoneyNum } from "./utils/parseMoneyNum.js";
@@ -14,11 +15,14 @@ import {
   CheckSquare,
   ArrowRight,
   ChevronRight,
-  Check
+  Check,
+  Lock
 } from "lucide-react";
 
 export default function DashboardPage() {
   const { user, setActiveProject } = useAuth();
+  const isSuperAdmin = useIsSuperAdmin();
+  const userId = user?.id || user?.user_id;
   const navigate = useNavigate();
   const [projects, setProjects] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -217,20 +221,37 @@ export default function DashboardPage() {
           </div>
         ) : (
           <div className="tt-projects-grid">
-            {activeProjects.map((p) => (
+            {activeProjects.map((p) => {
+              // Superadmins see every project blended into this list (backend
+              // read-bypass, docs/cognito_groups_rbac.md); other users' rows
+              // are shown but fully inert -- visible for context, not a
+              // read-only detail view -- so an admin can't casually open
+              // someone else's workspace from a dashboard grid.
+              const isOtherUsersProject = isSuperAdmin && p.owner_user_id && p.owner_user_id !== userId;
+              return (
               <div
                 key={p.id}
-                className="tt-project-card tt-project-card-clickable"
-                onClick={(e) => handleOpenProject(e, p.id)}
+                className={`tt-project-card${isOtherUsersProject ? " tt-project-card-inert" : " tt-project-card-clickable"}`}
+                onClick={isOtherUsersProject ? undefined : (e) => handleOpenProject(e, p.id)}
+                aria-disabled={isOtherUsersProject || undefined}
               >
                 <div className="tt-project-card-header">
                   <div>
-                    <h3 className="tt-project-title">{p.name}</h3>
+                    <h3 className="tt-project-title">
+                      {p.name}
+                      {isOtherUsersProject && <Lock className="tt-project-lock-icon" aria-hidden="true" />}
+                    </h3>
                     <span className="tt-project-badge tt-badge-in-progress">
                       In Progress
                     </span>
                   </div>
                 </div>
+
+                {isOtherUsersProject && (
+                  <p className="tt-project-owner-label">
+                    Owned by {p.owner_username || p.owner_email || "another user"}
+                  </p>
+                )}
 
                 <p className="text-sm text-slate-500 line-clamp-1 mt-1">
                   {p.address || p.description || "Home improvement project workspace"}
@@ -254,13 +275,21 @@ export default function DashboardPage() {
                     <span className="tt-budget-label">Municipality:</span>{" "}
                     <strong>{p.municipality || "Local"}</strong>
                   </div>
-                  <div className="tt-project-duedate text-blue-600 font-medium flex items-center">
-                    <span>Open Dashboard</span>
-                    <ArrowRight className="w-3.5 h-3.5 ml-1" />
-                  </div>
+                  {isOtherUsersProject ? (
+                    <div className="tt-project-duedate text-slate-400 font-medium flex items-center">
+                      <Lock className="w-3 h-3 mr-1" />
+                      <span>Not yours to open</span>
+                    </div>
+                  ) : (
+                    <div className="tt-project-duedate text-blue-600 font-medium flex items-center">
+                      <span>Open Dashboard</span>
+                      <ArrowRight className="w-3.5 h-3.5 ml-1" />
+                    </div>
+                  )}
                 </div>
               </div>
-            ))}
+              );
+            })}
           </div>
         )}
       </section>

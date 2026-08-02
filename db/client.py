@@ -1688,7 +1688,13 @@ def list_all_projects(
     search: str | None = None,
     has_room_scans: bool | None = None,
 ) -> list[dict[str, Any]]:
-    """All projects regardless of membership — staff (admin/superadmin) read bypass."""
+    """All projects regardless of membership — staff (admin/superadmin) read bypass.
+
+    Joins the owner's username/email onto each row (owner_username,
+    owner_email) — only ever called from the staff-bypass branch of
+    list_projects, so there's no privacy concern in always including it here;
+    the member-scoped list_projects_for_user() deliberately does not.
+    """
     where = []
     params: dict[str, Any] = {}
 
@@ -1718,8 +1724,9 @@ def list_all_projects(
 
     where_clause = f"WHERE {' AND '.join(where)}" if where else ""
     sql = f"""
-        SELECT p.*
+        SELECT p.*, u.username AS owner_username, u.email AS owner_email
         FROM projects p
+        LEFT JOIN users u ON u.id = p.owner_user_id
         {where_clause}
         ORDER BY p.created_at DESC;
     """

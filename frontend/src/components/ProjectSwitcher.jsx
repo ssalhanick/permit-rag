@@ -1,11 +1,14 @@
 import React, { useEffect, useRef, useState } from "react";
 import { NavLink } from "react-router-dom";
 import { useAuth } from "../context/AuthContext.jsx";
+import { useIsSuperAdmin } from "../hooks/useIsSuperAdmin.js";
 import { fetchProjects } from "../api.js";
-import { Check, ChevronDown, Folder, Search } from "lucide-react";
+import { Check, ChevronDown, Folder, Lock, Search } from "lucide-react";
 
 export default function ProjectSwitcher({ onSelect }) {
-  const { activeProject, setActiveProject } = useAuth();
+  const { user, activeProject, setActiveProject } = useAuth();
+  const isSuperAdmin = useIsSuperAdmin();
+  const userId = user?.id || user?.user_id;
   const [open, setOpen] = useState(false);
   const [projects, setProjects] = useState([]);
   const [loading, setLoading] = useState(false);
@@ -57,6 +60,12 @@ export default function ProjectSwitcher({ onSelect }) {
   });
 
   const handlePick = async (projectObj) => {
+    // Other users' projects render inert for superadmins (see the list item
+    // below) -- this is a defense-in-depth guard against that ever being
+    // bypassed, not the only thing preventing the switch.
+    if (isSuperAdmin && projectObj.owner_user_id && projectObj.owner_user_id !== userId) {
+      return;
+    }
     // setActiveProject expects a plain project id string, not the whole
     // project object -- passing the object sent a nested value where the
     // backend PATCH expects a UUID, so the switch silently never took effect.
@@ -156,22 +165,35 @@ export default function ProjectSwitcher({ onSelect }) {
             {!loading &&
               filtered.map((p) => {
                 const isSelected = activeProject?.id === p.id || activeProject?.name === p.name;
+                const isOtherUsersProject = isSuperAdmin && p.owner_user_id && p.owner_user_id !== userId;
                 return (
-                  <li key={p.id || p.name} role="option" aria-selected={isSelected}>
+                  <li key={p.id || p.name} role="option" aria-selected={isSelected} aria-disabled={isOtherUsersProject || undefined}>
                     <button
                       type="button"
+                      disabled={isOtherUsersProject}
                       className={`flex w-full items-center justify-between px-3 py-2 rounded-lg text-left text-xs transition-colors ${
-                        isSelected
+                        isOtherUsersProject
+                          ? "text-slate-500 cursor-default opacity-60"
+                          : isSelected
                           ? "bg-blue-900/40 text-blue-200 font-semibold"
                           : "text-slate-200 hover:bg-slate-800/80"
                       }`}
                       onClick={() => handlePick(p)}
                     >
                       <div className="flex flex-col min-w-0">
-                        <span className="truncate">{p.name}</span>
-                        {p.category && <span className="text-[10px] text-slate-400">{p.category}</span>}
+                        <span className="truncate flex items-center gap-1.5">
+                          {p.name}
+                          {isOtherUsersProject && <Lock className="w-3 h-3 flex-shrink-0" />}
+                        </span>
+                        {isOtherUsersProject ? (
+                          <span className="text-[10px] text-slate-500">
+                            Owned by {p.owner_username || p.owner_email || "another user"}
+                          </span>
+                        ) : (
+                          p.category && <span className="text-[10px] text-slate-400">{p.category}</span>
+                        )}
                       </div>
-                      {isSelected && (
+                      {isSelected && !isOtherUsersProject && (
                         <Check className="w-3.5 h-3.5 text-blue-400 flex-shrink-0 ml-2 stroke-[3]" />
                       )}
                     </button>
