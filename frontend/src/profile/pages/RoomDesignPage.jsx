@@ -402,6 +402,7 @@ export default function RoomDesignPage({ libraryMode = false }) {
         data: dxf,
         directory: Directory.Cache,
         encoding: Encoding.UTF8,
+        recursive: true,
       });
       const uri = await Filesystem.getUri({ path, directory: Directory.Cache });
       if (isNativePlatform()) {
@@ -491,75 +492,88 @@ export default function RoomDesignPage({ libraryMode = false }) {
           onChange={(e) => setUtterance(e.target.value)}
         />
 
-        <div className="flex flex-wrap items-center gap-2">
-          <button
-            type="button"
-            className="tt-btn-primary flex items-center gap-1.5 text-xs px-4 py-2.5 rounded-xl"
-            onClick={handlePreview}
-            disabled={busy}
-          >
-            <Eye className="w-3.5 h-3.5" />
-            {busy ? "Working…" : "Preview"}
-          </button>
-          <button
-            type="button"
-            className="tt-btn-secondary flex items-center gap-1.5 text-xs px-4 py-2.5 rounded-xl"
-            onClick={handleSave}
-            disabled={busy || !preview}
-          >
-            <Save className="w-3.5 h-3.5" />
-            Save
-          </button>
-          <button
-            type="button"
-            className="tt-btn-secondary flex items-center gap-1.5 text-xs px-4 py-2.5 rounded-xl"
-            onClick={handleGenerateImage}
-            disabled={busy || !preview}
-          >
-            <Sparkles className="w-3.5 h-3.5" />
-            Generate image
-          </button>
-          {isNativePlatform() && (
+        <div className="space-y-2.5">
+          <p className="text-xs font-semibold text-slate-500 dark:text-slate-400">
+            1. Describe the change, then Preview it &nbsp;·&nbsp; 2. Generate a photo, Save the revision, or view it in AR &nbsp;·&nbsp; Export DXF any time
+          </p>
+          <div className="flex flex-wrap items-center gap-2">
+            {isNativePlatform() && (
+              <button
+                type="button"
+                className="tt-btn-secondary flex items-center gap-1.5 text-xs px-4 py-2.5 rounded-xl"
+                onClick={handleMic}
+                disabled={busy}
+              >
+                <Mic className="w-3.5 h-3.5" />
+                Mic
+              </button>
+            )}
             <button
               type="button"
-              className="tt-btn-secondary flex items-center gap-1.5 text-xs px-4 py-2.5 rounded-xl"
-              onClick={handleMic}
+              className="tt-btn-primary flex items-center gap-1.5 text-xs px-4 py-2.5 rounded-xl"
+              onClick={handlePreview}
               disabled={busy}
             >
-              <Mic className="w-3.5 h-3.5" />
-              Mic
+              <Eye className="w-3.5 h-3.5" />
+              {busy ? "Working…" : "1. Preview"}
             </button>
-          )}
-          {isNativePlatform() && (
+
+            <span className="w-px h-6 bg-slate-200 dark:bg-slate-700 mx-0.5" aria-hidden="true" />
+
             <button
               type="button"
               className="tt-btn-secondary flex items-center gap-1.5 text-xs px-4 py-2.5 rounded-xl"
-              onClick={handleOpenAR}
+              onClick={handleGenerateImage}
+              disabled={busy || !preview}
+              title={preview ? undefined : "Run Preview first"}
             >
-              <Scan className="w-3.5 h-3.5" />
-              {selectedSurfaceId ? "Open AR here" : "Open AR"}
+              <Sparkles className="w-3.5 h-3.5" />
+              Generate image
             </button>
-          )}
-          {isNativePlatform() && (
             <button
               type="button"
               className="tt-btn-secondary flex items-center gap-1.5 text-xs px-4 py-2.5 rounded-xl"
-              onClick={handlePreviewModel}
+              onClick={handleSave}
+              disabled={busy || !preview}
+              title={preview ? undefined : "Run Preview first"}
+            >
+              <Save className="w-3.5 h-3.5" />
+              Save
+            </button>
+            {isNativePlatform() && (
+              <button
+                type="button"
+                className="tt-btn-secondary flex items-center gap-1.5 text-xs px-4 py-2.5 rounded-xl"
+                onClick={handleOpenAR}
+              >
+                <Scan className="w-3.5 h-3.5" />
+                {selectedSurfaceId ? "Open AR here" : "Open AR"}
+              </button>
+            )}
+            {isNativePlatform() && (
+              <button
+                type="button"
+                className="tt-btn-secondary flex items-center gap-1.5 text-xs px-4 py-2.5 rounded-xl"
+                onClick={handlePreviewModel}
+                disabled={busy}
+              >
+                <Box className="w-3.5 h-3.5" />
+                Preview 3D Model
+              </button>
+            )}
+
+            <span className="w-px h-6 bg-slate-200 dark:bg-slate-700 mx-0.5" aria-hidden="true" />
+
+            <button
+              type="button"
+              className="tt-btn-secondary flex items-center gap-1.5 text-xs px-4 py-2.5 rounded-xl"
+              onClick={handleExportDxf}
               disabled={busy}
             >
-              <Box className="w-3.5 h-3.5" />
-              Preview 3D Model
+              <Download className="w-3.5 h-3.5" />
+              Export DXF
             </button>
-          )}
-          <button
-            type="button"
-            className="tt-btn-secondary flex items-center gap-1.5 text-xs px-4 py-2.5 rounded-xl"
-            onClick={handleExportDxf}
-            disabled={busy}
-          >
-            <Download className="w-3.5 h-3.5" />
-            Export DXF
-          </button>
+          </div>
         </div>
 
         {tokenTotal != null && (
