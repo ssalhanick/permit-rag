@@ -4,6 +4,7 @@ import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { fetchAnswer, fetchProjects, fetchQueryHistory, submitAnswerFeedback } from "./api.js";
 import { useAuth } from "./context/AuthContext.jsx";
+import { useVoiceInput } from "./hooks/useVoiceInput.js";
 import {
   MessageSquare,
   Send,
@@ -215,27 +216,10 @@ export default function QueryPage() {
 
   const canSubmit = useMemo(() => query.trim().length >= 3 && !loading, [query, loading]);
 
-  const handleVoiceInput = async () => {
-    try {
-      const { startSpeechRecognition } = await import("./services/roomCapture.js");
-      const res = await startSpeechRecognition();
-      if (res.transcript) {
-        setQuery(res.transcript);
-      } else if (res.error && res.error !== "No speech detected") {
-        const friendlyError =
-          res.error === "not-allowed" || res.error === "permission-denied"
-            ? "Microphone access denied. Please allow microphone access in your browser settings."
-            : res.error === "network"
-            ? "Voice input requires an active internet connection."
-            : res.error === "no-speech"
-            ? "No speech detected. Try speaking closer to your mic."
-            : `Voice input failed: ${res.error}`;
-        setError(friendlyError);
-      }
-    } catch (err) {
-      setError(`Voice input not supported: ${err.message}`);
-    }
-  };
+  const voice = useVoiceInput({
+    onTranscript: (transcript) => setQuery(transcript),
+    onError: (message) => setError(message),
+  });
 
   const handleSubmit = async (event) => {
     if (event) event.preventDefault();
@@ -820,12 +804,17 @@ export default function QueryPage() {
                 <div className="flex items-center gap-2 text-slate-400">
                   <button
                     type="button"
-                    onClick={handleVoiceInput}
-                    className="p-2 hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-500 dark:text-slate-400 rounded-xl transition-colors flex items-center gap-1.5 text-xs font-semibold"
-                    title="Voice Input"
+                    onClick={voice.startListening}
+                    disabled={voice.listening}
+                    className={`p-2 rounded-xl transition-colors flex items-center gap-1.5 text-xs font-semibold ${
+                      voice.listening
+                        ? "bg-blue-50 dark:bg-blue-950/60 text-blue-600 dark:text-blue-400"
+                        : "hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-500 dark:text-slate-400"
+                    }`}
+                    title={voice.listening ? "Listening…" : "Voice Input"}
                   >
-                    <Mic className="w-4 h-4 text-blue-600 dark:text-blue-400" />
-                    <span className="hidden sm:inline">Voice</span>
+                    <Mic className={`w-4 h-4 ${voice.listening ? "animate-pulse" : ""}`} />
+                    <span className="hidden sm:inline">{voice.listening ? "Listening…" : "Voice"}</span>
                   </button>
                 </div>
 

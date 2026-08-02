@@ -2,6 +2,7 @@ import React, { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import { API_BASE_URL, DEFAULT_BASE_URL, fetchAnswer, fetchHealth, fetchProjects } from "./api.js";
 import { useAuth } from "./context/AuthContext.jsx";
+import { useVoiceInput } from "./hooks/useVoiceInput.js";
 import AddressAutocomplete from "./components/AddressAutocomplete.jsx";
 
 // shadcn component imports
@@ -161,27 +162,10 @@ export default function DebugQueryPage() {
     }));
   };
 
-  const handleVoiceInput = async () => {
-    try {
-      const { startSpeechRecognition } = await import("./services/roomCapture.js");
-      const res = await startSpeechRecognition();
-      if (res.transcript) {
-        setForm((prev) => ({ ...prev, query: res.transcript }));
-      } else if (res.error && res.error !== "No speech detected") {
-        const friendlyError =
-          res.error === "not-allowed" || res.error === "permission-denied"
-            ? "Microphone access denied. Click the 🔒 lock icon in your address bar, set Microphone to 'Allow', and try again."
-            : res.error === "network"
-            ? "Voice input requires an internet connection."
-            : res.error === "no-speech"
-            ? "No speech detected. Try speaking closer to your mic."
-            : `Voice input failed: ${res.error}`;
-        setError(friendlyError);
-      }
-    } catch (err) {
-      setError(`Voice input not supported: ${err.message}`);
-    }
-  };
+  const voice = useVoiceInput({
+    onTranscript: (transcript) => setForm((prev) => ({ ...prev, query: transcript })),
+    onError: (message) => setError(message),
+  });
 
   const handleSubmit = async (event) => {
     event.preventDefault();
@@ -415,10 +399,15 @@ export default function DebugQueryPage() {
                     />
                     <button
                       type="button"
-                      onClick={handleVoiceInput}
-                      className="absolute right-3 bottom-3 p-2 bg-emerald-950 hover:bg-emerald-900 border border-emerald-800 text-emerald-100 rounded-full text-lg leading-none transition-colors"
-                      title="Speak your question"
-                      aria-label="Speak your question"
+                      onClick={voice.startListening}
+                      disabled={voice.listening}
+                      className={`absolute right-3 bottom-3 p-2 border rounded-full text-lg leading-none transition-colors ${
+                        voice.listening
+                          ? "bg-emerald-600 border-emerald-400 text-white animate-pulse"
+                          : "bg-emerald-950 hover:bg-emerald-900 border-emerald-800 text-emerald-100"
+                      }`}
+                      title={voice.listening ? "Listening…" : "Speak your question"}
+                      aria-label={voice.listening ? "Listening…" : "Speak your question"}
                     >
                       🎙
                     </button>

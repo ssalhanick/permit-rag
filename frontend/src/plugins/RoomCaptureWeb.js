@@ -67,8 +67,13 @@ export class RoomCaptureWeb {
         done({ transcript: "", error: err.error || "Speech error" });
       };
       recognition.onend = () => {
-        // Fallback if no result fired
-        setTimeout(() => done({ transcript: "", error: "No speech detected" }), 100);
+        // Fallback if no result fired. Uses the same "no-speech" code the
+        // browser's own onerror event uses (not a human sentence) -- callers
+        // used to check for the two forms inconsistently, which is exactly
+        // why "no speech" sometimes leaked through as a raw, confusing
+        // string and sometimes silently vanished. One code, mapped to one
+        // friendly message in one place (useVoiceInput).
+        setTimeout(() => done({ transcript: "", error: "no-speech" }), 100);
       };
       recognition.start();
     });

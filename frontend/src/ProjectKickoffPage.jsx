@@ -13,6 +13,7 @@ import AddressAutocomplete from "./components/AddressAutocomplete.jsx";
 import PermitTags from "./components/PermitTags.jsx";
 import { createProject, fetchProjects, getProject, updateProject, postKickoffChat } from "./api.js";
 import { projectToWizardState } from "./projectKickoffRoutes.js";
+import { useVoiceInput } from "./hooks/useVoiceInput.js";
 import {
   SPACE_OPTIONS,
   WORK_TYPE_OPTIONS,
@@ -113,30 +114,10 @@ function WizardProgress({ current, total }) {
  * Shared by CheckboxGrid's "Other" field and the closing comments step.
  */
 function VoiceTextarea({ id, label, value, onChange, placeholder, rows = 2, maxLength }) {
-  const [listening, setListening] = useState(false);
-  const [voiceError, setVoiceError] = useState("");
-
-  const handleMic = async () => {
-    setListening(true);
-    setVoiceError("");
-    try {
-      const { startSpeechRecognition } = await import("./services/roomCapture.js");
-      const res = await startSpeechRecognition();
-      if (res.transcript) {
-        onChange(value.trim() ? `${value.trim()}, ${res.transcript}` : res.transcript);
-      } else if (res.error && res.error !== "No speech detected") {
-        setVoiceError(
-          res.error === "not-allowed" || res.error === "permission-denied"
-            ? "Microphone access denied. Enable it in your browser or device settings."
-            : res.error,
-        );
-      }
-    } catch (err) {
-      setVoiceError(err.message || "Voice input failed.");
-    } finally {
-      setListening(false);
-    }
-  };
+  const voice = useVoiceInput({
+    onTranscript: (transcript) =>
+      onChange(value.trim() ? `${value.trim()}, ${transcript}` : transcript),
+  });
 
   return (
     <div className="kickoff-other-field">
@@ -157,16 +138,16 @@ function VoiceTextarea({ id, label, value, onChange, placeholder, rows = 2, maxL
         />
         <button
           type="button"
-          className="kickoff-mic-button"
-          onClick={handleMic}
-          disabled={listening}
-          aria-label="Dictate with voice"
-          title="Dictate with voice"
+          className={`kickoff-mic-button${voice.listening ? " kickoff-mic-button--listening" : ""}`}
+          onClick={voice.startListening}
+          disabled={voice.listening}
+          aria-label={voice.listening ? "Listening…" : "Dictate with voice"}
+          title={voice.listening ? "Listening…" : "Dictate with voice"}
         >
-          {listening ? "…" : "🎙"}
+          {voice.listening ? "…" : "🎙"}
         </button>
       </div>
-      {voiceError && <p className="kickoff-voice-error">{voiceError}</p>}
+      {voice.error && <p className="kickoff-voice-error">{voice.error}</p>}
     </div>
   );
 }
@@ -413,29 +394,6 @@ export default function ProjectKickoffPage() {
       setWizard((w) => ({ ...w, name: derived }));
     }
   }, [wizardStep, steps]);
-
-  const handleVoiceInput = async () => {
-    try {
-      const { startSpeechRecognition } = await import("./services/roomCapture.js");
-      const res = await startSpeechRecognition();
-      if (res.transcript) {
-        setChatInput(res.transcript);
-      } else if (res.error && res.error !== "No speech detected") {
-        // Map browser error codes to friendly messages
-        const friendlyError =
-          res.error === "not-allowed" || res.error === "permission-denied"
-            ? "Microphone access denied. Click the 🔒 lock icon in your address bar, set Microphone to 'Allow', and try again."
-            : res.error === "network"
-            ? "Voice input requires an internet connection."
-            : res.error === "no-speech"
-            ? "No speech detected. Try speaking closer to your mic."
-            : `Voice input failed: ${res.error}`;
-        setError(friendlyError);
-      }
-    } catch (err) {
-      setError(`Voice input not supported: ${err.message}`);
-    }
-  };
 
 
   const handleChatSend = async (e) => {
