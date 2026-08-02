@@ -10,6 +10,7 @@ Usage:
 
 from __future__ import annotations
 
+import atexit
 import logging
 import os
 from collections.abc import Generator
@@ -56,6 +57,9 @@ def close_pool() -> None:
         _pool.close()
         _pool = None
         log.info("Connection pool closed")
+
+
+atexit.register(close_pool)
 
 
 @contextmanager

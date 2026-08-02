@@ -127,7 +127,7 @@ def check_022(conn: Any) -> list[str]:
 
     row = conn.execute(
         "SELECT count(*) AS total, "
-        "       count(*) FILTER (WHERE source_url_normalized IS NULL) AS unbackfilled "
+        "       count(*) FILTER (WHERE source_url_normalized IS NULL AND source_filename IS NULL) AS unbackfilled "
         "FROM documents;"
     ).fetchone()
     total, missing = int(row["total"]), int(row["unbackfilled"])
