@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { useProject } from "../ProjectContext.jsx";
 import { useAuth } from "../../context/AuthContext.jsx";
@@ -40,12 +40,24 @@ export default function ProjectDashboardPage() {
 
   const [activeTab, setActiveTab] = useState("tasks");
   const [showNewDropdown, setShowNewDropdown] = useState(false);
+  const newDropdownRef = useRef(null);
   const [scans, setScans] = useState([]);
   const [queries, setQueries] = useState([]);
   const [documents, setDocuments] = useState([]);
   const [permitStrategy, setPermitStrategy] = useState(null);
   const [coverage, setCoverage] = useState(null);
   const [selectedDocPreview, setSelectedDocPreview] = useState(null);
+
+  // Close dropdown menu when clicking outside
+  useEffect(() => {
+    function handleClickOutside(event) {
+      if (newDropdownRef.current && !newDropdownRef.current.contains(event.target)) {
+        setShowNewDropdown(false);
+      }
+    }
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, []);
 
   // Flat task list for this project, persisted to localStorage (see taskStorage.js)
   // so it stays in sync with the global Tasks page and the Dashboard widget.
@@ -242,22 +254,29 @@ export default function ProjectDashboardPage() {
             </Link>
 
             {/* Split Action Dropdown: Default to "New Query", with dropdown for task/material/upload/scan */}
-            <div className="relative flex items-center shadow-sm rounded-xl overflow-hidden border border-blue-600 dark:border-blue-500">
-              <Link
-                to={`/query?p=${projectId}`}
-                className="tt-btn-primary flex items-center gap-1.5 text-xs px-3 py-2 rounded-r-none border-r border-blue-500 dark:border-blue-400"
-              >
-                <Sparkles className="w-4 h-4" />
-                <span>New Query</span>
-              </Link>
-              <button
-                type="button"
-                onClick={() => setShowNewDropdown(!showNewDropdown)}
-                className="tt-btn-primary px-2 py-2 rounded-l-none hover:bg-blue-700 transition-colors"
-                aria-label="More creation options"
-              >
-                <ChevronDown className="w-3.5 h-3.5" />
-              </button>
+            <div className="relative inline-flex items-center" ref={newDropdownRef}>
+              <div className="inline-flex items-stretch rounded-xl shadow-sm overflow-hidden border border-blue-600 dark:border-blue-500">
+                <Link
+                  to={`/query?p=${projectId}`}
+                  className="tt-btn-primary flex items-center gap-1.5 text-xs px-3.5 py-2 border-r border-blue-500/80"
+                  style={{ borderRadius: "8px 0 0 8px" }}
+                >
+                  <Sparkles className="w-4 h-4" />
+                  <span>New Query</span>
+                </Link>
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setShowNewDropdown((prev) => !prev);
+                  }}
+                  className="tt-btn-primary px-2.5 py-2 hover:bg-blue-700 transition-colors flex items-center justify-center"
+                  style={{ borderRadius: "0 8px 8px 0" }}
+                  aria-label="More creation options"
+                >
+                  <ChevronDown className={`w-3.5 h-3.5 transition-transform duration-200 ${showNewDropdown ? "rotate-180" : ""}`} />
+                </button>
+              </div>
 
               {showNewDropdown && (
                 <div
@@ -266,35 +285,35 @@ export default function ProjectDashboardPage() {
                 >
                   <button
                     type="button"
-                    className="w-full text-left px-3 py-2 hover:bg-slate-100 dark:hover:bg-slate-700 flex items-center gap-2"
+                    className="w-full text-left px-3.5 py-2.5 hover:bg-slate-100 dark:hover:bg-slate-700 flex items-center gap-2.5 text-slate-700 dark:text-slate-200"
                     onClick={() => {
                       setActiveTab("tasks");
                       setShowAddInline(true);
                     }}
                   >
-                    <Plus className="w-3.5 h-3.5 text-blue-500" /> New Task
+                    <Plus className="w-4 h-4 text-blue-500 shrink-0" /> New Task
                   </button>
                   <button
                     type="button"
-                    className="w-full text-left px-3 py-2 hover:bg-slate-100 dark:hover:bg-slate-700 flex items-center gap-2"
+                    className="w-full text-left px-3.5 py-2.5 hover:bg-slate-100 dark:hover:bg-slate-700 flex items-center gap-2.5 text-slate-700 dark:text-slate-200"
                     onClick={() => {
                       setActiveTab("materials");
                       setShowAddMaterial(true);
                     }}
                   >
-                    <Package className="w-3.5 h-3.5 text-indigo-500" /> New Material
+                    <Package className="w-4 h-4 text-indigo-500 shrink-0" /> New Material
                   </button>
                   <Link
                     to={`/projects/${projectId}/documents/upload`}
-                    className="block w-full text-left px-3 py-2 hover:bg-slate-100 dark:hover:bg-slate-700 flex items-center gap-2"
+                    className="w-full text-left px-3.5 py-2.5 hover:bg-slate-100 dark:hover:bg-slate-700 flex items-center gap-2.5 text-slate-700 dark:text-slate-200 block"
                   >
-                    <Upload className="w-3.5 h-3.5 text-emerald-500" /> Upload Document
+                    <Upload className="w-4 h-4 text-emerald-500 shrink-0" /> Upload Document
                   </Link>
                   <Link
                     to={`/projects/${projectId}/scans`}
-                    className="block w-full text-left px-3 py-2 hover:bg-slate-100 dark:hover:bg-slate-700 flex items-center gap-2"
+                    className="w-full text-left px-3.5 py-2.5 hover:bg-slate-100 dark:hover:bg-slate-700 flex items-center gap-2.5 text-slate-700 dark:text-slate-200 block"
                   >
-                    <Eye className="w-3.5 h-3.5 text-amber-500" /> New Scan
+                    <Eye className="w-4 h-4 text-amber-500 shrink-0" /> New Scan
                   </Link>
                 </div>
               )}
