@@ -8,11 +8,6 @@ export const PROFILE_NAV_ITEMS = [
   { label: "Account", path: "/profile/account" },
 ];
 
-export const PROFILE_EXTERNAL_LINKS = [
-  { label: "Projects", path: "/projects" },
-  { label: "New Query", path: "/query" },
-];
-
 /** @type {Record<string, string>} */
 export const PROFILE_PAGE_TITLES = {
   "/profile/dashboard": "Dashboard",

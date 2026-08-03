@@ -3,7 +3,6 @@ import { NavLink, Outlet, useLocation } from "react-router-dom";
 import { useAuth } from "../context/AuthContext.jsx";
 import {
   getProfilePageTitle,
-  PROFILE_EXTERNAL_LINKS,
   PROFILE_NAV_ITEMS,
 } from "./profileNavConfig.js";
 
@@ -52,32 +51,23 @@ export default function ProfileLayout() {
           </div>
         </div>
 
-        <nav className="profile-sidebar-nav">
-          <p className="profile-sidebar-section-label">Profile</p>
-          <ul>
+        <nav className="profile-sidebar-nav space-y-1">
+          <p className="profile-sidebar-section-label text-[11px] font-extrabold uppercase tracking-widest text-slate-400 mb-2 px-3">
+            Account Navigation
+          </p>
+          <ul className="space-y-1">
             {PROFILE_NAV_ITEMS.map((item) => (
               <li key={item.path}>
                 <NavLink
                   to={item.path}
                   end={item.end}
                   className={({ isActive }) =>
-                    `profile-sidebar-link${isActive ? " profile-sidebar-link--active" : ""}`
+                    `profile-sidebar-link flex items-center px-3 py-2.5 rounded-xl font-medium text-xs transition-colors ${
+                      isActive
+                        ? "profile-sidebar-link--active bg-blue-50 dark:bg-blue-900/40 text-blue-600 dark:text-blue-400 font-bold"
+                        : "text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-slate-900 dark:hover:text-slate-200"
+                    }`
                   }
-                  onClick={closeSidebar}
-                >
-                  {item.label}
-                </NavLink>
-              </li>
-            ))}
-          </ul>
-
-          <p className="profile-sidebar-section-label">App</p>
-          <ul>
-            {PROFILE_EXTERNAL_LINKS.map((item) => (
-              <li key={item.path}>
-                <NavLink
-                  to={item.path}
-                  className="profile-sidebar-link profile-sidebar-link--external"
                   onClick={closeSidebar}
                 >
                   {item.label}

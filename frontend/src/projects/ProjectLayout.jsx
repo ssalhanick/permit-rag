@@ -103,7 +103,6 @@ export default function ProjectLayout() {
       <header className="project-layout-header">
         <div className="project-layout-title">
           <strong>{project.name}</strong>
-          <ProjectQuickActions projectId={project.id} />
           <span className="project-layout-muni">{project.municipality || "No jurisdiction"}</span>
         </div>
         <h1>{pageTitle}</h1>

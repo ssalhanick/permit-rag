@@ -241,21 +241,27 @@ export default function ProjectDashboardPage() {
               Edit
             </Link>
 
-            {/* "+ New" Action Dropdown */}
-            <div className="relative">
+            {/* Split Action Dropdown: Default to "New Query", with dropdown for task/material/upload/scan */}
+            <div className="relative flex items-center shadow-sm rounded-xl overflow-hidden border border-blue-600 dark:border-blue-500">
+              <Link
+                to={`/query?p=${projectId}`}
+                className="tt-btn-primary flex items-center gap-1.5 text-xs px-3 py-2 rounded-r-none border-r border-blue-500 dark:border-blue-400"
+              >
+                <Sparkles className="w-4 h-4" />
+                <span>New Query</span>
+              </Link>
               <button
                 type="button"
                 onClick={() => setShowNewDropdown(!showNewDropdown)}
-                className="tt-btn-primary flex items-center gap-1.5 text-xs px-3 py-2"
+                className="tt-btn-primary px-2 py-2 rounded-l-none hover:bg-blue-700 transition-colors"
+                aria-label="More creation options"
               >
-                <Plus className="w-4 h-4" />
-                <span>+ New</span>
-                <ChevronDown className="w-3.5 h-3.5 opacity-80" />
+                <ChevronDown className="w-3.5 h-3.5" />
               </button>
 
               {showNewDropdown && (
                 <div
-                  className="absolute right-0 mt-2 w-48 bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 shadow-xl z-50 py-1 font-medium text-xs text-slate-800 dark:text-slate-200 animate-in fade-in"
+                  className="absolute right-0 top-full mt-2 w-48 bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 shadow-xl z-50 py-1 font-medium text-xs text-slate-800 dark:text-slate-200 animate-in fade-in"
                   onClick={() => setShowNewDropdown(false)}
                 >
                   <button
@@ -285,10 +291,10 @@ export default function ProjectDashboardPage() {
                     <Upload className="w-3.5 h-3.5 text-emerald-500" /> Upload Document
                   </Link>
                   <Link
-                    to="/query"
+                    to={`/projects/${projectId}/scans`}
                     className="block w-full text-left px-3 py-2 hover:bg-slate-100 dark:hover:bg-slate-700 flex items-center gap-2"
                   >
-                    <Sparkles className="w-3.5 h-3.5 text-cyan-500" /> New Query
+                    <Eye className="w-3.5 h-3.5 text-amber-500" /> New Scan
                   </Link>
                 </div>
               )}
@@ -347,7 +353,7 @@ export default function ProjectDashboardPage() {
                 <strong className="text-slate-900 dark:text-slate-100 font-bold">
                   {coverage.doc_count || coverage.document_count || documents.length || 12}
                 </strong>{" "}
-                amount of documents supporting.
+                documents supporting.
               </p>
             </div>
             <div className="flex items-center gap-2 shrink-0 pt-1 sm:pt-0">
@@ -368,8 +374,8 @@ export default function ProjectDashboardPage() {
         </div>
       )}
 
-      {/* ── 3 Summary Metric Cards ── */}
-      <section className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+      {/* ── 2 Summary Metric Cards (50/50 Layout) ── */}
+      <section className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-6">
         {/* Card 1: Overall Progress */}
         <div className="bg-white dark:bg-slate-800/90 rounded-xl border border-slate-200 dark:border-slate-700 p-5 shadow-sm">
           <div className="text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-1">
@@ -389,7 +395,7 @@ export default function ProjectDashboardPage() {
           </p>
         </div>
 
-        {/* Card 2: Target Budget (no expense tracking exists yet, so there's no honest "spent" figure to show) */}
+        {/* Card 2: Target Budget */}
         <div className="bg-white dark:bg-slate-800/90 rounded-xl border border-slate-200 dark:border-slate-700 p-5 shadow-sm">
           <div className="text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-1">
             Target Budget
@@ -399,19 +405,6 @@ export default function ProjectDashboardPage() {
           </div>
           <p className="text-xs text-slate-500 dark:text-slate-300 mt-3 font-medium">
             Entered during project kickoff
-          </p>
-        </div>
-
-        {/* Card 3: Jurisdiction */}
-        <div className="bg-white dark:bg-slate-800/90 rounded-xl border border-slate-200 dark:border-slate-700 p-5 shadow-sm">
-          <div className="text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-1">
-            Jurisdiction
-          </div>
-          <div className="text-2xl font-extrabold text-slate-900 dark:text-slate-100">
-            {project.municipality || "Not set"}
-          </div>
-          <p className="text-xs text-slate-500 dark:text-slate-300 mt-3 font-medium">
-            Used for permit rule lookups
           </p>
         </div>
       </section>
