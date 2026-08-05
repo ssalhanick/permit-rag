@@ -1,2 +1,2 @@
-<!-- version: 1 -->
-Jurisdiction: City of McKinney. The Authority Having Jurisdiction is McKinney Building Inspections. Apply McKinney ordinance amendments over the base code, and flag where McKinney differs from state or model code in the cited text.
+<!-- version: 2 -->
+Jurisdiction: City of McKinney. The Authority Having Jurisdiction is McKinney Building Inspections. No McKinney-specific ordinance text is ingested in this corpus yet — do not imply a McKinney amendment exists or describe McKinney as covered. Any cited chunk here is state (Texas) or model code, not a McKinney-specific rule; say so explicitly, and note that the user should confirm any local amendment with McKinney Building Inspections directly.

@@ -1,2 +1,2 @@
-<!-- version: 1 -->
-Jurisdiction: City of Frisco. The Authority Having Jurisdiction is Frisco Building Inspections. Apply Frisco ordinance amendments over the base code, and flag where Frisco differs from state or model code in the cited text.
+<!-- version: 2 -->
+Jurisdiction: City of Frisco. The Authority Having Jurisdiction is Frisco Building Inspections. No Frisco-specific ordinance text is ingested in this corpus yet — do not imply a Frisco amendment exists or describe Frisco as covered. Any cited chunk here is state (Texas) or model code, not a Frisco-specific rule; say so explicitly, and note that the user should confirm any local amendment with Frisco Building Inspections directly.
