@@ -61,6 +61,15 @@ this session split into two parts:
   actually exercise the private-document scenario the fix targets. STATE.md
   updated to reflect this precisely rather than leaving the stale "not
   RAGAs-verified" claim standing.
+- **`py -m pytest tests/ -q` initially looked hung (20+ min, then Scott's own
+  concurrent run got OOM-killed) — resolved** (§7). Root cause was mundane:
+  Docker Desktop's daemon wasn't running (6 tests need a real Postgres
+  connection and were burning 30s pool timeouts each), a real gap in
+  `rag/permit_classifier.py`'s NLI-model path with no suite-wide guard against
+  it (this repo had no `tests/conftest.py` at all — added one), and most of
+  the apparent hang was this session's own diagnostic runs competing with
+  Scott's simultaneous terminal invocation on the identical machine. With
+  Docker up and nothing running concurrently: **832 passed, 0 failed, 22s.**
 
 ## 0. Urgent, out-of-scope finding: a live prod DB password is committed to git
 
@@ -274,17 +283,56 @@ migration-045 private-document hand-check (§5), and the credential rotation
 (§0, pending Scott's direction) — handed to Scott directly in chat this
 session.
 
+## 7. pytest suite health — initially looked hung, actually three ordinary causes
+
+Scott asked to confirm the suite passes clean before pushing anything. The
+first full run looked like an indefinite hang (killed after 20+ min at ~17s
+CPU time — mostly idle/waiting); his own concurrent run in a separate
+terminal on this *same* machine (`hostname` confirmed both were `UTD95110`)
+got OOM-killed after 54 tests. Bisecting down to a minimal reproducing pair
+(`test_agent_manager.py` + `test_agents_admin_routes.py`) via `faulthandler`
+stack dumps kept pointing at a heavy, slow import chain
+(`torch`/`sklearn`/`pandas`/`sympy`), but that turned out to be a red herring
+for the actual failures — three separate, ordinary things were stacked:
+
+1. **Docker Desktop's daemon wasn't running at all** (not just the
+   container) — 6 tests (`test_citation_wire.py`,
+   `test_query_answer_route.py`) legitimately need `db/client.py`'s real
+   connection pool and failed with `psycopg_pool.PoolTimeout` after the
+   pool's 30s wait, hitting `127.0.0.1:5433` with nothing listening.
+   `docker compose up -d` (per STATE.md's own "Is the container up?" hint)
+   fixed all 6 immediately.
+2. **A real, if smaller, gap**: `rag/permit_classifier.py` defaults to
+   `use_nli=True`, and `rag/agents/registry.py` self-registers the real
+   callable at import time — any test resolving `permit_classifier` from the
+   registry without its own stub can trigger a real ~85MB HuggingFace NLI
+   model load. `test_permit_classifier.py` already mocked this for itself;
+   nothing else in the suite was guarded, and **this repo had no
+   `tests/conftest.py` at all**. Added one with an autouse fixture patching
+   `_load_nli_classifier` to `None` suite-wide — cheap, safe, real defense
+   even though it wasn't the actual blocker.
+3. **Most of the apparent multi-minute delay was this session's own repeated
+   diagnostic pytest invocations competing with Scott's simultaneous
+   terminal run** for the same CPU/RAM importing the same heavy libraries —
+   not a deterministic per-file bug. Lesson: don't trust wall-clock
+   bisection findings gathered under unknown concurrent load.
+
+With Docker up and nothing else running: `py -m pytest tests/ -q` →
+**832 passed, 0 failed, in 22.06s.**
+
 ## Files changed this session
 
 - `rag/prompts/fragments/jurisdiction/frisco.md` — v1 → v2
 - `rag/prompts/fragments/jurisdiction/mckinney.md` — v1 → v2
-- `STATE.md` — decisions log entry, Next tasks update, module status note,
-  punch list #5 corrected, new header entry
+- `tests/conftest.py` — new; autouse fixture blocking the real NLI model load
+- `STATE.md` — decisions log entries, Next tasks update, module status note,
+  punch list #5 corrected and #7 (pytest hang) resolved and removed,
+  new header entry, SECURITY section
 - This file
 
-No commits pushed. Branch `agents/review`, cut from `deployment/sites` tip.
-The credential-leak finding (§0) was **not** acted on — no file removal, no
-history rewrite, no rotation — pending Scott's explicit direction.
+4 commits, none pushed. Branch `agents/review`, cut from `deployment/sites`
+tip. The credential-leak finding (§0) was **not** acted on — no file removal,
+no history rewrite, no rotation — pending Scott's explicit direction.
 
 ## Prompt for next session
 
