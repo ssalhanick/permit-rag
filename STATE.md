@@ -272,6 +272,16 @@ AGENTS.md "completed work → journal only."_
 6. **Live prod DB password committed to git, already pushed to GitHub —
    see the SECURITY section above.** Not remediated as of this entry;
    Scott's decision on rotation/history.
+7. **`py -m pytest tests/ -q` on machine A made real outbound HTTPS calls
+   and hung indefinitely (2026-08-04)** — killed after 20+ min at ~17s CPU
+   time (mostly idle/waiting, consistent with a retry/backoff loop against
+   a real host), violating the "fully mocked" guarantee in this file's own
+   "Verification" section. `test_prompt_router.py` (the file actually
+   relevant to this session's fragment edit) passed clean, 25/25, so the
+   edit itself is verified — but the full-suite hang itself is unresolved
+   and not yet isolated to a specific test file; a grep for
+   unmocked `requests`/`httpx`/`serpapi`/`youtube_transcript_api` call
+   sites came back clean, so the cause is subtler than a missing mock.
 
 ## Next tasks
 
