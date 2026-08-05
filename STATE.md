@@ -1,5 +1,39 @@
 # permit_rag — State
 
+## ⚠ SECURITY — live prod DB password committed to git (2026-08-04, unresolved)
+
+`evaluation/results/reprocess/20260802_101100/reprocess_20260802_101100_report.txt`
+and its paired `.log` file contain the **full prod RDS connection string in
+plaintext, including the password** — `scripts/reprocess_corpus.sh`/`.ps1`
+logged its own invocation args into a tracked (not gitignored) report. Both
+files are **already pushed to `origin/deployment/sites`**
+(`git merge-base --is-ancestor` confirms; local and remote are at the
+identical commit). Violates AGENTS.md's "No hardcoded secrets ... — .env
+only" directly, and the exposure is live, not historical.
+
+**Not remediated as of this entry.** Rotating the RDS password (infra
+action) and deciding whether to scrub already-pushed history are Scott's
+call — raised directly in chat 2026-08-04, not acted on unilaterally. The
+likely code fix (redact the password before the reprocess script writes its
+report) is small and safe once he decides how to handle the existing
+exposure. Full detail: `journals/session_20260804_agent_performance_review.md`
+§0. Punch list #6 tracks this until closed.
+
+_Updated: 2026-08-04 — agent performance review (~1.5 weeks post Phase-5
+launch): no hard agent failures found; fixed a real prompt-instruction gap
+(`jurisdiction/{frisco,mckinney}.md` told the model to "apply [city]
+amendments" despite AGENTS.md documenting zero real ingested content for
+either — v1→v2, now states general/state-level content only); found and
+flagged the credential leak above (out of scope for this session's own
+work, surfaced while checking migration 045's status); corrected punch list
+#5 — migration 045's RAGAs run already happened 2026-08-02
+(`ragas_20260802_034009.json`, 0.935, no regression) but the actual
+cross-tenant security property still needs a hand-check, not just a RAGAs
+number; batch agent-eval scripts (`run_agent_eval.py`, `review_feedback.py`)
+handed off with exact commands for machine B, not run from this checkout
+(empty local DB). Full detail:
+`journals/session_20260804_agent_performance_review.md`._
+
 _Updated: 2026-08-02 — system & migration health check (832 pytest green). Registered probes for migrations 002–045 in `scripts/check_migrations.py` and enforced via `tests/test_migration_integrity.py`. Fixed unbackfilled document reporting in `check_migration_details.py`, seeded RDS labor rate benchmarks, registered clean `atexit` connection pool cleanup in `db/client.py` to prevent process termination warnings, and corrected unauthenticated mobile nav sign-in button alignment in `Nav.jsx`._
 
 _Updated: 2026-08-01 — bug-triage batch (19 hand-tested findings) worked
@@ -216,17 +250,28 @@ AGENTS.md "completed work → journal only."_
    overwrites it; use `--no-answer-cache`. (b) Before RAGAs gates any phase,
    establish a fresh **live** multi-sample baseline (current: one sample,
    `ragas_20260725_011651.json`, avg 0.843) — don't gate on one number.
+   (c) **`eval_guard._latest_ragas_export()` picks the newest file by
+   timestamp, not the deployed config** — confirmed 2026-08-04: at the time
+   of checking, the chronologically-latest run (`ragas_20260731_165237.json`,
+   0.885) was the reverted chunking-step-3 experiment, not step-2's deployed
+   0.937. That specific instance is now moot — `ragas_20260802_034009.json`
+   (post-045, 0.935) is latest as of this entry and does reflect deployed
+   state — but the underlying mechanism is unchanged and will resurface the
+   next time an experiment is tested and reverted. See decisions log.
 4. **Mobile OAuth deep links (deferred)** — M0-6/M0-7 device Google/Apple
    roundtrip.
-5. **Migration 045 (match_chunks visibility fix) needs a RAGAs run on the
-   corpus machine before it's trusted.** Code-complete + mocked-tests-green
-   only (2026-08-01, this repo machine has no corpus). Run
-   `check_migration_details.py --local` first, then `apply_migration.py`,
-   then `py -m evaluation.ragas_eval --export --no-answer-cache` and compare
-   against the pre-045 baseline — same sequential-gating discipline as the
-   chunking-step evals. This is a real security fix (closes a cross-tenant
-   private-document leak into chat answers), so don't leave it sitting
-   unverified longer than necessary.
+5. **Migration 045 (match_chunks visibility fix) — RAGAs run done, but the
+   actual security property is still unverified.** `ragas_20260802_034009.json`
+   (2026-08-02, faithfulness 0.935) shows no regression vs. the 0.937 pre-045
+   baseline — but the fixed 7-query eval set has no tier-3/private-document
+   case, so that run only confirms the *general* corpus path didn't regress;
+   it says nothing about whether the fix actually blocks a cross-tenant leak.
+   Still needed: a hand-check (two test users, one private doc, confirm it
+   doesn't surface in the other user's answer) on the corpus machine. See
+   `journals/session_20260804_agent_performance_review.md` §5.
+6. **Live prod DB password committed to git, already pushed to GitHub —
+   see the SECURITY section above.** Not remediated as of this entry;
+   Scott's decision on rotation/history.
 
 ## Next tasks
 
@@ -237,11 +282,18 @@ AGENTS.md "completed work → journal only."_
      (`--no-answer-cache`) unchanged + hand-check a few genuinely compound
      queries (e.g. "setback and height for a garage in Plano, and do I need
      an electrical permit?") retrieve better than the single path.
-   - **Run the batch/eval loops on machine B** once volume exists:
-     `scripts/review_feedback.py`, `scripts/run_agent_eval.py`, and a
-     **multi-sample live RAGAs baseline** (punch #3) — the 2026-07-25 run
-     (avg 0.843) is one sample; run 3+, average out q6's ±0.15, repoint
-     `eval_guard` off the stale `ragas_20260531` baseline.
+   - **Run the batch/eval loops on machine B** — commands handed off
+     2026-08-04 (`journals/session_20260804_agent_performance_review.md`):
+     `py scripts/run_agent_eval.py --local --days 7`,
+     `py scripts/review_feedback.py --local --dry-run` (report-only, no
+     `--apply` yet). Still needs a **multi-sample live RAGAs baseline**
+     (punch #3) — the 2026-07-25 run (avg 0.843) is one sample; run 3+,
+     average out q6's ±0.15, repoint `eval_guard` off the stale
+     `ragas_20260531` baseline. **Higher-priority Machine-B item ahead of
+     this**: migration 045 (`match_chunks` tier-3 visibility fix,
+     `journals/session_20260801.md`) is code-complete but not
+     RAGAs-verified — a real cross-tenant document-leak security fix, don't
+     let it wait behind this review.
    - **Deferred Media Curator items** (tracked in `docs/media-curator-plan.md`):
      B2 `web_search` (needs the `claude-api` skill + `run_agent tools=`);
      link liveness → Freshness Watcher #15; `YOUTUBE_PROXY_*` for at-scale
@@ -318,7 +370,7 @@ should have been 027. Recorded, not renamed. The dedupe correction is
 | rag/agents/deconstructor | **Phase 5, #5.** `deconstruct(query)` — compound → sub-questions; deterministic gate for simple queries |
 | rag/agents/permit_strategy | **Phase 5, #11.** `plan_permits(context)` — permit set (mirrors `projectPermitRules.js`), pull-order, fee estimate |
 | forms/ontology | **Phase 5.** Field Ontology core: canonical vocabulary + per-field type/validation + source binding. New `forms/` package (AGENTS.md boundary `forms/ → db/, stdlib`) |
-| rag/prompts | **Phase 4.** Versioned fragment library. `Fragment.id = dimension:key@version`; `library_version()`, `bound_notes()` |
+| rag/prompts | **Phase 4.** Versioned fragment library. `Fragment.id = dimension:key@version`; `library_version()`, `bound_notes()`. **2026-08-04:** `jurisdiction/{frisco,mckinney}.md` v1→v2 — removed language implying ingested local amendments (AGENTS.md documents both as seeded with no real content yet); all other fragments audited, no other issues found |
 | rag/agents/prompt_router | **Phase 4.** Agent #2. Lookup composition; `research` default; persona/intent `max_tokens`; no LLM call |
 | rag/agents/guardrail | **Phase 4 slice.** `check_truncation` → action item on `stop_reason == 'max_tokens'`. **Media B1:** `check_media_sources` — zero-unsourced-URL gate |
 | rag/agents/media | **Media B1.** Media Curator (#17). Deterministic diy-only curator; never fabricates a URL |
@@ -382,6 +434,8 @@ should have been 027. Recorded, not renamed. The dedupe correction is
 | **Perf Review never silent-blames** | Every review writes an *unconfirmed* `agent_corrections` row; a superadmin confirms attribution. Below `CONFIDENCE_FLOOR=0.6` the row carries no `attributed_agent` — a human assigns blame |
 | **Query sessions are custom, not LangChain** | The `session_id` grouping query-history threads is a plain Postgres column + client-generated UUID, unrelated to LangChain's own memory/session abstractions (not used in this codebase — only LangSmith, for tracing, is). The same `session_id` also tags the LangSmith trace for that thread — see `docs/langsmith_session_tracing.md` |
 | **q4's 0.000 RAGAs relevancy is a known judge blind spot, not a quality bug (2026-07-28)** | `PROMPT_VERSION` v2 fixed a real prod bug (inline `•` bullets instead of markdown — rule 7 was ambiguous) but exposed a same-day, reproducible A/B regression: q4 ("building permit requirements") scored relevancy 1.000 under `v1` and 0.000 under `v2` twice. Root-caused to the model appending an explicit "consult the City of Plano Building Inspection Department directly" redirect when corpus coverage is partial — RAGAs' `answer_relevancy` metric hard-zeroes anything it reads as noncommittal, regardless of faithfulness or context precision (q4 hit 0.933 faithfulness / perfect citations the same run it scored 0 relevancy). `v3` tried suppressing the standalone "Limitations" header (rule 1) — didn't fix it, proving the header was never the mechanism; the redirect sentence itself is what trips the judge. **Not fixing further:** that redirect sentence is the same pattern as the existing AHJ disclaimer (`_AHJ_DISCLAIMER_TEXT`) — intentional, appropriate caution for a compliance app, not a hedge to prompt away. Treated like q6 in the original baseline: measure, don't gate, on this one query's relevancy score. Full investigation: `journals/session_20260728.md` |
+| **Frisco/McKinney fragments can't promise amendments that don't exist (2026-08-04)** | `jurisdiction/{frisco,mckinney}.md` (v1, unedited since authoring) instructed the model to "apply [city] ordinance amendments over the base code, and flag where [city] differs" — accurate instruction *if* local content existed, but AGENTS.md documents both cities as seeded with zero real ingested documents, and `docs/backlog.md` independently confirms both still `⬜ Pending` on GIS boundary load. Bumped to v2: state plainly that no jurisdiction-specific text is ingested yet, so any retrieved chunk is general/state-level, leaning on `base.md` grounding rules 5/6 (name the jurisdiction chunks actually apply to; say so when context is insufficient) rather than fighting them. Fort Worth/Plano/Dallas/TX/Federal fragments cross-checked against real cited `doc_id`s in RAGAs results and left unchanged — all five are backed by real content |
+| **"Latest RAGAs export" means latest by timestamp, not latest deployed (2026-08-04)** | `eval_guard._latest_ragas_export()` (used by `agent_eval.py`'s answer_generator faithfulness contract) has no concept of which corpus/flag config was actually deployed when a run happened — it just picks the newest file. Confirmed harmless-but-real: right after the 07-31 chunking-step-3 stop-ship revert, the chronologically-latest file for several days was the *reverted* experiment's run (0.885), not deployed step-2's 0.937 — both cleared the 0.85 gate so nothing broke, but the contract was silently grading an abandoned config. Superseded once a fresh run landed (`ragas_20260802_034009.json`), but the mechanism itself is unfixed and will recur the next time an experiment is tested and reverted without an immediate follow-up run. Not fixed this session (bigger than a fragment edit — needs either a config-aware resolver or discipline about always re-running RAGAs immediately after a revert); tracked in punch list #3(c) |
 | **Document visibility bulk-vs-single distinction (2026-08-01)** | `GET /documents` (bulk listing) is superadmin-only (`is_superadmin`, not the broader `is_staff`) — "only super users can see the document corpus" was an explicit product call, bulk corpus browsing being the sensitive operation. `GET /documents/{doc_id}` (single lookup by doc_id, e.g. a citation drill-down from an already-received answer) stays on the broader `is_staff` bypass for tier-3 docs — a regular user already implicitly learns a cited doc_id exists from the answer itself, so gating the single-doc-detail route more tightly than the bulk list doesn't add real protection, just friction. |
 | **Voice input: one shared hook, not five more patches (2026-08-01)** | 5 independent copy-pasted voice-input implementations had each drifted into a different subset of bugs (hardcoded-blue mic icon with no listening state, inconsistent "no speech" error mapping, a self-contradictory "not supported: no speech detected" message) because `RoomCaptureWeb.js` emitted two different strings for the same no-speech condition and each call site only ever checked one of them. Concrete proof duplication was the actual bug, not just style debt — patching five call sites again would leave the same fragmentation for the next bug. `frontend/src/hooks/useVoiceInput.js` owns the state machine and error mapping once; callers only control what happens with a transcript/error via `onTranscript`/`onError` callbacks. |
 | **Kickoff free-form entry pre-fills the wizard, never bypasses it (2026-08-01)** | Confirmed with Scott directly (not the two options originally offered): free-form text/talk isn't a parallel fast-path to project creation — it's AI extraction (`generate_kickoff_extraction`) that pre-fills the *same* step-by-step wizard fields for the user to review and complete. `address_guess` is deliberately plain text, not geocoded — the user still picks a real `AddressAutocomplete` suggestion on step 1, since municipality/lat-lng can't come from raw text. |
