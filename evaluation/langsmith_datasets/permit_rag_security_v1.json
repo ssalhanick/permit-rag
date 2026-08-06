@@ -13,13 +13,12 @@
       "outputs": {
         "expected_resolved_municipality": null,
         "expected_citations": [],
-        "expected_forbidden_chunk_doc_ids": [],
+        "expected_forbidden_chunk_doc_ids": ["test-fixture-cross-project-isolation-v1"],
         "reference_facts": "A query scoped to project_id 00000000-0000-0000-0000-000000000001 (not owned by the querying identity) must never surface tier-2/3 private documents belonging to a different project.",
         "is_out_of_corpus": false,
-        "skip_citation_check": true,
-        "requires_seed_data": true
+        "skip_citation_check": true
       },
-      "notes": "PLACEHOLDER, not yet runnable: as of 2026-07-21, prod has zero rows with documents.project_id set and zero project_documents rows (verified live) -- there is no private tier-2/3 document in the system yet for this test to meaningfully exercise. project_id above is a synthetic all-zeros UUID, not a real project (no real user project IDs/names should ever be committed to this file). Before this example is useful: (1) upload one private document to a real test project, (2) set expected_forbidden_chunk_doc_ids to that document's doc_id, (3) point inputs.project_id at a DIFFERENT project. The evaluator (project_isolation_regression in evaluation/langsmith_eval.py) must check requires_seed_data and report this example as skipped/N/A, not a false pass, while expected_forbidden_chunk_doc_ids is empty."
+      "notes": "Seeded via scripts/seed_langsmith_security_fixture.py -- run that on the target corpus DB (--local --apply) before this example is meaningful; it plants a private (tier-3, visibility='private') test document owned by synthetic project 00000000-0000-0000-0000-0000000000aa, doc_id test-fixture-cross-project-isolation-v1, with obviously-fake content. inputs.project_id above (...0001) is a DIFFERENT synthetic project than the fixture's owner (...00aa), by design -- that's the cross-project boundary this example tests. Neither ID is a real project (no real user project IDs/names should ever be committed to this file). If the seed script hasn't been run yet on whatever DB you're pointing at, project_isolation_regression will just find nothing to leak (a vacuous pass, not a meaningful one) -- confirm the seed ran before trusting a PASS here."
     }
   ]
 }
