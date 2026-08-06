@@ -30,6 +30,7 @@ import os
 import time
 from typing import Any
 
+from rag.agent_runtime import Tier, run_agent
 from rag.conflict_detector import detect_conflicts
 from rag.generator import PROMPT_VERSION, generate_answer
 from rag.jurisdiction_resolver import municipality_from_address
@@ -269,12 +270,18 @@ Respond with ONLY a single digit: 1 or 0."""
 
 
 def hallucination_judge(run: Any, example: Any) -> dict[str, Any]:
-    """Claude-Haiku groundedness judge. Skipped for abstained/out-of-corpus runs."""
+    """Claude-Haiku groundedness judge. Skipped for abstained/out-of-corpus runs.
+
+    Routed through rag/agent_runtime.py's run_agent -- this was previously the
+    one inline anthropic.Anthropic() call in the eval harness, which meant it
+    was invisible to the trace store, untracked in cost accounting, and didn't
+    pick up the runtime's per-model temperature handling. AGENTS.md's "no
+    inline anthropic calls" rule permits exactly rag/agent_runtime.py as the
+    single call site; evaluation/ is allowed to import it.
+    """
     outputs = run.outputs or {}
     if outputs.get("abstained") or example.outputs.get("is_out_of_corpus"):
         return {"key": "hallucination_judge", "score": None}
-
-    import anthropic
 
     answer = outputs.get("answer", "")
     chunk_texts = outputs.get("retrieved_chunk_texts", [])
@@ -287,15 +294,17 @@ def hallucination_judge(run: Any, example: Any) -> dict[str, Any]:
         f"WHAT A CORRECT ANSWER COVERS (context only, not sole ground truth):\n{reference}"
     )
 
-    client = anthropic.Anthropic(api_key=os.environ.get("ANTHROPIC_API_KEY"))
-    response = client.messages.create(
-        model=DEFAULT_JUDGE_MODEL,
-        max_tokens=8,
-        temperature=0.0,
+    result = run_agent(
+        "hallucination_judge",
         system=_JUDGE_SYSTEM_PROMPT,
         messages=[{"role": "user", "content": user_message}],
+        tier=Tier.CHEAP,
+        model=DEFAULT_JUDGE_MODEL,  # explicit override preserves EVAL_JUDGE_MODEL env var
+        max_tokens=8,
+        temperature=0.0,
+        input_parts=(answer, reference),
     )
-    text = response.content[0].text.strip()
+    text = (result.text or "").strip()
     score = 1 if text.startswith("1") else 0
     return {"key": "hallucination_judge", "score": score, "comment": text}
 
@@ -374,13 +383,28 @@ if __name__ == "__main__":
 
     from langsmith.evaluation import evaluate
 
+    from rag.prompts import library_version
+
     prefix = args.experiment_prefix or f"permit_rag-{int(time.time())}"
     results = evaluate(
         target,
         data=args.dataset,
         evaluators=ALL_EVALUATORS,
         experiment_prefix=prefix,
-        metadata={"harness": "langsmith_eval", "dataset": args.dataset, "prompt_version": PROMPT_VERSION},
+        metadata={
+            "harness": "langsmith_eval",
+            "dataset": args.dataset,
+            "prompt_version": PROMPT_VERSION,
+            # Fragment library version, tagged alongside PROMPT_VERSION so a
+            # later consumer (evaluation/agent_eval.py's LangSmith metric
+            # fetch) can tell whether "the latest experiment" actually ran
+            # against what's deployed now, or a stale/reverted config -- the
+            # same trap already found and documented for RAGAs' latest-export
+            # lookup (STATE.md punch #3c). Tagging is necessary but not
+            # sufficient: it only helps if experiments are re-run promptly
+            # after a version bump, same discipline as RAGAs.
+            "library_version": library_version(),
+        },
     )
     print(f"Experiment complete: {prefix}")
     print(results)
