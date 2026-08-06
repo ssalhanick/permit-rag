@@ -194,19 +194,29 @@ def test_langsmith_metrics_skips_stale_experiment(monkeypatch) -> None:
 
 def test_langsmith_metrics_reports_version_matched_experiment(monkeypatch) -> None:
     """A version-matched experiment's scores flow through as advisory metrics,
-    attributed to the agents configured in _LANGSMITH_SOURCES."""
+    attributed to the agents configured in _LANGSMITH_SOURCES.
+
+    _aggregate_feedback is mocked directly (not Project.feedback_stats) --
+    confirmed empirically 2026-08-06 against a real experiment that
+    Project.feedback_stats is never populated for a run() via
+    langsmith.evaluation.evaluate(); the real fetch aggregates individual
+    list_feedback() rows instead. See _aggregate_feedback's docstring.
+    """
     class _FakeProject:
         name = "fresh-experiment"
         start_time = datetime.now(UTC)
         metadata: ClassVar = {"prompt_version": "v3", "library_version": "lib-v3"}
-        feedback_stats: ClassVar = {
-            "hallucination_judge": {"avg": 0.9},
-            "citation_precision": {"avg": 0.85},
-            "citation_recall": {"avg": 0.75},
-            "project_isolation": {"avg": 1.0},
-        }
 
     monkeypatch.setattr(agent_eval, "_latest_experiment", lambda dataset: _FakeProject())
+    monkeypatch.setattr(
+        agent_eval, "_aggregate_feedback",
+        lambda experiment: {
+            "hallucination_judge": 0.9,
+            "citation_precision": 0.85,
+            "citation_recall": 0.75,
+            "project_isolation": 1.0,
+        },
+    )
     import rag.generator
     import rag.prompts
     monkeypatch.setattr(rag.generator, "PROMPT_VERSION", "v3")
@@ -217,6 +227,41 @@ def test_langsmith_metrics_reports_version_matched_experiment(monkeypatch) -> No
     assert result["answer_generator"]["langsmith_citation_precision"] == 0.85
     assert result["answer_generator"]["langsmith_citation_recall"] == 0.75
     assert result["manager"]["langsmith_project_isolation"] == 1.0
+
+
+def test_aggregate_feedback_computes_mean_per_key(monkeypatch) -> None:
+    """_aggregate_feedback means multiple runs' scores per key, skipping
+    None-score feedback rows (e.g. citation checks skipped for an example)."""
+    class _FakeExperiment:
+        id = "exp-1"
+
+    class _FakeRun:
+        def __init__(self, run_id):
+            self.id = run_id
+
+    class _FakeFeedback:
+        def __init__(self, key, score):
+            self.key = key
+            self.score = score
+
+    class _FakeClient:
+        def list_runs(self, *, project_id, execution_order):
+            return [_FakeRun("run-1"), _FakeRun("run-2")]
+
+        def list_feedback(self, *, run_ids):
+            per_run = {
+                "run-1": [_FakeFeedback("project_isolation", 1.0),
+                          _FakeFeedback("citation_precision", None)],
+                "run-2": [_FakeFeedback("project_isolation", 0.0)],
+            }
+            return per_run[run_ids[0]]
+
+    import langsmith
+    monkeypatch.setattr(langsmith, "Client", lambda: _FakeClient())
+
+    result = agent_eval._aggregate_feedback(_FakeExperiment())
+    assert result == {"project_isolation": 0.5}  # mean of 1.0 and 0.0
+    assert "citation_precision" not in result  # None-score rows excluded
 
 
 def test_langsmith_metrics_degrades_on_lookup_failure(monkeypatch) -> None:

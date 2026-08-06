@@ -188,10 +188,16 @@ def _langsmith_stats_for_dataset(
     meta = _experiment_metadata(experiment)
     exp_prompt_version = meta.get("prompt_version")
     exp_library_version = meta.get("library_version")
+    # Fail closed: a *missing* tag means "can't verify this matches deployed,"
+    # not "no claim was made, so let it through." Confirmed empirically
+    # (2026-08-06) why this matters -- the real permit_rag_eval_v1 experiment
+    # on record predates library_version tagging entirely (added this
+    # session), so exp_library_version is None for it; the original
+    # "None means no claim, don't penalize" logic let its numbers through as
+    # if fresh, silently reporting a 07-22 baseline's scores as current.
     stale = (
-        exp_prompt_version is not None and exp_prompt_version != deployed_prompt_version
-    ) or (
-        exp_library_version is not None and exp_library_version != deployed_library_version
+        exp_prompt_version != deployed_prompt_version
+        or exp_library_version != deployed_library_version
     )
     if stale:
         log.warning(
@@ -203,12 +209,35 @@ def _langsmith_stats_for_dataset(
             deployed_prompt_version, deployed_library_version,
         )
         return None
-    raw = getattr(experiment, "feedback_stats", None) or {}
-    return {
-        key: float(v["avg"])
-        for key, v in raw.items()
-        if isinstance(v, dict) and v.get("avg") is not None
-    }
+    return _aggregate_feedback(experiment)
+
+
+def _aggregate_feedback(experiment: Any) -> dict[str, float]:
+    """
+    Mean score per feedback key across every root run in an experiment.
+
+    Confirmed empirically (2026-08-06, against a freshly-completed real
+    experiment, not a stale one): ``Project.feedback_stats`` is *not*
+    populated for experiments run via ``langsmith.evaluation.evaluate()`` --
+    both ``list_projects()`` and a forced-fresh ``read_project()`` returned
+    ``None``, not even an empty dict. The real per-run scores are only
+    reachable via ``list_feedback(run_ids=...)``, so aggregate by hand
+    instead of trusting the higher-level attribute the first version of this
+    function assumed worked.
+    """
+    from langsmith import Client
+
+    client = Client()
+    runs = list(client.list_runs(project_id=experiment.id, execution_order=1))
+    sums: dict[str, float] = {}
+    counts: dict[str, int] = {}
+    for run in runs:
+        for fb in client.list_feedback(run_ids=[run.id]):
+            if fb.score is None:
+                continue
+            sums[fb.key] = sums.get(fb.key, 0.0) + float(fb.score)
+            counts[fb.key] = counts.get(fb.key, 0) + 1
+    return {key: total / counts[key] for key, total in sums.items()}
 
 
 def _latest_langsmith_metrics() -> dict[str, dict[str, float]]:
