@@ -31,12 +31,22 @@ if (-not $Local -and [string]::IsNullOrWhiteSpace($DatabaseUrl)) {
     exit 2
 }
 
+function Sanitize-Text {
+    param([string]$Text)
+    if ([string]::IsNullOrWhiteSpace($Text)) { return $Text }
+    return $Text -replace '(postgresql://[^:]+):[^@]+@', '$1:***@'
+}
+
 $dbArgs = @()
+$displayDbArgs = @()
 if ($Local) {
     $dbArgs += "--local"
+    $displayDbArgs += "--local"
 } else {
     $dbArgs += "--database-url"
     $dbArgs += $DatabaseUrl
+    $displayDbArgs += "--database-url"
+    $displayDbArgs += (Sanitize-Text $DatabaseUrl)
 }
 
 $timestamp = Get-Date -Format "yyyyMMdd_HHmmss"
@@ -50,7 +60,8 @@ $reportFile = "$reportDir/reprocess_${timestamp}_report.txt"
 
 function Write-Log {
     param([string]$Message)
-    $logMsg = "[$(Get-Date -Format 'yyyy-MM-dd HH:mm:ss')] $Message"
+    $cleanMessage = Sanitize-Text $Message
+    $logMsg = "[$(Get-Date -Format 'yyyy-MM-dd HH:mm:ss')] $cleanMessage"
     Write-Host $logMsg
     Add-Content -Path $logFile -Value $logMsg
 }
@@ -62,7 +73,7 @@ $step3Status = "SKIPPED"
 function Write-Report {
     $reportLines = @(
         "Corpus reprocess report -- $timestamp",
-        "DB target args: $($dbArgs -join ' ')",
+        "DB target args: $($displayDbArgs -join ' ')",
         "",
         "Step 1 (re-chunk, scripts.ingest_documents --include-existing): $step1Status",
         "Step 2 (force re-embed, ingestion.embedder --force):            $step2Status",
@@ -87,13 +98,14 @@ function Write-Report {
         $reportLines += "Full log: $logFile"
     }
 
-    $reportContent = $reportLines -join "`n"
-    Set-Content -Path $reportFile -Value $reportContent
-    Write-Host $reportContent
+    $rawContent = $reportLines -join "`n"
+    $cleanContent = Sanitize-Text $rawContent
+    Set-Content -Path $reportFile -Value $cleanContent
+    Write-Host $cleanContent
 }
 
 Write-Log "=== Corpus reprocess starting ==="
-Write-Log "DB target args: $($dbArgs -join ' ')"
+Write-Log "DB target args: $($displayDbArgs -join ' ')"
 if ($env:ENVIRONMENT) {
     Write-Log "Environment: $env:ENVIRONMENT"
 }
