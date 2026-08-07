@@ -14,10 +14,11 @@ from api.schemas import DesignIntentRequest
 from db import client as db_client
 
 
-def test_parse_design_intent_includes_usage() -> None:
+def test_parse_design_intent_includes_usage(monkeypatch: pytest.MonkeyPatch) -> None:
     """Rule fallback should include zero-token usage metadata."""
     from rag.design_intent import parse_design_intent
 
+    monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
     result = parse_design_intent("white subway tile")
     assert "usage" in result
     assert result["usage"]["model"] == "rules"

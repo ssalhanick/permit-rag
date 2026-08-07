@@ -17,7 +17,51 @@ call — raised directly in chat 2026-08-04, not acted on unilaterally. The
 likely code fix (redact the password before the reprocess script writes its
 report) is small and safe once he decides how to handle the existing
 exposure. Full detail: `journals/session_20260804_agent_performance_review.md`
-§0. Punch list #6 tracks this until closed.
+§0. Punch list tracks this until closed.
+
+_Updated: 2026-08-06 — `feat/langsmith-agent-eval` (5 commits, pushed,
+839 tests passing / ruff clean as of `2c4a293`), bookkeeping close-out for
+that branch (never written up in a prior session — see
+`journals/session_20260806.md` for full detail). LangSmith wired into
+`evaluation/agent_eval.py`'s Evaluator #23 via a new `Check.gates` flag:
+LangSmith-derived checks (hallucination judge + citation precision/recall
+on `answer_generator`, project-isolation on `manager`) default
+advisory/report-only; existing Postgres/RAGAs checks keep gating. Fixed
+real bugs found by actually running the harness on Machine B, not just
+mocked tests: `hallucination_judge` routed through `rag/agent_runtime.py`
+(was an inline `anthropic.Anthropic()` call); the seed fixture's
+`documents.project_id` FK satisfied via a real project instead of an
+invented UUID; the fixture's `visibility` fixed from `private` → `team`
+(private + no `requesting_user_id` threaded meant the isolation test would
+have passed vacuously); feedback now aggregated by hand via
+`list_feedback(run_ids=...)` since `Project.feedback_stats` is never
+populated for `evaluate()`-run experiments (confirmed empirically); the
+staleness check now fails closed on a missing `library_version` tag
+instead of treating it as "no claim, don't penalize." **Migration 045
+punch item (below) is now closed**, not just RAGAs-pending — a fresh
+LangSmith experiment against `permit_rag_security_v1` confirmed
+`project_isolation = 1.0` via real per-run feedback (`list_feedback`), on
+Machine B. **Same-day follow-up:** `query_deconstructor`'s 100% step-error rate was
+root-caused on Machine B (`scripts/check_query_deconstructor_errors.py
+--local`, new read-only diagnostic) to a real, 100%-reproducible bug, not a
+credential/data-sparsity artifact — every recorded call 400'd with "This
+model does not support the effort parameter." Fixed in `rag/agent_runtime.py`
+(new `_EFFORT_UNSUPPORTED` set, mirrors the existing `_TEMPERATURE_UNSUPPORTED`
+retry pattern), 841 tests passing / ruff clean, committed (`eb23ef5`) and
+**live-verified on Machine B 2026-08-07** — a real compound query now
+actually splits into sub-questions for the first time this agent has ever
+worked. **Second follow-up, same day:** the hand-check that fix finally made
+meaningful (`scripts/hand_check_deconstructor_fanout.py`) found `_fanout_retrieval`
+never canonicalized a sub-question's municipality, silently starving or
+one-sidedly corrupting fan-out results for any compound query naming a city
+(punch #8) — fixed (`rag/agents/manager.py`, one line + regression test),
+842 tests passing, not yet re-verified live on Machine B. Also multi-sample
+RAGAs (n=3, avg 0.865/0.885/0.629) finally replaces the old single-sample
+baseline (punch #3b closed). Still open: `answer_generator`'s LangSmith
+advisories may never surface in the printed report when it has zero
+scorecard rows in the window (design question, not decided). Everything
+above is Machine-B-local-traffic only — still not a statement about real
+production performance, see Next tasks below._
 
 _Updated: 2026-08-04 — agent performance review (~1.5 weeks post Phase-5
 launch): no hard agent failures found; fixed a real prompt-instruction gap
@@ -247,9 +291,27 @@ AGENTS.md "completed work → journal only."_
    retrieval/reranker concern.
 3. **Eval-harness debt.** (a) `RAGAS_ANSWER_CACHE_ENABLED=false` from the
    shell does **not** work — `bootstrap_env()`'s `load_dotenv(override=True)`
-   overwrites it; use `--no-answer-cache`. (b) Before RAGAs gates any phase,
-   establish a fresh **live** multi-sample baseline (current: one sample,
-   `ragas_20260725_011651.json`, avg 0.843) — don't gate on one number.
+   overwrites it; use `--no-answer-cache`. (b) ~~Before RAGAs gates any
+   phase, establish a fresh live multi-sample baseline (current: one
+   sample).~~ **CLOSED 2026-08-07** — 3 fresh live runs on Machine B
+   (`--no-answer-cache`, `CHUNK_STRUCTURE_AWARE_SPLITTING_ENABLED=false`
+   confirmed set): faithfulness 0.823/0.893/0.878 (avg **0.865**), relevancy
+   0.980/0.839/0.835 (avg **0.885** — the swing is q0's already-documented
+   judge blind spot recurring intermittently, not new), context precision
+   0.641/0.672/0.573 (avg **0.629**). This is now the reference baseline,
+   replacing the stale single-sample `ragas_20260725_011651.json` (avg
+   0.843). Confirms no faithfulness regression from punch #6's
+   effort-parameter fix (none of the 3 sample runs' queries are compound,
+   so this doesn't cover punch #8's fan-out fix — that needs its own
+   targeted re-check, see item 8 above and Next tasks). One en-route
+   detour worth remembering: an earlier run under this same session showed
+   relevancy/context-precision matching the already-rejected 2026-07-31
+   "chunking step 3" regression (`CHUNK_STRUCTURE_AWARE_SPLITTING_ENABLED`
+   defaults `true` in `ingestion/chunker.py` when unset) — caused by
+   Machine B's shell `ENVIRONMENT` var, not a real regression. Worth
+   remembering next time a Machine B RAGAs run looks like it's regressed:
+   check `$env:ENVIRONMENT` and the chunking flag before trusting the
+   numbers.
    (c) **`eval_guard._latest_ragas_export()` picks the newest file by
    timestamp, not the deployed config** — confirmed 2026-08-04: at the time
    of checking, the chronologically-latest run (`ragas_20260731_165237.json`,
@@ -260,49 +322,120 @@ AGENTS.md "completed work → journal only."_
    next time an experiment is tested and reverted. See decisions log.
 4. **Mobile OAuth deep links (deferred)** — M0-6/M0-7 device Google/Apple
    roundtrip.
-5. **Migration 045 (match_chunks visibility fix) — RAGAs run done, but the
-   actual security property is still unverified.** `ragas_20260802_034009.json`
-   (2026-08-02, faithfulness 0.935) shows no regression vs. the 0.937 pre-045
-   baseline — but the fixed 7-query eval set has no tier-3/private-document
-   case, so that run only confirms the *general* corpus path didn't regress;
-   it says nothing about whether the fix actually blocks a cross-tenant leak.
-   Still needed: a hand-check (two test users, one private doc, confirm it
-   doesn't surface in the other user's answer) on the corpus machine. See
-   `journals/session_20260804_agent_performance_review.md` §5.
-6. **Live prod DB password committed to git, already pushed to GitHub —
+5. ~~Migration 045 (match_chunks visibility fix) needs verification.~~
+   **CLOSED 2026-08-06** — a fresh LangSmith experiment against
+   `permit_rag_security_v1` on Machine B confirmed `project_isolation = 1.0`
+   via real per-run feedback (`list_feedback`, not an assumed aggregate).
+   Full detail: `journals/session_20260806.md`.
+6. ~~`query_deconstructor` shows a 100% step-error rate.~~ **ROOT-CAUSED
+   AND FIXED 2026-08-06.** `scripts/check_query_deconstructor_errors.py
+   --local` on Machine B showed all 10 most recent recorded steps
+   (2026-07-27 through 2026-08-06) failing with the identical error:
+   `400 - This model does not support the effort parameter`. Not a
+   credential/data-sparsity issue — a real, 100%-reproducible code bug:
+   `rag/agent_runtime.py`'s cheap-tier ladder never actually supported the
+   `output_config={"effort": ...}` knob its own docstring assumed it did,
+   so every real call from `deconstructor.py` (and `permit_strategy.py`,
+   same `effort="low"` call shape) 400'd, silently swallowed by
+   `deconstruct()`'s graceful-degrade design — meaning Query Deconstructor's
+   actual sub-question splitting has never once succeeded via the model
+   path since it was built. Fixed the same way `_TEMPERATURE_UNSUPPORTED`
+   already handles Sonnet/Opus rejecting `temperature`: a new
+   `_EFFORT_UNSUPPORTED` set learns per-model and retries without
+   `output_config`. Two new tests
+   (`test_effort_unsupported_retries_without_it`,
+   `test_effort_unsupported_model_skips_it_from_the_start`) mirror the
+   existing temperature-retry tests. 841 tests passing, ruff clean
+   (machine A, mocked). **Live-verified on Machine B, 2026-08-07:**
+   `scripts/verify_query_deconstructor_fix.py --local` made a real
+   compound-query call through `deconstruct()` — it split into 3 correct
+   sub-questions (setback/Plano, height/Plano, electrical permit) and
+   recorded `status=ok` in `agent_steps`. First confirmed-successful
+   model-path call this agent has ever made. Fully closed.
+7. **`answer_generator`'s LangSmith advisory metrics may never display.**
+   `evaluation/agent_eval.py`'s `compute_metrics()` only emits a report row
+   for agents present in `db_client.agent_scorecard()`'s result for the
+   window — if `answer_generator` has zero scorecard rows in a sparse
+   `--days` window, its LangSmith metrics compute successfully but never
+   surface. Open design question, not decided: correct behavior (LangSmith
+   metrics complement live-traffic rows, don't conjure new ones) or a gap
+   worth fixing.
+8. **`_fanout_retrieval` never canonicalized `sub.municipality` — found via
+   the hand-check the effort-parameter fix (#6) finally made meaningful,
+   fixed same-day 2026-08-07.** `scripts/hand_check_deconstructor_fanout.py
+   --local` on Machine B ran 3 real compound queries: Plano and Fort Worth
+   (all sub-questions carry a municipality) both returned **0 fan-out
+   chunks**; the Dallas one returned 5 chunks, but all from the one
+   sub-question with `municipality=None` — the actual Dallas-permit
+   sub-question contributed nothing, so fan-out's result was 100% ADA
+   content with the user's real question dropped. Root cause:
+   `get_jurisdiction_chain()` (`db/client.py:104`) does an exact-match
+   lookup against the corpus's canonical lowercase/aliased jurisdiction ids
+   (`rag/jurisdiction_ids.py` exists specifically for this — e.g. the
+   documented `"fort-worth"`→`"fortworth"` collision), but
+   `_fanout_retrieval` (`rag/agents/manager.py`) passed the Deconstructor's
+   raw LLM output (`"Plano"`, `"Fort Worth"`, `"Dallas"` — capitalized,
+   unslugified) straight through, unlike `_resolve_municipality`, which
+   already canonicalizes. **Production impact if shipped unfixed:** the
+   Plano/Fort Worth shape (empty merge) gracefully falls back to
+   single-question retrieval via `_fanout_retrieval(state) or
+   _single_retrieval(state)` — no worse than before. The Dallas shape
+   (non-empty but one-sided) does not fall back — production would have
+   silently served an incomplete, wrong-focus answer for any compound query
+   naming a city alongside an unfiltered sub-question. Fixed: `muni =
+   canonicalize(getattr(sub, "municipality", None)) or
+   state.effective_municipality`. New regression test
+   (`test_fanout_canonicalizes_sub_question_municipality` in
+   `tests/test_deconstructor_wire.py`) — the existing fan-out test suite
+   had zero coverage of a sub-question carrying its own municipality
+   distinct from `state.effective_municipality`, which is exactly why this
+   was never caught. 842 tests passing, ruff clean (machine A, mocked).
+   **Not yet re-verified against real Machine B traffic** — re-run
+   `scripts/hand_check_deconstructor_fanout.py --local` after pulling to
+   confirm fan-out now actually returns Plano/Fort Worth/Dallas-specific
+   chunks instead of empty/one-sided results.
+9. **Live prod DB password committed to git, already pushed to GitHub —
    see the SECURITY section above.** Not remediated as of this entry;
    Scott's decision on rotation/history.
 
 ## Next tasks
 
-1. **Phase 5 remaining tail:**
+1. **`feat/langsmith-agent-eval` (pushed, 839 tests / ruff clean at
+   `2c4a293`) — merge decision pending.** Settle the `query_deconstructor`
+   error-rate root cause on Machine B (punch list #6) first, or explicitly
+   decide it doesn't block this merge; then get Scott's go-ahead to merge
+   into `deployment/sites` and push (AGENTS.md: commits/merges/pushes always
+   need explicit confirmation). Full detail: `journals/session_20260806.md`.
+2. **Path to real (prod-reflective) agent performance data — still
+   unresolved.** This was the original ask behind the LangSmith branch and
+   remains open after it: everything run so far (RAGAs, LangSmith
+   experiments, `run_agent_eval.py`) is against Machine B's local dev/test
+   traffic, not production. Two options surfaced, neither decided/executed:
+   read-only prod RDS access, or wait for accumulated real trace volume and
+   re-run the same scripts against it.
+3. **Phase 5 remaining tail:**
    - **#5 Query Deconstructor** — built (machine A green), NOT deployed.
      Manager wave-1 `_deconstruct` + gated fan-out in `_run_retrieval`.
-     **Before merging to `deployment/sites`: validate on machine B** — RAGAs
-     (`--no-answer-cache`) unchanged + hand-check a few genuinely compound
-     queries (e.g. "setback and height for a garage in Plano, and do I need
-     an electrical permit?") retrieve better than the single path.
-   - **Run the batch/eval loops on machine B** — commands handed off
-     2026-08-04 (`journals/session_20260804_agent_performance_review.md`):
-     `py scripts/run_agent_eval.py --local --days 7`,
-     `py scripts/review_feedback.py --local --dry-run` (report-only, no
-     `--apply` yet). Still needs a **multi-sample live RAGAs baseline**
-     (punch #3) — the 2026-07-25 run (avg 0.843) is one sample; run 3+,
-     average out q6's ±0.15, repoint `eval_guard` off the stale
-     `ragas_20260531` baseline. **Higher-priority Machine-B item ahead of
-     this**: migration 045 (`match_chunks` tier-3 visibility fix,
-     `journals/session_20260801.md`) is code-complete but not
-     RAGAs-verified — a real cross-tenant document-leak security fix, don't
-     let it wait behind this review.
+     **Hand-check finally done 2026-08-07** (only became meaningful once
+     punch #6 fixed deconstruct()'s error rate) — found and fixed a second,
+     more serious bug (punch #8, municipality canonicalization). Still
+     pending: re-run `scripts/hand_check_deconstructor_fanout.py --local`
+     and a fresh RAGAs pass after pulling the punch #8 fix, before treating
+     this as validated.
+   - **Run the batch/eval loops on machine B** once volume exists:
+     `scripts/review_feedback.py`, `scripts/run_agent_eval.py`, and a
+     **multi-sample live RAGAs baseline** (punch #3) — the 2026-07-25 run
+     (avg 0.843) is one sample; run 3+, average out q6's ±0.15, repoint
+     `eval_guard` off the stale `ragas_20260531` baseline.
    - **Deferred Media Curator items** (tracked in `docs/media-curator-plan.md`):
      B2 `web_search` (needs the `claude-api` skill + `run_agent tools=`);
      link liveness → Freshness Watcher #15; `YOUTUBE_PROXY_*` for at-scale
      ingest.
-2. **Pre-existing, not phase-blocking:** q6 (building height) + q1
+4. **Pre-existing, not phase-blocking:** q6 (building height) + q1
    (electrical) faithfulness; the `NLI inference failed ('type')` classifier
    warning (falls back to keyword rules, non-fatal).
-3. **Bidding marketplace, jurisdiction runbook, document uploads — sequenced on one shared branch (2026-07-30).** `feat/bidding-marketplace` is code-complete (contractor profiles/licensing, marketplace browse/listing, structured bids + Bid Evaluator reuse — see `bids/`, `commerce/connectors/`, migrations `042`-`044`) **plus the actual Phase 6 ontology deliverable, `034_ontology_and_bids.sql`** (`form_templates`/`field_mappings` schema, per `docs/agent_architecture.md` — the PDF-parsing agent and review dashboard are still unbuilt Phase 7 work). 681 tests passing (75 new, mocked — no live DB/browser walkthrough yet, this machine's DB is empty). Agreed sequencing: this branch stays put and is not merged/replaced — jurisdiction runbook work (`docs/jurisdiction_and_gis_runbook.md`) continues next **on this same branch**, then document-uploads work after that — a **separate plan Scott is actively revising** as of 2026-07-30 (not runbook Phase 4's overlay/petition system); its own plan doc/asset is forthcoming, not yet in this repo. Whoever picks up jurisdiction next: migrations **037-038 are still free**, confirmed in the numbering note above — no renumbering needed.
-4. **Doc health check batch 4 (2026-07-28) — closed.** Sprint 11 (doc
+5. **Bidding marketplace, jurisdiction runbook, document uploads — sequenced on one shared branch (2026-07-30).** `feat/bidding-marketplace` is code-complete (contractor profiles/licensing, marketplace browse/listing, structured bids + Bid Evaluator reuse — see `bids/`, `commerce/connectors/`, migrations `042`-`044`) **plus the actual Phase 6 ontology deliverable, `034_ontology_and_bids.sql`** (`form_templates`/`field_mappings` schema, per `docs/agent_architecture.md` — the PDF-parsing agent and review dashboard are still unbuilt Phase 7 work). 681 tests passing (75 new, mocked — no live DB/browser walkthrough yet, this machine's DB is empty). Agreed sequencing: this branch stays put and is not merged/replaced — jurisdiction runbook work (`docs/jurisdiction_and_gis_runbook.md`) continues next **on this same branch**, then document-uploads work after that — a **separate plan Scott is actively revising** as of 2026-07-30 (not runbook Phase 4's overlay/petition system); its own plan doc/asset is forthcoming, not yet in this repo. Whoever picks up jurisdiction next: migrations **037-038 are still free**, confirmed in the numbering note above — no renumbering needed.
+6. **Doc health check batch 4 (2026-07-28) — closed.** Sprint 11 (doc
    governance UI) and Sprint 12 (profile dashboard) confirmed shipped via
    code; `docs/backlog.md` re-confirmed still current; `docs/ux_audit_260703.md`
    spot-checked — all 4 P0s fixed. **Remainder, code-verified but not
@@ -375,8 +508,8 @@ should have been 027. Recorded, not renamed. The dedupe correction is
 | rag/agents/guardrail | **Phase 4 slice.** `check_truncation` → action item on `stop_reason == 'max_tokens'`. **Media B1:** `check_media_sources` — zero-unsourced-URL gate |
 | rag/agents/media | **Media B1.** Media Curator (#17). Deterministic diy-only curator; never fabricates a URL |
 | ingestion/transcript | **Media C1.** `fetch_transcript(url)` — YouTube transcript pull (public captions, no API cost) |
-| db.client match_chunks / retrieval | **Media C1:** migration 031 scopes `match_chunks` to `content_class='authority'` in SQL (unchanged 3-arg signature); new `match_how_to_chunks` (diy path). **Jurisdiction (037):** `filter_municipality` became a jurisdiction-chain `text[]` (this row predates recording that — 037 is the actual latest signature prior to 045, see that migration's own header). **Security fix (045, 2026-08-01):** added a 4th `requesting_user_id` param + a tier-3 `visibility` predicate in the WHERE clause, closing the gap `match_project_chunks` (040) already closed for the project-scoped mini-RAG path but the general corpus path never got. Threading fix was mostly Python: `retrieve_with_project()` already received `requesting_user_id` and already passed it to `match_project_chunks`, but silently dropped it on its own call to `retrieve()` — `retrieve()` didn't even accept the param. Both fixed; `db_client.match_chunks()` now takes and forwards `requesting_user_id` too. **RAGAs-unverified as of this entry** — see punch list #5. |
-| rag/agent_runtime | Single Anthropic call site. `_dispatch` learns models that reject `temperature` and retries without it |
+| db.client match_chunks / retrieval | **Media C1:** migration 031 scopes `match_chunks` to `content_class='authority'` in SQL (unchanged 3-arg signature); new `match_how_to_chunks` (diy path). **Jurisdiction (037):** `filter_municipality` became a jurisdiction-chain `text[]` (this row predates recording that — 037 is the actual latest signature prior to 045, see that migration's own header). **Security fix (045, 2026-08-01):** added a 4th `requesting_user_id` param + a tier-3 `visibility` predicate in the WHERE clause, closing the gap `match_project_chunks` (040) already closed for the project-scoped mini-RAG path but the general corpus path never got. Threading fix was mostly Python: `retrieve_with_project()` already received `requesting_user_id` and already passed it to `match_project_chunks`, but silently dropped it on its own call to `retrieve()` — `retrieve()` didn't even accept the param. Both fixed; `db_client.match_chunks()` now takes and forwards `requesting_user_id` too. **Isolation-verified 2026-08-06** — a LangSmith experiment against `permit_rag_security_v1` confirmed `project_isolation = 1.0` via real per-run feedback (see punch list #5, now closed); RAGAs quality re-verification specifically was never separately run and is not blocking, since the isolation test directly exercises what this migration changed. |
+| rag/agent_runtime | Single Anthropic call site. `_dispatch` learns models that reject `temperature` and retries without it. **2026-08-06:** learns the same way for `output_config`/`effort` — the cheap-tier ladder's `effort="low"` knob 400'd on every real call (punch list #6), not just an edge case |
 | rag/generator | Folded into the runtime. Optional `routed` RoutedPrompt (composed system + persona `max_tokens` + fragment ids); un-routed default unchanged. **2026-07-28: `PROMPT_VERSION` v1→v3** — rule 7 now requires real markdown lists (was ambiguous "bullet points," rendered as inline `•` in prod); rule 1 forbids a standalone "Limitations" header. `rag/prompts/fragments/base.md` bumped to version 3 in lockstep (shared grounding rules) |
 | rag/design_intent | Folded in Phase 1; contract unchanged |
 | ingestion/metadata_agent | **Phase 3.** Corpus Metadata Validator (#13). Deterministic-first; one structured `run_agent` call; cited proposals; writes nothing (via governance only) |
@@ -386,7 +519,7 @@ should have been 027. Recorded, not renamed. The dedupe correction is
 | audit | `record_step` driven by the runtime; the Manager writes its own deterministic step |
 | db | 026/027 trace + autonomy helpers; **Phase 3:** `update_document_metadata_fields`; **Media B1:** `fetch_media_refs`/`insert_media_ref`. **Phase 5:** `upsert_answer_feedback`, `answer_feedback_counts`, `list_downvotes_without_review`, `list_agent_corrections`, `confirm_agent_correction`. **2026-07-28:** `insert_query_log`/`get_user_query_history` learn `session_id` |
 | api/routes/query | HTTP concerns only; injects retrieval + grounding thresholds into the Manager. **Phase 5:** both response paths carry `run_id`; `POST /query/feedback` upserts a vote. **2026-07-28:** `X-Client-Session-Id` now persisted as `query_log.session_id` (previously parsed for tracing only) |
-| evaluation | **Phase 4:** `langsmith_eval.run_pipeline` persona routing; `persona_checks.py`. **Phase 5:** `perf_review.py` (#24), `agent_eval.py` (#23) |
+| evaluation | **Phase 4:** `langsmith_eval.run_pipeline` persona routing; `persona_checks.py`. **Phase 5:** `perf_review.py` (#24), `agent_eval.py` (#23). **2026-08-06:** `agent_eval.py`'s `Check.gates` flag wires LangSmith-derived advisory metrics (hallucination judge + citation precision/recall on `answer_generator`, project-isolation on `manager`) alongside the existing gating Postgres/RAGAs checks; `langsmith_eval.py`'s `hallucination_judge` now routes through `rag/agent_runtime.py` (was an inline Anthropic call); experiments tagged `prompt_version` + `library_version`; `scripts/seed_langsmith_security_fixture.py` seeds the project-isolation regression fixture (idempotent) |
 | tests | **662 passing** (machine A, 2026-07-30) — rest of this table not re-verified against jurisdiction-accuracy changes, see 2026-07-30 header |
 
 ## Decisions log
@@ -441,6 +574,10 @@ should have been 027. Recorded, not renamed. The dedupe correction is
 | **Voice input: one shared hook, not five more patches (2026-08-01)** | 5 independent copy-pasted voice-input implementations had each drifted into a different subset of bugs (hardcoded-blue mic icon with no listening state, inconsistent "no speech" error mapping, a self-contradictory "not supported: no speech detected" message) because `RoomCaptureWeb.js` emitted two different strings for the same no-speech condition and each call site only ever checked one of them. Concrete proof duplication was the actual bug, not just style debt — patching five call sites again would leave the same fragmentation for the next bug. `frontend/src/hooks/useVoiceInput.js` owns the state machine and error mapping once; callers only control what happens with a transcript/error via `onTranscript`/`onError` callbacks. |
 | **Kickoff free-form entry pre-fills the wizard, never bypasses it (2026-08-01)** | Confirmed with Scott directly (not the two options originally offered): free-form text/talk isn't a parallel fast-path to project creation — it's AI extraction (`generate_kickoff_extraction`) that pre-fills the *same* step-by-step wizard fields for the user to review and complete. `address_guess` is deliberately plain text, not geocoded — the user still picks a real `AddressAutocomplete` suggestion on step 1, since municipality/lat-lng can't come from raw text. |
 | **Kickoff extraction reuses bound_notes(), never a second free-text blob (2026-08-01)** | The existing kickoff chat deliberately emits bounded, sanitized `notes` instead of a free-text system-prompt blob specifically to close an injection surface (see the "Kickoff demotion" decision above). `generate_kickoff_extraction`'s `comments` field is the same kind of free-text output and gets the identical `bound_notes()` treatment — a new LLM entry point is exactly where that discipline is easiest to forget. |
+| **LangSmith checks default advisory, not gating (2026-08-06)** | `Check.gates` defaults `True` for the pre-existing Postgres/RAGAs checks (unchanged behavior) but `False` for every LangSmith-derived check — they measure a fixed offline dataset against the *latest* experiment run, not live traffic, and haven't earned trust yet. Promote a specific agent's check to `gates=True` per-agent once confident, rather than an all-or-nothing switch. `manager`'s `langsmith_project_isolation` is flagged as the strongest early candidate — a leak there is a real security regression, not a fuzzy quality signal. |
+| **Feedback aggregated by hand from `list_feedback`, not `Project.feedback_stats` (2026-08-06)** | Confirmed empirically on Machine B that `Project.feedback_stats` is never populated for `evaluate()`-run experiments — both `list_projects()` and a forced `read_project()` returned `None`. Real per-run scores only exist via `list_feedback(run_ids=...)`; `langsmith_eval.py`'s `_aggregate_feedback()` now reads that directly instead of trusting a project-level rollup that silently never fills in. |
+| **Missing `library_version` tag fails closed, not open (2026-08-06)** | The staleness check originally treated a missing version tag as "no claim, don't penalize" — backwards, since it let a stale 2026-07-22 baseline experiment's numbers through simply because it predated version tagging entirely (rather than being freshly verified). A missing tag now means "can't verify, don't trust." |
+| **Security seed fixture uses `visibility='team'`, not `'private'` (2026-08-06)** | `langsmith_eval.py` never threads `requesting_user_id` (always `None`), so a `'private'` tier-3 doc is excluded from `match_chunks` unconditionally regardless of `project_id` — the project-isolation regression test would have passed vacuously (nothing to leak, because nothing was retrievable in the first place). `'team'` visibility makes the fixture doc retrievable within its own project, so the isolation check is actually exercising cross-project boundaries. |
 
 ## Canonical validation
 

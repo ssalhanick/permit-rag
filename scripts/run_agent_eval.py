@@ -69,6 +69,8 @@ def main(argv: list[str] | None = None) -> int:
               + (f" faith={r.metrics['faithfulness']:.3f}" if 'faithfulness' in r.metrics else ""))
         for b in r.breaches:
             print(f"        - {b}")
+        for a in r.advisories:
+            print(f"        ~ [advisory, not gating] {a}")
         if not r.passed:
             breached += 1
             if r.demoted_to:
