@@ -97,6 +97,34 @@ def test_fanout_empty_falls_back_to_single(monkeypatch) -> None:
     assert calls == ["sub-a", "sub-b", "orig"]
 
 
+def test_fanout_canonicalizes_sub_question_municipality() -> None:
+    """A sub-question's own municipality is canonicalized before retrieval.
+
+    Found 2026-08-07 via a live hand-check on Machine B: the Deconstructor's
+    raw LLM output ("Fort Worth", "Plano", "Dallas" -- capitalized, unslugified)
+    was passed straight to retrieve() -> get_jurisdiction_chain(), which does an
+    exact-match lookup against the corpus's canonical lowercase/aliased ids
+    (jurisdiction_ids.py's whole reason for existing, incl. the documented
+    "fort-worth" -> "fortworth" collision). Every real sub-question with its own
+    named municipality silently matched zero chunks. state.effective_municipality
+    already goes through canonicalize() elsewhere (_resolve_municipality) --
+    _fanout_retrieval was the one path that didn't.
+    """
+    seen_municipalities = []
+
+    def _retrieve(q, *, municipality=None, **_k):
+        seen_municipalities.append(municipality)
+        return _result([_chunk(0.9)], 5, query=q)
+
+    st = _state(
+        _retrieve,
+        [SubQuestion(text="a", municipality="Fort Worth"),
+         SubQuestion(text="b", municipality="Plano")],
+    )
+    mgr._run_retrieval(st)
+    assert seen_municipalities == ["fortworth", "plano"]
+
+
 def test_deconstruct_step_skips_explicit_chunk_ids() -> None:
     """A chunk-id request bypasses deconstruction (no sub-questions set)."""
     st = _state(lambda *a, **k: None, [])

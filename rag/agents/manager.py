@@ -366,6 +366,7 @@ def _fanout_retrieval(state: _PlanState) -> Any:
     behave exactly as today. Returns None to fall back to single retrieval when no
     sub-question returned anything.
     """
+    from rag.jurisdiction_ids import canonicalize
     from rag.retriever import RetrievalResult
 
     r = state.request
@@ -373,7 +374,7 @@ def _fanout_retrieval(state: _PlanState) -> Any:
     seen: set[Any] = set()
     latency = 0
     for sub in state.sub_questions:
-        muni = getattr(sub, "municipality", None) or state.effective_municipality
+        muni = canonicalize(getattr(sub, "municipality", None)) or state.effective_municipality
         try:
             res = state.deps.retrieve(
                 sub.text, project_id=r.project_id, top_k=r.top_k,

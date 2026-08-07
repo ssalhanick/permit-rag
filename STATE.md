@@ -31,11 +31,18 @@ model does not support the effort parameter." Fixed in `rag/agent_runtime.py`
 retry pattern), 841 tests passing / ruff clean, committed (`eb23ef5`) and
 **live-verified on Machine B 2026-08-07** — a real compound query now
 actually splits into sub-questions for the first time this agent has ever
-worked. Still open: `answer_generator`'s LangSmith advisories may
-never surface in the printed report when it has zero scorecard rows in the
-window (design question, not decided). Everything above is Machine-B-local-
-traffic only — still not a statement about real production performance, see
-Next tasks below._
+worked. **Second follow-up, same day:** the hand-check that fix finally made
+meaningful (`scripts/hand_check_deconstructor_fanout.py`) found `_fanout_retrieval`
+never canonicalized a sub-question's municipality, silently starving or
+one-sidedly corrupting fan-out results for any compound query naming a city
+(punch #8) — fixed (`rag/agents/manager.py`, one line + regression test),
+842 tests passing, not yet re-verified live on Machine B. Also multi-sample
+RAGAs (n=3, avg 0.865/0.885/0.629) finally replaces the old single-sample
+baseline (punch #3b closed). Still open: `answer_generator`'s LangSmith
+advisories may never surface in the printed report when it has zero
+scorecard rows in the window (design question, not decided). Everything
+above is Machine-B-local-traffic only — still not a statement about real
+production performance, see Next tasks below._
 
 _Updated: 2026-08-02 — system & migration health check (832 pytest green). Registered probes for migrations 002–045 in `scripts/check_migrations.py` and enforced via `tests/test_migration_integrity.py`. Fixed unbackfilled document reporting in `check_migration_details.py`, seeded RDS labor rate benchmarks, registered clean `atexit` connection pool cleanup in `db/client.py` to prevent process termination warnings, and corrected unauthenticated mobile nav sign-in button alignment in `Nav.jsx`._
 
@@ -250,9 +257,27 @@ AGENTS.md "completed work → journal only."_
    retrieval/reranker concern.
 3. **Eval-harness debt.** (a) `RAGAS_ANSWER_CACHE_ENABLED=false` from the
    shell does **not** work — `bootstrap_env()`'s `load_dotenv(override=True)`
-   overwrites it; use `--no-answer-cache`. (b) Before RAGAs gates any phase,
-   establish a fresh **live** multi-sample baseline (current: one sample,
-   `ragas_20260725_011651.json`, avg 0.843) — don't gate on one number.
+   overwrites it; use `--no-answer-cache`. (b) ~~Before RAGAs gates any
+   phase, establish a fresh live multi-sample baseline (current: one
+   sample).~~ **CLOSED 2026-08-07** — 3 fresh live runs on Machine B
+   (`--no-answer-cache`, `CHUNK_STRUCTURE_AWARE_SPLITTING_ENABLED=false`
+   confirmed set): faithfulness 0.823/0.893/0.878 (avg **0.865**), relevancy
+   0.980/0.839/0.835 (avg **0.885** — the swing is q0's already-documented
+   judge blind spot recurring intermittently, not new), context precision
+   0.641/0.672/0.573 (avg **0.629**). This is now the reference baseline,
+   replacing the stale single-sample `ragas_20260725_011651.json` (avg
+   0.843). Confirms no faithfulness regression from punch #6's
+   effort-parameter fix (none of the 3 sample runs' queries are compound,
+   so this doesn't cover punch #8's fan-out fix — that needs its own
+   targeted re-check, see item 8 above and Next tasks). One en-route
+   detour worth remembering: an earlier run under this same session showed
+   relevancy/context-precision matching the already-rejected 2026-07-31
+   "chunking step 3" regression (`CHUNK_STRUCTURE_AWARE_SPLITTING_ENABLED`
+   defaults `true` in `ingestion/chunker.py` when unset) — caused by
+   Machine B's shell `ENVIRONMENT` var, not a real regression. Worth
+   remembering next time a Machine B RAGAs run looks like it's regressed:
+   check `$env:ENVIRONMENT` and the chunking flag before trusting the
+   numbers.
 4. **Mobile OAuth deep links (deferred)** — M0-6/M0-7 device Google/Apple
    roundtrip.
 5. ~~Migration 045 (match_chunks visibility fix) needs verification.~~
@@ -293,6 +318,40 @@ AGENTS.md "completed work → journal only."_
    surface. Open design question, not decided: correct behavior (LangSmith
    metrics complement live-traffic rows, don't conjure new ones) or a gap
    worth fixing.
+8. **`_fanout_retrieval` never canonicalized `sub.municipality` — found via
+   the hand-check the effort-parameter fix (#6) finally made meaningful,
+   fixed same-day 2026-08-07.** `scripts/hand_check_deconstructor_fanout.py
+   --local` on Machine B ran 3 real compound queries: Plano and Fort Worth
+   (all sub-questions carry a municipality) both returned **0 fan-out
+   chunks**; the Dallas one returned 5 chunks, but all from the one
+   sub-question with `municipality=None` — the actual Dallas-permit
+   sub-question contributed nothing, so fan-out's result was 100% ADA
+   content with the user's real question dropped. Root cause:
+   `get_jurisdiction_chain()` (`db/client.py:104`) does an exact-match
+   lookup against the corpus's canonical lowercase/aliased jurisdiction ids
+   (`rag/jurisdiction_ids.py` exists specifically for this — e.g. the
+   documented `"fort-worth"`→`"fortworth"` collision), but
+   `_fanout_retrieval` (`rag/agents/manager.py`) passed the Deconstructor's
+   raw LLM output (`"Plano"`, `"Fort Worth"`, `"Dallas"` — capitalized,
+   unslugified) straight through, unlike `_resolve_municipality`, which
+   already canonicalizes. **Production impact if shipped unfixed:** the
+   Plano/Fort Worth shape (empty merge) gracefully falls back to
+   single-question retrieval via `_fanout_retrieval(state) or
+   _single_retrieval(state)` — no worse than before. The Dallas shape
+   (non-empty but one-sided) does not fall back — production would have
+   silently served an incomplete, wrong-focus answer for any compound query
+   naming a city alongside an unfiltered sub-question. Fixed: `muni =
+   canonicalize(getattr(sub, "municipality", None)) or
+   state.effective_municipality`. New regression test
+   (`test_fanout_canonicalizes_sub_question_municipality` in
+   `tests/test_deconstructor_wire.py`) — the existing fan-out test suite
+   had zero coverage of a sub-question carrying its own municipality
+   distinct from `state.effective_municipality`, which is exactly why this
+   was never caught. 842 tests passing, ruff clean (machine A, mocked).
+   **Not yet re-verified against real Machine B traffic** — re-run
+   `scripts/hand_check_deconstructor_fanout.py --local` after pulling to
+   confirm fan-out now actually returns Plano/Fort Worth/Dallas-specific
+   chunks instead of empty/one-sided results.
 
 ## Next tasks
 
@@ -312,10 +371,12 @@ AGENTS.md "completed work → journal only."_
 3. **Phase 5 remaining tail:**
    - **#5 Query Deconstructor** — built (machine A green), NOT deployed.
      Manager wave-1 `_deconstruct` + gated fan-out in `_run_retrieval`.
-     **Before merging to `deployment/sites`: validate on machine B** — RAGAs
-     (`--no-answer-cache`) unchanged + hand-check a few genuinely compound
-     queries (e.g. "setback and height for a garage in Plano, and do I need
-     an electrical permit?") retrieve better than the single path.
+     **Hand-check finally done 2026-08-07** (only became meaningful once
+     punch #6 fixed deconstruct()'s error rate) — found and fixed a second,
+     more serious bug (punch #8, municipality canonicalization). Still
+     pending: re-run `scripts/hand_check_deconstructor_fanout.py --local`
+     and a fresh RAGAs pass after pulling the punch #8 fix, before treating
+     this as validated.
    - **Run the batch/eval loops on machine B** once volume exists:
      `scripts/review_feedback.py`, `scripts/run_agent_eval.py`, and a
      **multi-sample live RAGAs baseline** (punch #3) — the 2026-07-25 run
