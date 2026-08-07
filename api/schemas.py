@@ -196,6 +196,43 @@ class CitationResponse(BaseModel):
     authority_level: str | None = Field(description="Authority level of cited source.")
 
 
+class SubAnswerResponse(BaseModel):
+    """
+    One sub-question's own answer from a fanned-out compound query.
+
+    Item 3 (compound-answer structuring): a compound question like "what are
+    the setback and height requirements, and do I need an electrical permit?"
+    is graded and generated per sub-question instead of once over a merged
+    chunk pool, so each part's citations are attributable and a part can
+    abstain independently instead of the whole query being all-or-nothing.
+    Populated only for a genuinely fanned-out compound query — empty
+    ``AnswerResponse.sub_answers`` means either a simple query or a compound
+    query whose fan-out fell back to the single-answer path.
+    """
+
+    question: str = Field(description="This sub-question's own text.")
+    municipality: str | None = Field(
+        default=None, description="Jurisdiction this sub-question resolved to."
+    )
+    abstained: bool = Field(
+        default=False,
+        description="True when this part alone couldn't be answered — the other parts may still.",
+    )
+    answer: str | None = Field(
+        default=None, description="This part's generated answer text. Null when abstained."
+    )
+    abstain_message: str | None = Field(
+        default=None, description="Conversational explanation when this part abstained."
+    )
+    citations: list[CitationResponse] = Field(
+        default_factory=list, description="Citations for this part only, never another part's."
+    )
+    unsupported_citations: list[str] = Field(
+        default_factory=list,
+        description="This part's own fabricated-citation sentences, not the whole answer's.",
+    )
+
+
 class MediaRefResponse(BaseModel):
     """A sourced how-to video link (Media Curator, agent #17)."""
 
@@ -342,6 +379,18 @@ class AnswerResponse(BaseModel):
         description=(
             "Answer sentences whose citation points at a chunk that was not "
             "retrieved. Empty when every citation resolves."
+        ),
+    )
+    # Item 3: per-sub-question breakdown of a fanned-out compound query.
+    # Additive — `answer`/`citations` above always carry a backward-compatible
+    # combined answer regardless, so an unmodified client needs no changes.
+    # Empty for every non-compound query.
+    sub_answers: list[SubAnswerResponse] = Field(
+        default_factory=list,
+        description=(
+            "Per-sub-question breakdown of a fanned-out compound query, each with "
+            "its own citations and abstain state. Empty for a simple query, or a "
+            "compound query whose fan-out fell back to the single-answer path."
         ),
     )
     # Phase 5 feedback loop: the audit run this answer came from. The client

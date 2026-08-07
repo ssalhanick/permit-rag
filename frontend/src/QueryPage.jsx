@@ -602,18 +602,64 @@ export default function QueryPage() {
                         </div>
                       )}
 
-                      {/* Main Answer Content */}
-                      <div
-                        className={`p-4 rounded-xl text-xs sm:text-sm leading-relaxed ${
-                          turn.abstained
-                            ? "bg-slate-50 dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700/80 text-slate-900 dark:text-slate-100"
-                            : "bg-slate-50/70 dark:bg-slate-800/50 border border-slate-100 dark:border-slate-800 text-slate-800 dark:text-slate-100"
-                        }`}
-                      >
-                        <ReactMarkdown remarkPlugins={[remarkGfm]} components={markdownComponents}>
-                          {turn.answer}
-                        </ReactMarkdown>
-                      </div>
+                      {/* Main Answer Content — per-sub-question breakdown for a
+                          fanned-out compound query (item 3), each part graded,
+                          generated, and cited independently. Falls through to
+                          the single flat answer for every non-compound query,
+                          or a compound query whose fan-out fell back to it. */}
+                      {turn.sub_answers?.length > 0 ? (
+                        <div className="space-y-4">
+                          {turn.sub_answers.map((sa, saIdx) => (
+                            <div key={saIdx} className="space-y-2">
+                              <h4 className="font-bold text-xs text-slate-700 dark:text-slate-300">
+                                {sa.question}
+                              </h4>
+                              {sa.abstained && (
+                                <div className="flex items-center gap-2 text-xs font-bold px-3.5 py-2.5 rounded-xl bg-amber-500/10 text-amber-800 dark:text-amber-300 border border-amber-500/30">
+                                  <AlertOctagon className="w-4 h-4 text-amber-600 dark:text-amber-400 flex-shrink-0" />
+                                  <span>General Knowledge Fallback (Unverified against specific local municipal code corpus)</span>
+                                </div>
+                              )}
+                              <div
+                                className={`p-4 rounded-xl text-xs sm:text-sm leading-relaxed ${
+                                  sa.abstained
+                                    ? "bg-slate-50 dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700/80 text-slate-900 dark:text-slate-100"
+                                    : "bg-slate-50/70 dark:bg-slate-800/50 border border-slate-100 dark:border-slate-800 text-slate-800 dark:text-slate-100"
+                                }`}
+                              >
+                                <ReactMarkdown remarkPlugins={[remarkGfm]} components={markdownComponents}>
+                                  {sa.abstained ? sa.abstain_message : sa.answer}
+                                </ReactMarkdown>
+                              </div>
+                              {(sa.citations || []).length > 0 && (
+                                <div className="flex flex-wrap gap-2">
+                                  {sa.citations.map((citation, cIdx) => (
+                                    <span
+                                      key={cIdx}
+                                      className="inline-flex items-center gap-1 text-[11px] font-semibold bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 px-2.5 py-1 rounded-lg border border-slate-200 dark:border-slate-700"
+                                    >
+                                      <FileText className="w-3 h-3 text-blue-500" />
+                                      {citation.doc_id} (ch {citation.chunk_index})
+                                    </span>
+                                  ))}
+                                </div>
+                              )}
+                            </div>
+                          ))}
+                        </div>
+                      ) : (
+                        <div
+                          className={`p-4 rounded-xl text-xs sm:text-sm leading-relaxed ${
+                            turn.abstained
+                              ? "bg-slate-50 dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700/80 text-slate-900 dark:text-slate-100"
+                              : "bg-slate-50/70 dark:bg-slate-800/50 border border-slate-100 dark:border-slate-800 text-slate-800 dark:text-slate-100"
+                          }`}
+                        >
+                          <ReactMarkdown remarkPlugins={[remarkGfm]} components={markdownComponents}>
+                            {turn.answer}
+                          </ReactMarkdown>
+                        </div>
+                      )}
 
                       {/* Interactive Clarification Multiple-Choice Chips */}
                       {(turn.clarifying_options || []).length > 0 && (
@@ -695,8 +741,9 @@ export default function QueryPage() {
                         </div>
                       )}
 
-                      {/* Source Citations */}
-                      {(turn.citations || []).length > 0 && (
+                      {/* Source Citations — suppressed when sub_answers already
+                          rendered each part's own citations above (item 3). */}
+                      {!(turn.sub_answers?.length > 0) && (turn.citations || []).length > 0 && (
                         <div className="pt-3 border-t border-slate-100 dark:border-slate-800">
                           <h4 className="font-bold text-xs text-slate-700 dark:text-slate-300 mb-2">Verified Code Sources:</h4>
                           <div className="flex flex-wrap gap-2">

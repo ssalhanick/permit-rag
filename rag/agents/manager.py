@@ -56,6 +56,11 @@ log = logging.getLogger(__name__)
 # Hard ceiling on Manager ReAct iterations (docs/agent_architecture.md).
 MAX_ITERATIONS = 6
 
+# Cap on sub-questions that get their own generation call. The Deconstructor
+# has no hard limit on how many it returns; N generation calls is where an
+# unbounded compound query first costs real money, not just latency.
+MAX_SUBQUESTIONS_FOR_GENERATION = 4
+
 # User-facing abstain messages. A grounding-floor miss is a valid *outcome*, not
 # an error (Phase 4 query-UX pass): retrieval ran fine, the system simply chose
 # not to answer without enough support. These read conversationally so the route
@@ -174,6 +179,28 @@ class ManagerDeps:
 
 
 @dataclass
+class SubAnswer:
+    """
+    One compound sub-question's own answer, grounded and cited independently.
+
+    Compound-answer structuring (item 3): a fanned-out compound query gets one
+    of these per sub-question instead of a single flat answer synthesized over
+    a merged, top-k-capped chunk pool — the mechanism that silently dropped an
+    entire sub-claim's citations when another sub-intent's chunks crowded it
+    out of the shared pool before generation ever ran.
+    """
+
+    question: str
+    municipality: str | None
+    abstained: bool
+    answer: str | None
+    abstain_message: str | None
+    citations: list[dict[str, Any]] = field(default_factory=list)
+    chunks: list[dict[str, Any]] = field(default_factory=list)
+    unsupported_citations: list[str] = field(default_factory=list)
+
+
+@dataclass
 class ManagerResult:
     """
     The assembled outcome. Payloads are resolved from the store, not carried.
@@ -207,8 +234,16 @@ class ManagerResult:
     # educational disclaimer and the frontend labels it accordingly.
     how_to: bool = False
     # Citation Verifier (#9): sentences citing a chunk retrieval never returned
-    # (fabricated citations). Empty on a clean answer and on an abstain.
+    # (fabricated citations). Empty on a clean answer and on an abstain. For a
+    # fanned-out compound query this is the union of every sub_answers entry's
+    # own list, not a separate top-level check.
     unsupported_citations: list[str] = field(default_factory=list)
+    # Compound-answer structuring (item 3): populated only for a genuinely
+    # fanned-out compound query (len(sub_questions) > 1 and fan-out didn't fall
+    # back to the single-question path). Empty for every other query — the
+    # existing `answer`/`citations`-shaped fields above still carry a
+    # backward-compatible combined answer either way.
+    sub_answers: list[SubAnswer] = field(default_factory=list)
 
     @property
     def retrieval(self) -> Any:
@@ -251,6 +286,14 @@ class _PlanState:
     # Query Deconstructor (#5): sub-questions for retrieval fan-out. A single
     # entry (or empty) means a simple query — retrieval takes the unchanged path.
     sub_questions: list[Any] = field(default_factory=list)
+    # Item 3: one RetrievalResult per sub-question, index-aligned with
+    # sub_questions (None where that sub-question's retrieval raised). Empty
+    # whenever fan-out globally fell back to _single_retrieval, or the query
+    # was never compound — _check_grounding/_generate treat empty the same as
+    # "not a fanned-out query" and take the existing single-answer path.
+    sub_retrievals: list[Any] = field(default_factory=list)
+    # Item 3: one SubAnswer per sub-question, set only on the fanned-out path.
+    sub_answers: list[SubAnswer] = field(default_factory=list)
     # The chunks the answer was generated over (compliance or how-to), so the
     # Citation Verifier resolves citations against the exact set the model saw.
     answer_chunks: list[dict[str, Any]] = field(default_factory=list)
@@ -382,6 +425,15 @@ def _fanout_retrieval(state: _PlanState) -> Any:
     the compound question. Capped at ``top_k`` so generation context and grounding
     behave exactly as today. Returns None to fall back to single retrieval when no
     sub-question returned anything.
+
+    Also populates ``state.sub_retrievals`` with each sub-question's own,
+    un-merged ``RetrievalResult`` (``None`` where that sub-question's retrieval
+    raised), index-aligned with ``state.sub_questions`` — item 3's per-sub-
+    question grounding/generation reads this instead of the merged/capped pool
+    above, so one sub-intent's chunks can no longer crowd another's out before
+    generation even runs. A pure side-effect addition; the merge/dedupe/cap
+    return value above is unchanged so the existing fallback and tests keep
+    their exact current behavior.
     """
     from rag.jurisdiction_ids import canonicalize
     from rag.retriever import RetrievalResult
@@ -390,6 +442,7 @@ def _fanout_retrieval(state: _PlanState) -> Any:
     merged: list[dict[str, Any]] = []
     seen: set[Any] = set()
     latency = 0
+    state.sub_retrievals = []
     for sub in state.sub_questions:
         muni = canonicalize(getattr(sub, "municipality", None)) or state.effective_municipality
         try:
@@ -400,7 +453,9 @@ def _fanout_retrieval(state: _PlanState) -> Any:
             )
         except Exception as exc:  # one weak sub-question must not fail the whole query
             log.warning("sub-question retrieval failed (%s)", exc)
+            state.sub_retrievals.append(None)
             continue
+        state.sub_retrievals.append(res)
         latency += int(getattr(res, "latency_ms", 0) or 0)
         for c in res.chunks:
             cid = c.get("id")
@@ -428,8 +483,17 @@ def _run_retrieval(state: _PlanState) -> None:
         if request.chunk_ids:
             result = _retrieve_by_ids(state)
         elif len(state.sub_questions) > 1:
-            # Compound query: fan out, falling back to the single path on an empty union.
-            result = _fanout_retrieval(state) or _single_retrieval(state)
+            # Compound query: fan out, falling back to the single path on an
+            # empty union. _fanout_retrieval populates state.sub_retrievals as
+            # a side effect even on this fallback — reset it so the plan takes
+            # the single-answer path below (item 3's per-sub-question grounding/
+            # generation only runs when sub_retrievals is genuinely non-empty;
+            # a global empty-union fallback should stay one clean abstain, not
+            # try to render N empty parts).
+            result = _fanout_retrieval(state)
+            if result is None:
+                state.sub_retrievals = []
+                result = _single_retrieval(state)
         else:
             result = _single_retrieval(state)
     except Exception as exc:
@@ -498,7 +562,15 @@ def _check_grounding(state: _PlanState) -> None:
     the retrieval result's ``diagnostics``; only the user-facing text is friendly.
 
     Genuine retrieval and generation *failures* still raise ``ManagerError`` (500).
+
+    A genuinely fanned-out compound query (``state.sub_retrievals`` non-empty)
+    skips this entirely — the merged pool's grounding is superseded by item 3's
+    per-sub-question grounding in ``_generate_subanswers``, which runs
+    ``_grounding_verdict`` against each sub-question's own retrieval instead of
+    the shared merged/capped pool.
     """
+    if state.sub_retrievals:
+        return
     result = state.store.get(state.retrieval_ref)
     deps = state.deps
     abstained, reason = _grounding_verdict(
@@ -700,6 +772,12 @@ def _generate(state: _PlanState) -> None:
         if fallback_res.get("clarifying_options"):
             state.clarifying_options = fallback_res["clarifying_options"]
         return
+    # A genuinely fanned-out compound query (state.abstained stayed False here
+    # because _check_grounding skipped its own check for this case) takes the
+    # per-sub-question path instead of the single generation call below.
+    if state.sub_retrievals:
+        _generate_subanswers(state)
+        return
     result = state.store.get(state.retrieval_ref)
     chunks, _ = state.governor.degrade(
         "answer_generator", list(result.passing_chunks), overhead_tokens=600
@@ -744,6 +822,161 @@ def _generate(state: _PlanState) -> None:
         "output_tokens": gen.output_tokens,
         "latency_generation_ms": gen.latency_ms,
         "citation_count": len(gen.citations),
+    })
+
+
+def _generate_subanswers(state: _PlanState) -> None:
+    """
+    One grounded (or abstained) answer per sub-question of a fanned-out
+    compound query, instead of a single call over the merged/top-k-capped
+    pool — the mechanism that let one sub-intent's chunks crowd another's out
+    before generation ever ran, silently dropping an entire sub-claim's
+    citations (see ``_fanout_retrieval``/``_check_grounding``).
+
+    Each sub-question is graded independently with the same
+    ``_grounding_verdict`` the single-answer path uses, so a compound query
+    can partially answer — some parts grounded and cited, others abstained —
+    rather than all-or-nothing. ``state.abstained`` is only set when *every*
+    part abstains. Either way, a single backward-compatible ``GenerationResult``
+    is still synthesized onto ``state.generation_ref`` (concatenated parts
+    under headings, unioned citations) so every existing consumer of
+    ``ManagerResult.generation``/``.answer``/``.citations`` — the feedback
+    loop, history logging, an un-updated frontend — keeps working unchanged;
+    ``state.sub_answers`` is the new, additive, per-part structure.
+    """
+    from rag.generator import GenerationResult, generate_clarification_fallback
+    from rag.jurisdiction_ids import canonicalize
+
+    request, deps = state.request, state.deps
+    routed = _route_prompt(state)
+
+    pairs = list(zip(state.sub_questions, state.sub_retrievals, strict=True))
+    if len(pairs) > MAX_SUBQUESTIONS_FOR_GENERATION:
+        log.warning(
+            "compound query has %d sub-questions, capping generation at %d",
+            len(pairs), MAX_SUBQUESTIONS_FOR_GENERATION,
+        )
+        pairs = pairs[:MAX_SUBQUESTIONS_FOR_GENERATION]
+
+    _notify(deps, "started", "generation", {
+        "query": request.query, "num_sub_questions": len(pairs),
+    })
+
+    sub_answers: list[SubAnswer] = []
+    total_input = total_output = total_latency = total_chunks = 0
+    model = ""
+    for sub, retrieval in pairs:
+        muni = canonicalize(getattr(sub, "municipality", None)) or state.effective_municipality
+        if retrieval is None:  # this sub-question's own retrieval raised
+            sub_answers.append(SubAnswer(
+                question=sub.text, municipality=muni, abstained=True,
+                answer=None, abstain_message=_ABSTAIN_EMPTY,
+            ))
+            continue
+        abstained, reason = _grounding_verdict(
+            retrieval, min_chunks=deps.min_chunks, min_top_sim=deps.min_top_sim,
+            municipality=muni, min_muni_match=deps.min_municipality_match_chunks,
+        )
+        if abstained:
+            fallback_res = generate_clarification_fallback(sub.text, municipality=muni)
+            canned = {
+                "empty": _ABSTAIN_EMPTY,
+                "jurisdiction_mismatch": _ABSTAIN_JURISDICTION_MISMATCH,
+            }.get(reason, _ABSTAIN_LOW_CONFIDENCE)
+            sub_answers.append(SubAnswer(
+                question=sub.text, municipality=muni, abstained=True,
+                answer=None, abstain_message=fallback_res.get("answer") or canned,
+            ))
+            continue
+        chunks, _ = state.governor.degrade(
+            "answer_generator", list(retrieval.passing_chunks), overhead_tokens=600
+        )
+        try:
+            gen = _agent("answer_generator")(
+                sub.text, chunks,
+                project_context=state.store.get_or_none(state.project_context_ref),
+                routed=routed,
+            )
+        except RuntimeError as exc:  # provider credentials missing — systemic,
+            # every remaining sub-call would hit the same wall, so this still
+            # aborts the whole request rather than looping through failures.
+            log.error("Generator config error on sub-question %r: %s", sub.text, exc)
+            raise ManagerError(str(exc), stage="generation", kind="config") from exc
+        except Exception as exc:
+            # A transient failure on one sub-question (rate limit, one bad API
+            # call) must not 500 the whole compound answer when other parts may
+            # have already succeeded — degrade this one part instead, matching
+            # _fanout_retrieval's own "one weak sub-question must not fail the
+            # whole query" philosophy above.
+            log.warning(
+                "generation failed for sub-question %r (%s) — treating as unanswered",
+                sub.text, exc,
+            )
+            sub_answers.append(SubAnswer(
+                question=sub.text, municipality=muni, abstained=True, answer=None,
+                abstain_message=(
+                    "I wasn't able to generate an answer for this part — "
+                    "try asking it separately."
+                ),
+            ))
+            continue
+
+        _guard_truncation(state, gen)
+        state.governor.charge(
+            int(getattr(gen, "input_tokens", 0) or 0), int(getattr(gen, "output_tokens", 0) or 0)
+        )
+        sub_answers.append(SubAnswer(
+            question=sub.text, municipality=muni, abstained=False,
+            answer=gen.answer, abstain_message=None,
+            citations=list(gen.citations), chunks=list(retrieval.chunks),
+        ))
+        total_input += int(getattr(gen, "input_tokens", 0) or 0)
+        total_output += int(getattr(gen, "output_tokens", 0) or 0)
+        total_latency += int(getattr(gen, "latency_ms", 0) or 0)
+        total_chunks += int(getattr(gen, "chunk_count", 0) or 0)
+        model = model or gen.model
+
+    state.sub_answers = sub_answers
+    state.abstained = all(sa.abstained for sa in sub_answers)
+    if state.abstained:
+        state.abstain_message = "\n\n".join(
+            f"**{sa.question}** — {sa.abstain_message}" for sa in sub_answers
+        )
+        return
+
+    parts: list[str] = []
+    combined_citations: list[dict[str, Any]] = []
+    for sa in sub_answers:
+        if sa.abstained:
+            parts.append(f"### {sa.question}\n\n{sa.abstain_message}")
+        else:
+            parts.append(f"### {sa.question}\n\n{sa.answer}")
+            combined_citations.extend(sa.citations)
+    combined = GenerationResult(
+        query=request.query,
+        answer="\n\n".join(parts),
+        citations=combined_citations,
+        model=model or "unknown",
+        input_tokens=total_input,
+        output_tokens=total_output,
+        latency_ms=total_latency,
+        chunk_count=total_chunks,
+    )
+    # Mirrors the single-answer path: every chunk actually generated over, so
+    # a citation flagged unsupported by _verify_citations is a real
+    # fabrication, not a budget-degrade artifact.
+    state.answer_chunks = [c for sa in sub_answers for c in sa.chunks]
+    state.generation_ref = state.store.put(
+        "answer", combined, summary=_summarise_generation(combined)
+    )
+    _notify(deps, "finished", "generation", {
+        "model": combined.model,
+        "input_tokens": combined.input_tokens,
+        "output_tokens": combined.output_tokens,
+        "latency_generation_ms": combined.latency_ms,
+        "citation_count": len(combined.citations),
+        "num_sub_answers": len(sub_answers),
+        "num_sub_abstained": sum(1 for sa in sub_answers if sa.abstained),
     })
 
 
@@ -901,7 +1134,28 @@ def _verify_citations(state: _PlanState) -> None:
     compliance tool is the most dangerous kind of wrong. The full entailment
     pass (paraphrase judgement) runs offline in the Evaluator, not per query.
     Best-effort: any failure leaves the answer untouched.
+
+    A fanned-out compound query (``state.sub_answers`` populated) verifies
+    each sub-answer against its own chunks separately instead of once over the
+    concatenated text — so ``unsupported_citations`` is attributed to the
+    correct part, not a flat list with no indication which part fabricated.
     """
+    if state.sub_answers:
+        verified_any = False
+        for sa in state.sub_answers:
+            if sa.abstained or not sa.chunks:
+                continue
+            try:
+                report = _agent("citation_verifier")(sa.answer, sa.chunks, use_llm=False)
+                sa.unsupported_citations = _unsupported_citations(report)
+                verified_any = True
+            except Exception as exc:  # verification is advisory; never break the answer
+                log.warning(
+                    "citation verification failed for sub-question %r (%s)", sa.question, exc
+                )
+        if verified_any:
+            record_step("citation_verifier", deterministic=True, status="ok")
+        return
     if state.abstained or state.generation_ref is None or not state.answer_chunks:
         return
     gen = state.store.get_or_none(state.generation_ref)
@@ -1053,5 +1307,11 @@ def _assemble(state: _PlanState, iterations: int) -> ManagerResult:
         clarifying_options=state.clarifying_options,
         media_refs=state.media_refs,
         how_to=state.how_to,
-        unsupported_citations=_unsupported_citations(state.citation_report),
+        # Top-level report is empty on the fan-out path (state.citation_report
+        # stays None there); each sub-answer's own list is unioned in instead.
+        unsupported_citations=[
+            *_unsupported_citations(state.citation_report),
+            *(c for sa in state.sub_answers for c in sa.unsupported_citations),
+        ],
+        sub_answers=state.sub_answers,
     )

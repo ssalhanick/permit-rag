@@ -45,6 +45,7 @@ from api.schemas import (
     MediaRefResponse,
     QueryRequest,
     QueryResponse,
+    SubAnswerResponse,
 )
 from audit.logger import annotate_run, current_run, traced_run
 from db.client import get_jurisdiction
@@ -113,6 +114,44 @@ def _media_ref_responses(plan: Any) -> list[MediaRefResponse]:
             relevance_note=ref.relevance_note,
         )
         for ref in getattr(plan, "media_refs", []) or []
+    ]
+
+
+def _map_citations(citations: list[dict[str, Any]]) -> list[CitationResponse]:
+    """Map raw citation dicts (from a GenerationResult) to response models.
+
+    Shared by the top-level ``AnswerResponse.citations`` and each item-3
+    ``SubAnswerResponse.citations`` — one mapping, not duplicated per caller.
+    """
+    return [
+        CitationResponse(
+            doc_id=c["doc_id"],
+            chunk_index=c["chunk_index"],
+            found_in_context=c["found_in_context"],
+            municipality=c.get("municipality"),
+            authority_level=c.get("authority_level"),
+        )
+        for c in citations
+    ]
+
+
+def _sub_answer_responses(plan: Any) -> list[SubAnswerResponse]:
+    """Map the plan's per-sub-question SubAnswer objects to response models.
+
+    Empty for every non-compound query, or a compound query whose fan-out
+    fell back to the single-answer path (item 3).
+    """
+    return [
+        SubAnswerResponse(
+            question=sa.question,
+            municipality=sa.municipality,
+            abstained=sa.abstained,
+            answer=sa.answer,
+            abstain_message=sa.abstain_message,
+            citations=_map_citations(sa.citations),
+            unsupported_citations=list(sa.unsupported_citations or []),
+        )
+        for sa in getattr(plan, "sub_answers", []) or []
     ]
 
 
@@ -350,6 +389,10 @@ def _build_abstain_response(
         abstained=True,
         clarifying_options=clarifying,
         media_refs=_media_ref_responses(plan),
+        # A fanned-out compound query where every part abstained still has its
+        # own per-part reasoning worth surfacing, even though the top-level
+        # answer is empty (item 3).
+        sub_answers=_sub_answer_responses(plan),
         run_id=_current_run_id(),
     )
     try:
@@ -587,16 +630,7 @@ def query_answer(
         for chunk in result.chunks
     ]
 
-    citations = [
-        CitationResponse(
-            doc_id=c["doc_id"],
-            chunk_index=c["chunk_index"],
-            found_in_context=c["found_in_context"],
-            municipality=c.get("municipality"),
-            authority_level=c.get("authority_level"),
-        )
-        for c in gen.citations
-    ]
+    citations = _map_citations(gen.citations)
 
     # Sprint 6 — Fix 2: filter response chunks to only those cited (found_in_context=True).
     # Falls back to all retrieved chunks when no citations matched context.
@@ -669,6 +703,7 @@ def query_answer(
             _EDUCATIONAL_DISCLAIMER_TEXT if getattr(plan, "how_to", False) else None
         ),
         unsupported_citations=list(getattr(plan, "unsupported_citations", []) or []),
+        sub_answers=_sub_answer_responses(plan),
         run_id=_current_run_id(),
     )
     # Insert query log in Postgres (background, non-blocking)

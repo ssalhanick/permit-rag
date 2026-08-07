@@ -95,6 +95,46 @@ def test_fanout_empty_falls_back_to_single(monkeypatch) -> None:
     mgr._run_retrieval(st)
     # both sub-questions tried (empty), then the single path on the original query
     assert calls == ["sub-a", "sub-b", "orig"]
+    # item 3: an all-empty union resets sub_retrievals so the plan takes the
+    # single-answer path — one clean abstain, not N empty parts.
+    assert st.sub_retrievals == []
+
+
+# ── sub_retrievals — item 3's per-sub-question retrieval side channel ────
+
+
+def test_fanout_populates_sub_retrievals_index_aligned() -> None:
+    """Each sub-question's own, un-merged RetrievalResult lands in
+    state.sub_retrievals, index-aligned with sub_questions — not the merged/
+    deduped/capped pool _fanout_retrieval still returns for the existing path."""
+    a1, b1 = _chunk(0.95), _chunk(0.7)
+
+    def _retrieve(q, **_k):
+        if q == "sub-a":
+            return _result([a1], 10, query=q)
+        return _result([b1], 12, query=q)
+
+    st = _state(_retrieve, [SubQuestion(text="sub-a"), SubQuestion(text="sub-b")])
+    mgr._run_retrieval(st)
+    assert len(st.sub_retrievals) == 2
+    assert [c["id"] for c in st.sub_retrievals[0].chunks] == [a1["id"]]
+    assert [c["id"] for c in st.sub_retrievals[1].chunks] == [b1["id"]]
+
+
+def test_fanout_records_none_for_a_failed_sub_question() -> None:
+    """One sub-question's retrieval raising doesn't drop it from sub_retrievals
+    — it's recorded as None so index alignment with sub_questions holds."""
+    ok = _chunk(0.9)
+
+    def _retrieve(q, **_k):
+        if q == "sub-a":
+            raise ConnectionError("pgvector down")
+        return _result([ok], 5, query=q)
+
+    st = _state(_retrieve, [SubQuestion(text="sub-a"), SubQuestion(text="sub-b")])
+    mgr._run_retrieval(st)
+    assert st.sub_retrievals[0] is None
+    assert [c["id"] for c in st.sub_retrievals[1].chunks] == [ok["id"]]
 
 
 def test_fanout_canonicalizes_sub_question_municipality() -> None:
