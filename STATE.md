@@ -22,15 +22,18 @@ instead of treating it as "no claim, don't penalize." **Migration 045
 punch item (below) is now closed**, not just RAGAs-pending — a fresh
 LangSmith experiment against `permit_rag_security_v1` confirmed
 `project_isolation = 1.0` via real per-run feedback (`list_feedback`), on
-Machine B. Two things open, not yet resolved: `query_deconstructor` shows
-a 100% step-error rate in `scripts/run_agent_eval.py`'s Machine B output —
-root-caused by code reading (not yet confirmed against real data) to
-`deconstruct()`'s graceful-degrade design still recording the underlying
-`run_agent()` failure to `agent_steps` before swallowing it; and
-`answer_generator`'s LangSmith advisories may never surface in the printed
-report when it has zero scorecard rows in the window (design question, not
-decided). Everything above is Machine-B-local-traffic only — still not a
-statement about real production performance, see Next tasks below._
+Machine B. **Same-day follow-up:** `query_deconstructor`'s 100% step-error rate was
+root-caused on Machine B (`scripts/check_query_deconstructor_errors.py
+--local`, new read-only diagnostic) to a real, 100%-reproducible bug, not a
+credential/data-sparsity artifact — every recorded call 400'd with "This
+model does not support the effort parameter." Fixed in `rag/agent_runtime.py`
+(new `_EFFORT_UNSUPPORTED` set, mirrors the existing `_TEMPERATURE_UNSUPPORTED`
+retry pattern), 841 tests passing / ruff clean, not yet committed pending
+Scott's go-ahead. Still open: `answer_generator`'s LangSmith advisories may
+never surface in the printed report when it has zero scorecard rows in the
+window (design question, not decided). Everything above is Machine-B-local-
+traffic only — still not a statement about real production performance, see
+Next tasks below._
 
 _Updated: 2026-08-02 — system & migration health check (832 pytest green). Registered probes for migrations 002–045 in `scripts/check_migrations.py` and enforced via `tests/test_migration_integrity.py`. Fixed unbackfilled document reporting in `check_migration_details.py`, seeded RDS labor rate benchmarks, registered clean `atexit` connection pool cleanup in `db/client.py` to prevent process termination warnings, and corrected unauthenticated mobile nav sign-in button alignment in `Nav.jsx`._
 
@@ -255,22 +258,30 @@ AGENTS.md "completed work → journal only."_
    `permit_rag_security_v1` on Machine B confirmed `project_isolation = 1.0`
    via real per-run feedback (`list_feedback`, not an assumed aggregate).
    Full detail: `journals/session_20260806.md`.
-6. **`query_deconstructor` shows a 100% step-error rate** in
-   `scripts/run_agent_eval.py`'s Machine B output (`det=0.00 err=1.00`).
-   Root-caused by code reading only (2026-08-06, this machine has no
-   corpus): `deconstruct()` (`rag/agents/deconstructor.py`) never lets a
-   `run_agent()` failure reach its caller — it degrades to the
-   single-question form, invisible to users — but `run_agent()`
-   (`rag/agent_runtime.py:360-367`) still records the failed attempt as a
-   `status="error"` `agent_steps` row *before* the exception is caught. So
-   the error rate is real telemetry of underlying model-call failures, not
-   necessarily a deconstruction-logic bug. **Not yet distinguished:**
-   credential/environment issue vs. a real bug in the `Deconstruction`
-   structured-output call. On Machine B, settle it directly: `SELECT error
-   FROM agent_steps WHERE agent_name='query_deconstructor' AND status <>
-   'ok'` for the window in question, before deciding whether this blocks
-   merging `feat/langsmith-agent-eval` or deploying Query Deconstructor #5
-   (item 1 below).
+6. ~~`query_deconstructor` shows a 100% step-error rate.~~ **ROOT-CAUSED
+   AND FIXED 2026-08-06.** `scripts/check_query_deconstructor_errors.py
+   --local` on Machine B showed all 10 most recent recorded steps
+   (2026-07-27 through 2026-08-06) failing with the identical error:
+   `400 - This model does not support the effort parameter`. Not a
+   credential/data-sparsity issue — a real, 100%-reproducible code bug:
+   `rag/agent_runtime.py`'s cheap-tier ladder never actually supported the
+   `output_config={"effort": ...}` knob its own docstring assumed it did,
+   so every real call from `deconstructor.py` (and `permit_strategy.py`,
+   same `effort="low"` call shape) 400'd, silently swallowed by
+   `deconstruct()`'s graceful-degrade design — meaning Query Deconstructor's
+   actual sub-question splitting has never once succeeded via the model
+   path since it was built. Fixed the same way `_TEMPERATURE_UNSUPPORTED`
+   already handles Sonnet/Opus rejecting `temperature`: a new
+   `_EFFORT_UNSUPPORTED` set learns per-model and retries without
+   `output_config`. Two new tests
+   (`test_effort_unsupported_retries_without_it`,
+   `test_effort_unsupported_model_skips_it_from_the_start`) mirror the
+   existing temperature-retry tests. 841 tests passing, ruff clean
+   (machine A, mocked). **Not yet re-verified against real Machine B
+   traffic** — same sequential-gating discipline as any `agent_runtime.py`
+   change; pending Scott's go-ahead to commit, then a Machine B re-run of
+   `check_query_deconstructor_errors.py` to confirm live calls now
+   succeed.
 7. **`answer_generator`'s LangSmith advisory metrics may never display.**
    `evaluation/agent_eval.py`'s `compute_metrics()` only emits a report row
    for agents present in `db_client.agent_scorecard()`'s result for the
@@ -389,7 +400,7 @@ should have been 027. Recorded, not renamed. The dedupe correction is
 | rag/agents/media | **Media B1.** Media Curator (#17). Deterministic diy-only curator; never fabricates a URL |
 | ingestion/transcript | **Media C1.** `fetch_transcript(url)` — YouTube transcript pull (public captions, no API cost) |
 | db.client match_chunks / retrieval | **Media C1:** migration 031 scopes `match_chunks` to `content_class='authority'` in SQL (unchanged 3-arg signature); new `match_how_to_chunks` (diy path). **Jurisdiction (037):** `filter_municipality` became a jurisdiction-chain `text[]` (this row predates recording that — 037 is the actual latest signature prior to 045, see that migration's own header). **Security fix (045, 2026-08-01):** added a 4th `requesting_user_id` param + a tier-3 `visibility` predicate in the WHERE clause, closing the gap `match_project_chunks` (040) already closed for the project-scoped mini-RAG path but the general corpus path never got. Threading fix was mostly Python: `retrieve_with_project()` already received `requesting_user_id` and already passed it to `match_project_chunks`, but silently dropped it on its own call to `retrieve()` — `retrieve()` didn't even accept the param. Both fixed; `db_client.match_chunks()` now takes and forwards `requesting_user_id` too. **Isolation-verified 2026-08-06** — a LangSmith experiment against `permit_rag_security_v1` confirmed `project_isolation = 1.0` via real per-run feedback (see punch list #5, now closed); RAGAs quality re-verification specifically was never separately run and is not blocking, since the isolation test directly exercises what this migration changed. |
-| rag/agent_runtime | Single Anthropic call site. `_dispatch` learns models that reject `temperature` and retries without it |
+| rag/agent_runtime | Single Anthropic call site. `_dispatch` learns models that reject `temperature` and retries without it. **2026-08-06:** learns the same way for `output_config`/`effort` — the cheap-tier ladder's `effort="low"` knob 400'd on every real call (punch list #6), not just an edge case |
 | rag/generator | Folded into the runtime. Optional `routed` RoutedPrompt (composed system + persona `max_tokens` + fragment ids); un-routed default unchanged. **2026-07-28: `PROMPT_VERSION` v1→v3** — rule 7 now requires real markdown lists (was ambiguous "bullet points," rendered as inline `•` in prod); rule 1 forbids a standalone "Limitations" header. `rag/prompts/fragments/base.md` bumped to version 3 in lockstep (shared grounding rules) |
 | rag/design_intent | Folded in Phase 1; contract unchanged |
 | ingestion/metadata_agent | **Phase 3.** Corpus Metadata Validator (#13). Deterministic-first; one structured `run_agent` call; cited proposals; writes nothing (via governance only) |

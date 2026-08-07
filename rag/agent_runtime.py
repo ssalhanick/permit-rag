@@ -382,6 +382,13 @@ def run_agent(
 # later call in the process skips `temperature` for it — one wasted call, once.
 _TEMPERATURE_UNSUPPORTED: set[str] = set()
 
+# Models that reject `output_config` (the `effort` knob on cheap-tier subagent
+# calls), learned the same way. Found 2026-08-06: every real call from
+# rag/agents/deconstructor.py's cheap-tier structured extraction 400s with
+# "This model does not support the effort parameter" — the ladder's cheap rung
+# never actually supported the knob its own docstring assumed it did.
+_EFFORT_UNSUPPORTED: set[str] = set()
+
 
 def _is_temperature_deprecated(exc: Exception) -> bool:
     """True when a 400 says the model no longer accepts `temperature`."""
@@ -389,6 +396,12 @@ def _is_temperature_deprecated(exc: Exception) -> bool:
     return "temperature" in msg and (
         "deprecat" in msg or "not support" in msg or "unsupported" in msg
     )
+
+
+def _is_effort_unsupported(exc: Exception) -> bool:
+    """True when a 400 says the model doesn't accept the `effort` output_config knob."""
+    msg = str(exc).lower()
+    return "effort" in msg and ("not support" in msg or "unsupported" in msg)
 
 
 def _dispatch(
@@ -406,14 +419,14 @@ def _dispatch(
 ) -> Any:
     """Route to parse (structured) or create (text), with retries."""
 
-    def _call(include_temperature: bool) -> Any:
+    def _call(include_temperature: bool, include_output_config: bool) -> Any:
         kwargs: dict[str, Any] = {
             "model": model, "max_tokens": max_tokens,
             "system": system, "messages": messages,
         }
         if include_temperature:
             kwargs["temperature"] = temperature
-        if output_config is not None:
+        if include_output_config and output_config is not None:
             kwargs["output_config"] = output_config
         if output_format is not None:
             return _invoke_with_retries(
@@ -426,13 +439,18 @@ def _dispatch(
         )
 
     include_temp = model not in _TEMPERATURE_UNSUPPORTED
+    include_output_config = model not in _EFFORT_UNSUPPORTED
     try:
-        return _call(include_temp)
+        return _call(include_temp, include_output_config)
     except Exception as exc:
         if include_temp and _is_temperature_deprecated(exc):
             _TEMPERATURE_UNSUPPORTED.add(model)
             log.info("temperature not accepted by %s; retrying without it", model)
-            return _call(include_temperature=False)
+            return _call(include_temperature=False, include_output_config=include_output_config)
+        if include_output_config and _is_effort_unsupported(exc):
+            _EFFORT_UNSUPPORTED.add(model)
+            log.info("output_config/effort not accepted by %s; retrying without it", model)
+            return _call(include_temperature=include_temp, include_output_config=False)
         raise
 
 

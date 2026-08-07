@@ -323,3 +323,63 @@ def test_temperature_unsupported_model_skips_it_from_the_start(wired: _Recorder)
         assert "temperature" not in seen[0]
     finally:
         agent_runtime._TEMPERATURE_UNSUPPORTED.discard("claude-sonnet-5")
+
+
+def test_effort_unsupported_retries_without_it(wired: _Recorder) -> None:
+    """A model that 400s on `effort` (found live on Haiku 4.5, 2026-08-06) is
+    retried without output_config, mirroring the temperature-deprecation retry."""
+    agent_runtime._EFFORT_UNSUPPORTED.discard("claude-haiku-4-5")
+    seen: list[dict[str, Any]] = []
+
+    class _Msgs:
+        def count_tokens(self, **k: Any) -> Any:
+            return SimpleNamespace(input_tokens=120)
+
+        def create(self, **k: Any) -> Any:
+            seen.append(k)
+            if "output_config" in k:
+                raise RuntimeError(
+                    "Error code: 400 - This model does not support the effort parameter."
+                )
+            return _FakeResponse(model="claude-haiku-4-5")
+
+    class _Client:
+        messages = _Msgs()
+
+    try:
+        with audit_logger.start_run("t"):
+            result = run_agent("x", system="s",
+                               messages=[{"role": "user", "content": "x"}],
+                               tier=Tier.CHEAP, effort="low", client=_Client())
+        assert result.text == "hello"
+        assert "output_config" in seen[0]        # first attempt sent it
+        assert "output_config" not in seen[1]    # retry dropped it
+        assert "claude-haiku-4-5" in agent_runtime._EFFORT_UNSUPPORTED
+    finally:
+        agent_runtime._EFFORT_UNSUPPORTED.discard("claude-haiku-4-5")
+
+
+def test_effort_unsupported_model_skips_it_from_the_start(wired: _Recorder) -> None:
+    """Once learned, the model omits output_config with no wasted first call."""
+    agent_runtime._EFFORT_UNSUPPORTED.add("claude-haiku-4-5")
+    seen: list[dict[str, Any]] = []
+
+    class _Msgs:
+        def count_tokens(self, **k: Any) -> Any:
+            return SimpleNamespace(input_tokens=120)
+
+        def create(self, **k: Any) -> Any:
+            seen.append(k)
+            return _FakeResponse(model="claude-haiku-4-5")
+
+    class _Client:
+        messages = _Msgs()
+
+    try:
+        with audit_logger.start_run("t"):
+            run_agent("x", system="s", messages=[{"role": "user", "content": "x"}],
+                      tier=Tier.CHEAP, effort="low", client=_Client())
+        assert len(seen) == 1                  # no retry needed
+        assert "output_config" not in seen[0]
+    finally:
+        agent_runtime._EFFORT_UNSUPPORTED.discard("claude-haiku-4-5")
