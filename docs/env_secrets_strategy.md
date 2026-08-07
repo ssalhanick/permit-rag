@@ -1,6 +1,6 @@
 # Environment & Secrets Strategy
 
-_Created: 2026-06-30 | Status: Planned (not yet implemented)_
+_Created: 2026-06-30 | Status: Partially implemented — Gap 3 (SSM-backed secrets) is done for everything except the DATABASE_URL family; see "Known gaps" below. Updated 2026-08-07 after the reprocess-log credential leak incident confirmed the actual `terraform/main.tf` state diverged from this doc._
 
 ---
 
@@ -29,7 +29,9 @@ Vite's built-in layering. `frontend/.env` is always loaded; `frontend/.env.produ
 |---|-----|------|
 | 1 | Cognito values hardcoded in `deploy.yml` lines 110–114 | Rotating a value requires a code change + PR |
 | 2 | `COGNITO_USER_POOL_ID` + `COGNITO_REGION` baked into `Dockerfile` | Image is environment-coupled; can't promote same image across envs |
-| 3 | True secrets (`ANTHROPIC_API_KEY`, `DATABASE_URL`, `API_ADMIN_TOKEN`, `LANGSMITH_API_KEY`) stored as plaintext in ECS task definition | Visible in AWS Console; not rotatable without manual task def edit |
+| 3 | `DATABASE_URL`, `CORPUS_WRITER_URL`, `APP_READER_URL` stored as plaintext in ECS task definition (`terraform/main.tf:361-363`) — composed by interpolating the SSM-sourced password directly into a `value` field, not a `valueFrom` reference | Visible in AWS Console and in every past task definition revision (immutable — old revisions retain the old value even after rotation); not rotatable without a `terraform apply` |
+
+**Already done, contrary to earlier drafts of this doc:** `ANTHROPIC_API_KEY`, `API_ADMIN_TOKEN`, `LANGSMITH_API_KEY`, `OPENAI_API_KEY`, `LEONARDO_API_KEY`, `FAL_API_KEY`, `SERPAPI_API_KEY`, `JWT_SECRET`, and the Neo4j values are all real `valueFrom` SSM references (`terraform/main.tf:381-417`) — Gap 3 below is closed for these. Only the DATABASE_URL family (row 3 above) remains open.
 
 ---
 
@@ -60,13 +62,16 @@ Vite's built-in layering. `frontend/.env` is always loaded; `frontend/.env.produ
                    │ resolved at container start
                    ▼
 ┌─────────────────────────────────────────────────────────┐
-│ AWS SSM Parameter Store (SecureString)                  │
-│  /permit_rag/prod/database_url                          │
-│  /permit_rag/prod/anthropic_api_key                     │
-│  /permit_rag/prod/admin_token                           │
-│  /permit_rag/prod/langsmith_api_key                     │
-│  /permit_rag/prod/neo4j_auth          (if AuraDB used)  │
-│  /permit_rag/prod/neo4j_bolt_url      (if AuraDB used)  │
+│ AWS SSM Parameter Store (SecureString) — actual paths     │
+│ per terraform/main.tf. Not "database_url" — the full      │
+│ DATABASE_URL is composed at apply time by interpolating   │
+│ db_password into a connection string, not stored whole:   │
+│  /permit_rag/prod/db_password                              │
+│  /permit_rag/prod/anthropic_api_key                        │
+│  /permit_rag/prod/admin_token                               │
+│  /permit_rag/prod/langsmith_api_key                         │
+│  /permit_rag/prod/neo4j_auth                                 │
+│  /permit_rag/prod/neo4j_bolt_url                              │
 └─────────────────────────────────────────────────────────┘
 ```
 
@@ -160,77 +165,22 @@ Push and deploy. The task definition now owns these values; the image is environ
 
 ### Gap 3 — Move true secrets to SSM Parameter Store
 
-**Risk:** Medium. Requires IAM policy check and task definition rewrite. Test in staging first if available.
+**Status: done for everything except `DATABASE_URL`/`CORPUS_WRITER_URL`/`APP_READER_URL`.** `ANTHROPIC_API_KEY`, `API_ADMIN_TOKEN`, `LANGSMITH_API_KEY`, `OPENAI_API_KEY`, `LEONARDO_API_KEY`, `FAL_API_KEY`, `SERPAPI_API_KEY`, `JWT_SECRET`, `NEO4J_AUTH`, `NEO4J_BOLT_URL` are already wired as real `valueFrom` SSM references in `terraform/main.tf:381-417` — steps 3.1-3.4 below are already implemented for these and don't need re-doing. What follows is scoped to the one remaining item.
 
-**Step 3.1 — Identify which secrets are currently plaintext in ECS**
+**Note on the SSM parameters themselves:** these are Terraform `data` sources (`data "aws_ssm_parameter" ...`, e.g. `main.tf:197-198`), not `resource` blocks — Terraform only *reads* them, it doesn't create or manage their values. Each parameter is created/updated out-of-band via `aws ssm put-parameter` (console or CLI), then Terraform picks up the current value on the next `plan`/`apply`. The correct path for the DB credential is `/permit_rag/prod/db_password` — **not** `/permit_rag/prod/database_url` (an earlier draft of this doc named a path that was never actually implemented).
 
-Check the current ECS task definition for any of these as plain `value` (not `valueFrom`):
+**Remaining work — `DATABASE_URL` family (architecturally different from the others, not a simple `valueFrom` swap):**
 
-| Secret | Current location | Target SSM path |
-|--------|-----------------|-----------------|
-| `ANTHROPIC_API_KEY` | ECS task def (plaintext) | `/permit_rag/prod/anthropic_api_key` |
-| `DATABASE_URL` | ECS task def (plaintext) | `/permit_rag/prod/database_url` |
-| `API_ADMIN_TOKEN` | ECS task def (plaintext) | `/permit_rag/prod/admin_token` |
-| `LANGSMITH_API_KEY` | ECS task def (plaintext) | `/permit_rag/prod/langsmith_api_key` |
-| `NEO4J_AUTH` | ECS task def (plaintext) | `/permit_rag/prod/neo4j_auth` |
-| `NEO4J_BOLT_URL` | ECS task def (plaintext) | `/permit_rag/prod/neo4j_bolt_url` |
-
-Note: `/permit_rag/prod/anthropic_api_key`, `/permit_rag/prod/admin_token`, `/permit_rag/prod/neo4j_auth`, and `/permit_rag/prod/neo4j_bolt_url` may already exist in SSM from Terraform setup (see README). Verify before creating duplicates.
-
-**Step 3.2 — Create / verify SSM parameters**
-
-```powershell
-# Create (or overwrite) each secret as SecureString
-aws ssm put-parameter `
-  --name "/permit_rag/prod/database_url" `
-  --value "postgresql://..." `
-  --type SecureString `
-  --overwrite
-
-aws ssm put-parameter `
-  --name "/permit_rag/prod/langsmith_api_key" `
-  --value "lsv2_pt_..." `
-  --type SecureString `
-  --overwrite
-
-# Repeat for each secret above
+`terraform/main.tf:361-363` composes three connection strings by interpolating `data.aws_ssm_parameter.db_password.value` directly into a plaintext `value` field:
+```hcl
+{ name = "DATABASE_URL", value = "postgresql://postgres:${data.aws_ssm_parameter.db_password.value}@${aws_db_instance.postgres.endpoint}/permit_rag?sslmode=require" },
 ```
+ECS's `valueFrom` substitutes a named SSM parameter's raw content verbatim into one env var — it can't do string composition (host + password + query string), so this can't be fixed the same way the other secrets were (just adding `valueFrom` to an existing plaintext `value`). Two real options, not yet decided:
 
-**Step 3.3 — Verify ECS task execution role has SSM access**
+1. **Store the fully-composed connection strings as their own SSM `SecureString`s** (three new parameters — `database_url`, `corpus_writer_url`, `app_reader_url`), written by a `resource "aws_ssm_parameter"` block in Terraform (not just a `data` source, since something has to actually write the composed value), then reference each via `valueFrom`. Adds a write-capable IAM permission for Terraform's own execution identity, and means the composed connection string exists in Terraform state either way (see `docs/secrets_leak_protocol.md`'s note on local state already holding this).
+2. **Have the app compose the DSN itself at runtime** from three separately-injected, individually-`valueFrom`-able pieces (host, user, password) instead of one pre-built URL — larger change, touches `api/load_env.py`/`db/client.py`'s connection setup, but avoids ever materializing the full connection string as a stored secret anywhere.
 
-The task **execution role** (not the task role) needs this policy:
-
-```json
-{
-  "Effect": "Allow",
-  "Action": [
-    "ssm:GetParameters",
-    "ssm:GetParameter"
-  ],
-  "Resource": "arn:aws:ssm:us-east-1:*:parameter/permit_rag/prod/*"
-}
-```
-
-Check in IAM → Roles → find the ECS task execution role → Permissions. Add the policy if missing.
-
-**Step 3.4 — Update ECS task definition to use `valueFrom`**
-
-For each secret, change the container environment entry from:
-
-```json
-{ "name": "ANTHROPIC_API_KEY", "value": "sk-ant-..." }
-```
-
-to:
-
-```json
-{
-  "name": "ANTHROPIC_API_KEY",
-  "valueFrom": "arn:aws:ssm:us-east-1:<account-id>:parameter/permit_rag/prod/anthropic_api_key"
-}
-```
-
-Create the new task definition revision. Force a new deployment. Watch CloudWatch logs for startup errors — a missing SSM permission or wrong ARN will cause the container to fail to start.
+Neither is implemented. Whoever picks this up: decide between the two above before touching `main.tf` — this doc previously implied it was a one-line `valueFrom` change, which undersold the real work.
 
 **Step 3.5 — Remove the legacy `API_JWT_SECRET` var**
 
@@ -285,4 +235,4 @@ Each gap is independently reversible:
 |-----|--------|----------|
 | Gap 1 (GitHub vars) | 15 min | Do next sprint |
 | Gap 2 (Dockerfile ENV) | 30 min | Do next sprint |
-| Gap 3 (SSM secrets) | 2–3 hrs | Before any shared access / customer demo |
+| Gap 3 (SSM secrets) | Mostly done — remaining scope is just the `DATABASE_URL` family, needs an architecture decision first (see Gap 3 above), then ~2-3 hrs to implement | Before any shared access / customer demo |
