@@ -31,6 +31,7 @@ import time
 from typing import Any
 
 from rag.agent_runtime import Tier, run_agent
+from rag.agents.manager import _grounding_verdict
 from rag.conflict_detector import detect_conflicts
 from rag.generator import PROMPT_VERSION, generate_answer
 from rag.jurisdiction_resolver import municipality_from_address
@@ -42,6 +43,7 @@ log = logging.getLogger(__name__)
 # Same guardrail constants/semantics as api/routes/query.py and evaluation/ragas_eval.py.
 MIN_GROUNDED_CHUNKS = int(os.environ.get("RAG_GUARD_MIN_CHUNKS", "3"))
 MIN_GROUNDED_TOP_SIM = float(os.environ.get("RAG_GUARD_MIN_TOP_SIM", "0.74"))
+MIN_GROUNDED_MUNI_MATCH_CHUNKS = int(os.environ.get("RAG_GUARD_MIN_MUNI_MATCH_CHUNKS", "1"))
 
 # $ per 1M tokens, (input_rate, output_rate). Extend when LLM_MODEL changes.
 _MODEL_RATES_PER_1M: dict[str, tuple[float, float]] = {
@@ -51,9 +53,20 @@ _MODEL_RATES_PER_1M: dict[str, tuple[float, float]] = {
 DEFAULT_JUDGE_MODEL = os.environ.get("EVAL_JUDGE_MODEL", "claude-haiku-4-5-20251001")
 
 
-def _guardrail_triggered(num_chunks: int, top_similarity: float) -> bool:
-    """Same guardrail condition as api/routes/query.py::query_answer."""
-    return num_chunks < MIN_GROUNDED_CHUNKS or top_similarity < MIN_GROUNDED_TOP_SIM
+def _guardrail_triggered(result: Any, municipality: str | None) -> bool:
+    """Same guardrail condition as api/routes/query.py::query_answer.
+
+    Delegates to rag.agents.manager._grounding_verdict (the live query path's
+    own pure grounding check) rather than re-implementing thresholds here.
+    """
+    abstained, _reason = _grounding_verdict(
+        result,
+        min_chunks=MIN_GROUNDED_CHUNKS,
+        min_top_sim=MIN_GROUNDED_TOP_SIM,
+        municipality=municipality,
+        min_muni_match=MIN_GROUNDED_MUNI_MATCH_CHUNKS,
+    )
+    return abstained
 
 
 # ── Target function ──────────────────────────────────────────
@@ -103,7 +116,7 @@ def run_pipeline(
         min_similarity=min_similarity,
     )
 
-    guardrail_on = _guardrail_triggered(result.num_results, result.top_similarity)
+    guardrail_on = _guardrail_triggered(result, effective_municipality)
 
     base: dict[str, Any] = {
         "resolved_municipality": resolved_municipality,

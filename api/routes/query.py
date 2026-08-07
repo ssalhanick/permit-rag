@@ -57,6 +57,10 @@ log = logging.getLogger(__name__)
 router = APIRouter(tags=["query"])
 MIN_GROUNDED_CHUNKS = int(os.environ.get("RAG_GUARD_MIN_CHUNKS", "3"))
 MIN_GROUNDED_TOP_SIM = float(os.environ.get("RAG_GUARD_MIN_TOP_SIM", "0.74"))
+# Jurisdiction-mismatch floor — abstain when chunks clear the floor above but
+# none are the resolved municipality's own content (McKinney/Frisco false-
+# confidence case). Set to 0 to disable.
+MIN_GROUNDED_MUNI_MATCH_CHUNKS = int(os.environ.get("RAG_GUARD_MIN_MUNI_MATCH_CHUNKS", "1"))
 # Media C2 — the diy how-to fallback floor. Looser than compliance: transcript
 # prose sits lower on cosine similarity than statute text.
 HOW_TO_MIN_CHUNKS = int(os.environ.get("RAG_HOWTO_MIN_CHUNKS", "1"))
@@ -245,7 +249,7 @@ def _build_manager_deps(observer: Any) -> ManagerDeps:
     """
     Assemble the Manager's injected collaborators.
 
-    ``retrieve_with_project`` and the two grounding thresholds are read from this
+    ``retrieve_with_project`` and the grounding thresholds are read from this
     module at call time, so an operator's env override — and a test's patch —
     both still apply.
     """
@@ -253,6 +257,7 @@ def _build_manager_deps(observer: Any) -> ManagerDeps:
         retrieve=retrieve_with_project,
         min_chunks=MIN_GROUNDED_CHUNKS,
         min_top_sim=MIN_GROUNDED_TOP_SIM,
+        min_municipality_match_chunks=MIN_GROUNDED_MUNI_MATCH_CHUNKS,
         observer=observer,
         retrieve_how_to=retrieve_how_to,
         how_to_min_chunks=HOW_TO_MIN_CHUNKS,

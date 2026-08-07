@@ -71,6 +71,15 @@ _ABSTAIN_LOW_CONFIDENCE = (
     "McKinney, or Fort Worth), or rephrasing to be more specific about the permit "
     "or work type — I'd rather say so than guess on a compliance question."
 )
+# Chunks cleared the floor above but none are actually that city's own code —
+# only general/state-level content the jurisdiction chain pulled in. Distinct
+# from low-confidence: retrieval was healthy, it just isn't locally specific.
+_ABSTAIN_JURISDICTION_MISMATCH = (
+    "I found some related material, but nothing specific to that city's own code — "
+    "only general or state-level content. I'd rather say so than give you a number "
+    "that might not actually be that municipality's rule. Try Dallas, Plano, or "
+    "Fort Worth, or check with the local building department directly."
+)
 
 
 # ── Failure signalling ───────────────────────────────────────
@@ -144,6 +153,14 @@ class ManagerDeps:
     retrieve: Callable[..., Any]
     min_chunks: int = 3
     min_top_sim: float = 0.74
+    # Grounding-floor extension: chunks can clear min_chunks/min_top_sim on
+    # generic state/county content pulled in by the jurisdiction chain without
+    # any of it actually being the resolved city's own code (the McKinney/Frisco
+    # false-confidence case — no real local content ingested, but the chain
+    # still returns enough state-level chunks to look grounded). Requires at
+    # least this many retrieved chunks whose own ``municipality`` field exactly
+    # matches ``state.effective_municipality``. Set to 0 to disable.
+    min_municipality_match_chunks: int = 1
     observer: StepObserver | None = None
     governor: BudgetGovernor | None = None
     # Media Curator Slice C2 — the DIY how-to fallback. When a diy query abstains
@@ -433,6 +450,42 @@ def _run_retrieval(state: _PlanState) -> None:
     })
 
 
+def _grounding_verdict(
+    result: Any,
+    *,
+    min_chunks: int,
+    min_top_sim: float,
+    municipality: str | None,
+    min_muni_match: int,
+) -> tuple[bool, str]:
+    """
+    Pure grounding check for one ``RetrievalResult`` — no state mutation, no
+    logging, so item 3's per-sub-question grounding can reuse it without
+    duplicating threshold logic.
+
+    Returns ``(abstained, reason)`` where ``reason`` is one of ``""`` (not
+    abstained), ``"empty"``, ``"low_confidence"``, or ``"jurisdiction_mismatch"``.
+
+    ``jurisdiction_mismatch`` catches a real gap the other two miss: a query
+    can clear ``min_chunks``/``min_top_sim`` entirely on generic state/county
+    content the jurisdiction chain pulled in (``get_jurisdiction_chain``),
+    without a single retrieved chunk actually being the resolved city's own
+    code — e.g. McKinney/Frisco, which have no real local content ingested yet
+    but still retrieve well against Texas-level chunks. Skipped when
+    ``municipality`` is falsy (an unscoped question has no city to match) or
+    ``min_muni_match`` is 0 (opt-out).
+    """
+    if not result.chunks:
+        return True, "empty"
+    if result.num_results < min_chunks or result.top_similarity < min_top_sim:
+        return True, "low_confidence"
+    if municipality and min_muni_match > 0:
+        match_count = sum(1 for c in result.chunks if c.get("municipality") == municipality)
+        if match_count < min_muni_match:
+            return True, "jurisdiction_mismatch"
+    return False, ""
+
+
 def _check_grounding(state: _PlanState) -> None:
     """
     Enforce the grounding floor as a soft **abstain**, not an exception.
@@ -447,21 +500,35 @@ def _check_grounding(state: _PlanState) -> None:
     Genuine retrieval and generation *failures* still raise ``ManagerError`` (500).
     """
     result = state.store.get(state.retrieval_ref)
-    if not result.chunks:
-        state.abstained = True
-        state.abstain_message = _ABSTAIN_EMPTY
-        log.info("grounding abstain: no chunks retrieved for %r", state.request.query)
-        return
     deps = state.deps
-    if result.num_results >= deps.min_chunks and result.top_similarity >= deps.min_top_sim:
+    abstained, reason = _grounding_verdict(
+        result,
+        min_chunks=deps.min_chunks,
+        min_top_sim=deps.min_top_sim,
+        municipality=state.effective_municipality,
+        min_muni_match=deps.min_municipality_match_chunks,
+    )
+    if not abstained:
         return
     state.abstained = True
-    state.abstain_message = _ABSTAIN_LOW_CONFIDENCE
-    log.info(
-        "grounding abstain: chunks=%d top_sim=%.4f (need >=%d / >=%.2f) for %r",
-        result.num_results, result.top_similarity, deps.min_chunks,
-        deps.min_top_sim, state.request.query,
-    )
+    if reason == "empty":
+        state.abstain_message = _ABSTAIN_EMPTY
+        log.info("grounding abstain: no chunks retrieved for %r", state.request.query)
+    elif reason == "jurisdiction_mismatch":
+        state.abstain_message = _ABSTAIN_JURISDICTION_MISMATCH
+        log.info(
+            "grounding abstain: jurisdiction mismatch — no chunks match "
+            "municipality=%r (need >=%d) for %r",
+            state.effective_municipality, deps.min_municipality_match_chunks,
+            state.request.query,
+        )
+    else:
+        state.abstain_message = _ABSTAIN_LOW_CONFIDENCE
+        log.info(
+            "grounding abstain: chunks=%d top_sim=%.4f (need >=%d / >=%.2f) for %r",
+            result.num_results, result.top_similarity, deps.min_chunks,
+            deps.min_top_sim, state.request.query,
+        )
 
 
 # ── Wave 3 — post-retrieval enrichment, all non-blocking ─────

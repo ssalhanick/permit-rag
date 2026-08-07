@@ -18,7 +18,7 @@ CLI usage:
     py -m evaluation.ragas_eval --query 0 2 4      # run specific queries by index
 """
 
-from __future__ import annotations
+from __future__ import annotations  # noqa: I001 — shim below must precede the ragas imports; isort would merge/reorder it
 
 # ── Compatibility shim (must come before any ragas import) ────
 import evaluation._ragas_shim  # noqa: F401 — patches langchain import paths
@@ -44,8 +44,9 @@ from ragas.metrics import (
 )
 
 from db.client import close_pool
-from rag.retriever import RetrievalResult, retrieve
+from rag.agents.manager import _grounding_verdict
 from rag.llm_provider import get_provider_capabilities
+from rag.retriever import RetrievalResult, retrieve
 
 log = logging.getLogger(__name__)
 ANSWER_CACHE_DEFAULT_PATH = "evaluation/cache/answers.json"
@@ -53,14 +54,27 @@ ANSWER_CACHE_PROMPT_VERSION = "v1"
 # Guardrails: retrieval confidence required before free-form generation
 MIN_GROUNDED_CHUNKS = int(os.environ.get("RAG_GUARD_MIN_CHUNKS", "3"))
 MIN_GROUNDED_TOP_SIM = float(os.environ.get("RAG_GUARD_MIN_TOP_SIM", "0.74"))
+MIN_GROUNDED_MUNI_MATCH_CHUNKS = int(os.environ.get("RAG_GUARD_MIN_MUNI_MATCH_CHUNKS", "1"))
 
 
-def _guardrail_triggered(num_chunks: int, top_similarity: float) -> bool:
-    """Return True when retrieval confidence is too weak for grounded generation."""
-    return (
-        num_chunks < MIN_GROUNDED_CHUNKS
-        or top_similarity < MIN_GROUNDED_TOP_SIM
+def _guardrail_triggered(result: RetrievalResult, municipality: Optional[str]) -> bool:
+    """
+    Return True when retrieval confidence is too weak for grounded generation.
+
+    Delegates to ``rag.agents.manager._grounding_verdict`` — the same pure
+    grounding check the live query path gates on — instead of re-implementing
+    the thresholds here, so this harness can't silently drift from what
+    production actually abstains on (this file bypasses ``manager.py``
+    entirely otherwise, calling ``retrieve()``/``generate_answer()`` direct).
+    """
+    abstained, _reason = _grounding_verdict(
+        result,
+        min_chunks=MIN_GROUNDED_CHUNKS,
+        min_top_sim=MIN_GROUNDED_TOP_SIM,
+        municipality=municipality,
+        min_muni_match=MIN_GROUNDED_MUNI_MATCH_CHUNKS,
     )
+    return abstained
 
 
 def _abstain_answer_from_context(chunks: list[dict[str, Any]]) -> str:
@@ -122,6 +136,26 @@ TEST_QUERIES: list[dict[str, Any]] = [
         "municipality": "dallas",
         "top_k": 10,
         "notes": "Expects Dallas zoning/ordinance chunks about height limits",
+    },
+    {
+        "query": "What are the residential setback requirements in McKinney?",
+        "municipality": "mckinney",
+        "top_k": 10,
+        "notes": (
+            "Expects abstain (jurisdiction_mismatch) — no McKinney-specific "
+            "documents ingested; jurisdiction chain retrieves Texas-level "
+            "content only. Should stop expecting abstain once item 0's "
+            "ingestion lands real McKinney content."
+        ),
+    },
+    {
+        "query": "What is the maximum fence height allowed in Frisco?",
+        "municipality": "frisco",
+        "top_k": 10,
+        "notes": (
+            "Expects abstain (jurisdiction_mismatch) — same as McKinney above, "
+            "no Frisco-specific documents ingested yet."
+        ),
     },
 ]
 
@@ -603,7 +637,7 @@ def evaluate_query(
         ),
     )
 
-    guardrail_on = _guardrail_triggered(result.num_results, result.top_similarity)
+    guardrail_on = _guardrail_triggered(result, municipality)
     if not retrieval_only and guardrail_on:
         answer = _abstain_answer_from_context(result.chunks)
         eval_result.answer_preview = answer[:200]

@@ -22,6 +22,7 @@ from rag.agents.manager import (
     ManagerDeps,
     ManagerError,
     ManagerRequest,
+    _grounding_verdict,
     run_query_plan,
 )
 from rag.agents.registry import AgentSpec
@@ -29,12 +30,15 @@ from rag.agents.registry import AgentSpec
 _CHUNK_TEXT = "SETBACK-TEXT-THAT-MUST-NOT-REACH-THE-MANAGER"
 
 
-def _chunk(doc_id: str, index: int, *, filtered_out: bool = False, tier: int = 1) -> dict:
+def _chunk(
+    doc_id: str, index: int, *, filtered_out: bool = False, tier: int = 1,
+    municipality: str = "dallas",
+) -> dict:
     """A retrieval row shaped like rag.retriever output."""
     return {
         "id": uuid4(), "document_id": uuid4(), "doc_id": doc_id,
         "chunk_index": index, "content": f"{_CHUNK_TEXT}-{doc_id}",
-        "municipality": "dallas", "authority_level": "municipal",
+        "municipality": municipality, "authority_level": "municipal",
         "doc_type": "building_code", "document_status": "active",
         "source_tier": tier, "similarity": 0.88, "raw_similarity": 0.88,
         "reranked_score": 0.88, "provenance_weight": 1.0,
@@ -116,10 +120,21 @@ def stubs(monkeypatch: pytest.MonkeyPatch) -> _Calls:
 
 
 def _deps(result: Any = None, **overrides: Any) -> ManagerDeps:
-    """Build deps whose retrieval returns ``result`` and records the call."""
+    """Build deps whose retrieval returns ``result`` and records the call.
+
+    All three grounding floors default to trivially-pass/disabled — most tests
+    here aren't testing grounding and shouldn't have to think about it. The
+    jurisdiction-match floor defaults off (0) rather than its class default of
+    1 because the fixtures' resolved municipality (e.g. the stubbed
+    jurisdiction_resolver's "plano") and the default chunks' municipality
+    ("dallas") are unrelated to each other by construction — tests that
+    actually exercise the jurisdiction-mismatch gate pass
+    ``min_municipality_match_chunks=1`` explicitly.
+    """
     payload = _retrieval() if result is None else result
-    return ManagerDeps(retrieve=lambda *_a, **_k: payload, min_chunks=1,
-                       min_top_sim=0.0, **overrides)
+    defaults = {"min_chunks": 1, "min_top_sim": 0.0, "min_municipality_match_chunks": 0}
+    defaults.update(overrides)
+    return ManagerDeps(retrieve=lambda *_a, **_k: payload, **defaults)
 
 
 # ── Plan shape ───────────────────────────────────────────────
@@ -223,6 +238,108 @@ def test_low_confidence_abstains_not_raises(stubs: _Calls) -> None:
     assert result.abstained is True
     assert result.generation is None
     assert "answer_generator" not in stubs.order
+
+
+# ── _grounding_verdict — the pure helper directly ─────────────
+
+
+def test_grounding_verdict_reasons() -> None:
+    """The exact reason code per case, in isolation from _generate's fallback
+    override — this is where the message-selection logic actually lives."""
+    empty = SimpleNamespace(chunks=[])
+    assert _grounding_verdict(
+        empty, min_chunks=1, min_top_sim=0.0, municipality=None, min_muni_match=0,
+    ) == (True, "empty")
+
+    weak = _retrieval([_chunk("d", 0)])
+    assert _grounding_verdict(
+        weak, min_chunks=99, min_top_sim=0.0, municipality=None, min_muni_match=0,
+    ) == (True, "low_confidence")
+
+    mismatched = _retrieval([_chunk("t", 0, municipality="texas")])
+    assert _grounding_verdict(
+        mismatched, min_chunks=1, min_top_sim=0.0,
+        municipality="mckinney", min_muni_match=1,
+    ) == (True, "jurisdiction_mismatch")
+
+    matched = _retrieval([_chunk("fw", 0, municipality="fortworth")])
+    assert _grounding_verdict(
+        matched, min_chunks=1, min_top_sim=0.0,
+        municipality="fortworth", min_muni_match=1,
+    ) == (False, "")
+
+
+# ── Jurisdiction-mismatch abstain (McKinney/Frisco false confidence) ──
+
+
+def test_jurisdiction_mismatch_abstains_when_no_chunk_matches_resolved_city(
+    stubs: _Calls,
+) -> None:
+    """Chunks clear min_chunks/min_top_sim but none are the resolved city's own
+    content (all 'texas' — the jurisdiction-chain fallback) — abstain, don't
+    hand the generator a broad heuristic answer that looks locally authoritative."""
+    rows = [_chunk("texas-general-1", 0, municipality="texas"),
+            _chunk("texas-general-2", 1, municipality="texas"),
+            _chunk("texas-general-3", 2, municipality="texas")]
+    result = run_query_plan(
+        ManagerRequest(query="q", municipality="mckinney"),
+        _deps(_retrieval(rows), min_municipality_match_chunks=1),
+    )
+    assert result.abstained is True
+    assert result.generation is None
+    # abstain_message may be overwritten by generate_clarification_fallback's
+    # own text once _generate runs (same as the empty/low-confidence abstain
+    # paths) — see test_grounding_verdict_* below for the exact reason/message
+    # selection logic in isolation.
+    assert result.abstain_message
+    assert "answer_generator" not in stubs.order
+
+
+def test_one_matching_chunk_among_general_chunks_does_not_abstain(
+    stubs: _Calls,
+) -> None:
+    """Regression guard for the good case (Fort Worth): one real matching chunk
+    among supporting state/county chunks is enough — don't over-abstain a city
+    that actually has content just because most of its top-k is state-level."""
+    rows = [_chunk("fortworth-tx-1", 0, municipality="fortworth"),
+            _chunk("texas-general-1", 1, municipality="texas"),
+            _chunk("texas-general-2", 2, municipality="texas")]
+    result = run_query_plan(
+        ManagerRequest(query="q", municipality="fortworth"),
+        _deps(_retrieval(rows), min_municipality_match_chunks=1),
+    )
+    assert result.abstained is False
+    assert "answer_generator" in stubs.order
+
+
+def test_unscoped_query_skips_jurisdiction_check(stubs: _Calls) -> None:
+    """No resolved municipality (no city named or geocoded) means there's
+    nothing to match against — the new gate must not fire even when enabled,
+    only the existing two floors apply, exactly as before this change."""
+    rows = [_chunk("texas-general-1", 0, municipality="texas"),
+            _chunk("texas-general-2", 1, municipality="texas")]
+    result = run_query_plan(
+        ManagerRequest(query="q"),
+        _deps(_retrieval(rows), min_municipality_match_chunks=1),
+    )
+    assert result.abstained is False
+    assert "answer_generator" in stubs.order
+
+
+def test_min_municipality_match_chunks_zero_disables_the_gate(
+    stubs: _Calls,
+) -> None:
+    """An explicit opt-out (min_municipality_match_chunks=0) is a rollback
+    lever — same all-'texas' chunks as the abstain test above, but disabled."""
+    rows = [_chunk("texas-general-1", 0, municipality="texas"),
+            _chunk("texas-general-2", 1, municipality="texas"),
+            _chunk("texas-general-3", 2, municipality="texas")]
+    result = run_query_plan(
+        ManagerRequest(query="q", municipality="mckinney"),
+        _deps(_retrieval(rows), min_municipality_match_chunks=0),
+    )
+    assert result.abstained is False
+    assert "answer_generator" in stubs.order
 
 
 def test_generator_config_error_is_distinguishable(stubs: _Calls) -> None:
