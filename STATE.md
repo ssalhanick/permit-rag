@@ -28,8 +28,10 @@ root-caused on Machine B (`scripts/check_query_deconstructor_errors.py
 credential/data-sparsity artifact — every recorded call 400'd with "This
 model does not support the effort parameter." Fixed in `rag/agent_runtime.py`
 (new `_EFFORT_UNSUPPORTED` set, mirrors the existing `_TEMPERATURE_UNSUPPORTED`
-retry pattern), 841 tests passing / ruff clean, not yet committed pending
-Scott's go-ahead. Still open: `answer_generator`'s LangSmith advisories may
+retry pattern), 841 tests passing / ruff clean, committed (`eb23ef5`) and
+**live-verified on Machine B 2026-08-07** — a real compound query now
+actually splits into sub-questions for the first time this agent has ever
+worked. Still open: `answer_generator`'s LangSmith advisories may
 never surface in the printed report when it has zero scorecard rows in the
 window (design question, not decided). Everything above is Machine-B-local-
 traffic only — still not a statement about real production performance, see
@@ -277,11 +279,12 @@ AGENTS.md "completed work → journal only."_
    (`test_effort_unsupported_retries_without_it`,
    `test_effort_unsupported_model_skips_it_from_the_start`) mirror the
    existing temperature-retry tests. 841 tests passing, ruff clean
-   (machine A, mocked). **Not yet re-verified against real Machine B
-   traffic** — same sequential-gating discipline as any `agent_runtime.py`
-   change; pending Scott's go-ahead to commit, then a Machine B re-run of
-   `check_query_deconstructor_errors.py` to confirm live calls now
-   succeed.
+   (machine A, mocked). **Live-verified on Machine B, 2026-08-07:**
+   `scripts/verify_query_deconstructor_fix.py --local` made a real
+   compound-query call through `deconstruct()` — it split into 3 correct
+   sub-questions (setback/Plano, height/Plano, electrical permit) and
+   recorded `status=ok` in `agent_steps`. First confirmed-successful
+   model-path call this agent has ever made. Fully closed.
 7. **`answer_generator`'s LangSmith advisory metrics may never display.**
    `evaluation/agent_eval.py`'s `compute_metrics()` only emits a report row
    for agents present in `db_client.agent_scorecard()`'s result for the
