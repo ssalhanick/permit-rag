@@ -12,10 +12,16 @@ time.
 
 For each compound query below, prints:
   - the sub-questions the Deconstructor split it into
-  - the chunks retrieved via fan-out (one retrieval per sub-question, merged
-    and re-ranked -- mirrors _fanout_retrieval's own merge logic exactly)
-  - the chunks retrieved via the single-question path (today's un-deconstructed
-    default -- what every query got before this fix)
+  - the chunks retrieved via fan-out -- calls rag.agents.manager._fanout_retrieval
+    directly (via a constructed _PlanState), not a hand-copied reimplementation.
+    2026-08-07: this script's first version *did* hand-copy the merge logic, which
+    meant it kept reproducing a bug (missing municipality canonicalization) even
+    after that bug was fixed in manager.py itself, since the script's own copy
+    never got the fix. Calling the real function is what makes a re-run actually
+    prove anything about the production code path.
+  - the chunks retrieved via the single-question path (rag.agents.manager._single_retrieval,
+    same real-function approach) -- what every query got before Query Deconstructor's
+    fan-out started firing
   - which chunks appear in one path but not the other
 
 Judgment is still human: read the "only in fan-out" chunks and decide whether
@@ -47,6 +53,7 @@ from api.load_env import bootstrap_env
 TARGET = _db_target.resolve(sys.argv[1:], bootstrap_env)
 
 from audit.logger import start_run
+from rag.agents import manager as mgr
 from rag.agents.deconstructor import deconstruct
 from rag.retriever import retrieve_with_project
 
@@ -65,21 +72,28 @@ COMPOUND_QUERIES: tuple[str, ...] = (
 )
 
 
+def _state(query: str, sub_questions: list[Any]) -> mgr._PlanState:
+    """Build a real _PlanState so retrieval calls go through the actual
+    manager.py functions, not a hand-copied reimplementation of them."""
+    state = mgr._PlanState(
+        request=mgr.ManagerRequest(query=query, top_k=TOP_K),
+        deps=mgr.ManagerDeps(retrieve=retrieve_with_project),
+        store=mgr.ArtifactStore(),
+        governor=mgr.BudgetGovernor(),
+    )
+    state.sub_questions = sub_questions
+    return state
+
+
 def _fanout(query: str, sub_questions: list[Any]) -> list[dict[str, Any]]:
-    """Mirror rag/agents/manager.py::_fanout_retrieval exactly."""
-    merged: list[dict[str, Any]] = []
-    seen: set[Any] = set()
-    for sub in sub_questions:
-        res = retrieve_with_project(
-            sub.text, top_k=TOP_K, municipality=sub.municipality,
-        )
-        for c in res.chunks:
-            cid = c.get("id")
-            if cid not in seen:
-                seen.add(cid)
-                merged.append(c)
-    merged.sort(key=lambda c: c.get("reranked_score") or c.get("similarity") or 0.0, reverse=True)
-    return merged[:TOP_K]
+    """The real rag.agents.manager._fanout_retrieval, not a copy of it."""
+    result = mgr._fanout_retrieval(_state(query, sub_questions))
+    return result.chunks if result is not None else []
+
+
+def _single(query: str) -> list[dict[str, Any]]:
+    """The real rag.agents.manager._single_retrieval, not a copy of it."""
+    return mgr._single_retrieval(_state(query, [])).chunks
 
 
 def _describe(chunks: list[dict[str, Any]]) -> list[str]:
@@ -115,8 +129,7 @@ def main() -> None:
             print(f"  - {sq.text!r} (municipality={sq.municipality}, permit_type={sq.permit_type})")
 
         fanout_chunks = _fanout(query, deconstruction.sub_questions)
-        single_result = retrieve_with_project(query, top_k=TOP_K)
-        single_chunks = single_result.chunks
+        single_chunks = _single(query)
 
         fanout_ids = {c.get("id") for c in fanout_chunks}
         single_ids = {c.get("id") for c in single_chunks}
