@@ -40,6 +40,17 @@ const SOURCE_TIERS = [
   { value: 3, label: "3 — Project document (drawings/specs)" },
 ];
 
+// File-upload tab only. Tier 1 (general corpus) is a deliberate, separate
+// staff action — the Pull from URL tab below, which uses the real SOURCE_TIERS
+// list above and keeps tier 1 as its whole purpose — not a dropdown pick here.
+// Hidden entirely and the remaining two relabeled 0/1 so this form reads as a
+// plain two-way choice rather than implying a tier 1 exists to skip past.
+// Underlying values sent to the backend are unchanged (still 2 and 3).
+const FILE_UPLOAD_SOURCE_TIERS = [
+  { value: 2, label: "0 — User ordinance upload (supplementary)" },
+  { value: 3, label: "1 — Project document (drawings/specs)" },
+];
+
 const DEFAULT_FORM = {
   doc_id: "",
   municipality: "",
@@ -281,10 +292,12 @@ export default function UploadPage() {
   };
 
   // Item: tier-2 project override. Tier 1 (general corpus) never binds to a
-  // project; tier 2/3 do — tier 2 defaults to the uploader's active project
+  // project and is no longer reachable via this form's dropdown at all
+  // (FILE_UPLOAD_SOURCE_TIERS above) — always tier 2 or 3 here, both of which
+  // bind to a project. Tier 2 defaults to the uploader's active project
   // server-side (api/routes/upload.py::upload_document) when left blank, so
   // this picker is how a tier-2 upload overrides that default explicitly.
-  const showProjectPicker = user && projects.length > 0 && form.source_tier !== 1;
+  const showProjectPicker = user && projects.length > 0;
 
   return (
     <main className="max-w-3xl mx-auto p-4 sm:p-6 pb-16">
@@ -696,7 +709,7 @@ export default function UploadPage() {
                     onChange={handleChange}
                     className={inputClass}
                   >
-                    {SOURCE_TIERS.map((t) => (
+                    {FILE_UPLOAD_SOURCE_TIERS.map((t) => (
                       <option key={t.value} value={t.value}>{t.label}</option>
                     ))}
                   </select>
