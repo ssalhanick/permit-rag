@@ -17,7 +17,8 @@ import {
   ChevronDown,
   LogIn,
   ArrowRight,
-  HardHat
+  HardHat,
+  UploadCloud
 } from "lucide-react";
 import LogoSVG from "./components/LogoSVG.jsx";
 import ProjectSwitcher from "./components/ProjectSwitcher.jsx";
@@ -222,6 +223,17 @@ export default function Nav() {
                     <FileText className="w-4 h-4 text-slate-400" />
                     Document Corpus
                   </NavLink>
+
+                  {isSuperAdmin && (
+                    <NavLink
+                      to="/upload"
+                      className="tt-dropdown-link text-emerald-400 hover:text-emerald-300"
+                      onClick={closeMenu}
+                    >
+                      <UploadCloud className="w-4 h-4 text-emerald-400" />
+                      Upload Document
+                    </NavLink>
+                  )}
 
                   {isSuperAdmin && (
                     <NavLink
