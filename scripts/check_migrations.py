@@ -137,6 +137,13 @@ _PROBES: list[tuple[str, str, str, str | None]] = [
         "SELECT EXISTS (SELECT 1 FROM information_schema.parameters WHERE specific_name LIKE 'match_chunks%' AND parameter_name = 'requesting_user_id') AS present;",
         None,
     ),
+    (
+        "046_drop_dallas_pilot_boundary",
+        "sql",
+        "SELECT NOT EXISTS (SELECT 1 FROM municipal_boundaries "
+        "WHERE jurisdiction_id = 'dallas' AND source_name = 'internal-task14b-pilot') AS present;",
+        None,
+    ),
 ]
 
 _TABLE_SQL = """

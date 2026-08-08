@@ -37,22 +37,23 @@ def test_seeded_but_empty_municipality_is_no_documents(mock_list_documents) -> N
     assert "frisco" in result.message
 
 
-@patch("rag.jurisdiction_resolver._point_in_polygon")
+@patch("rag.jurisdiction_resolver.resolve_jurisdiction_for_point")
 @patch("db.client.list_documents")
-def test_lat_lng_resolves_to_covered_municipality(mock_list_documents, mock_point_in_polygon) -> None:
-    mock_point_in_polygon.return_value = "plano"
+def test_lat_lng_resolves_to_covered_municipality(mock_list_documents, mock_resolve) -> None:
+    mock_resolve.return_value = "plano"
     mock_list_documents.return_value = [{"doc_id": "plano-permit"}]
 
     result = check_coverage(municipality=None, latitude=33.02, longitude=-96.70)
 
     assert result.status == "covered"
     assert result.municipality == "plano"
-    mock_point_in_polygon.assert_called_once_with(33.02, -96.70)
+    mock_resolve.assert_called_once_with(33.02, -96.70)
 
 
-@patch("rag.jurisdiction_resolver._point_in_polygon")
-def test_lat_lng_outside_every_boundary_is_no_boundary_data(mock_point_in_polygon) -> None:
-    mock_point_in_polygon.return_value = None
+@patch("rag.jurisdiction_resolver.resolve_jurisdiction_for_point")
+def test_lat_lng_outside_every_boundary_is_no_boundary_data(mock_resolve) -> None:
+    """Neither the override table nor the nationwide fallback resolved a point."""
+    mock_resolve.return_value = None
 
     result = check_coverage(municipality=None, latitude=40.0, longitude=-74.0)
 

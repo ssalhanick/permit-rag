@@ -1,35 +1,15 @@
 -- db/seeds/municipal_boundaries.sql — Seed municipal boundaries
--- Dallas pilot boundary (coarse envelope) for Task 14B validation.
--- This is a pilot geometry for spatial plumbing checks, not production-grade city limits.
-
-INSERT INTO municipal_boundaries (
-    jurisdiction_id,
-    boundary_name,
-    source_name,
-    source_url,
-    geom
-)
-VALUES (
-    'dallas',
-    'City of Dallas (pilot envelope)',
-    'internal-task14b-pilot',
-    NULL,
-    ST_Multi(
-        ST_GeomFromText(
-            'POLYGON((
-                -97.10 32.55,
-                -97.10 33.02,
-                -96.45 33.02,
-                -96.45 32.55,
-                -97.10 32.55
-            ))',
-            4326
-        )
-    )
-)
-ON CONFLICT (jurisdiction_id) DO UPDATE SET
-    boundary_name = EXCLUDED.boundary_name,
-    source_name = EXCLUDED.source_name,
-    source_url = EXCLUDED.source_url,
-    geom = EXCLUDED.geom,
-    loaded_at = NOW();
+--
+-- Empty by design. The Dallas "pilot envelope" placeholder (a coarse,
+-- hand-drawn rectangle, never production-grade city limits) was dropped by
+-- migration 046_drop_dallas_pilot_boundary.sql — nationwide jurisdiction
+-- resolution now falls back to the Census Bureau's own `geographies` lookup
+-- (rag/jurisdiction_resolver.py::resolve_jurisdiction_for_point) instead of
+-- requiring a locally-loaded polygon, and a stale placeholder would have
+-- silently shadowed that for every Dallas address.
+--
+-- Add rows here only for real, sourced boundary data via
+-- scripts/load_gis_boundaries.py — this table is now scoped to a small
+-- number of cities where the team wants precision beyond Census's place
+-- boundary (ETJs, annexation corrections), not a general resolution
+-- mechanism.

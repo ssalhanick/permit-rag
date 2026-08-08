@@ -52,9 +52,11 @@ def check_coverage(
     - municipality given: covered if it has >=1 active document, else
       "no_documents" (a real, seeded jurisdiction with nothing ingested yet —
       e.g. Frisco/McKinney today).
-    - No municipality but lat/lng given: point-in-polygon against loaded
-      municipal boundaries. A miss is "no_boundary_data", not "unsupported" —
-      it may just be a city Phase 2 of the GIS rollout hasn't loaded yet.
+    - No municipality but lat/lng given: resolved nationwide via
+      rag.jurisdiction_resolver.resolve_jurisdiction_for_point (local
+      override polygons, then the Census `geographies` fallback). A miss is
+      "no_boundary_data", not "unsupported" — it may just be a point outside
+      the US or an area Census's own boundary data doesn't recognize.
     - Neither given: "unresolved" — nothing to check yet, not a warning.
     """
     if municipality:
@@ -68,17 +70,17 @@ def check_coverage(
         )
 
     if latitude is not None and longitude is not None:
-        from rag.jurisdiction_resolver import _point_in_polygon
+        from rag.jurisdiction_resolver import resolve_jurisdiction_for_point
 
-        resolved = _point_in_polygon(latitude, longitude)
+        resolved = resolve_jurisdiction_for_point(latitude, longitude)
         if resolved:
             return check_coverage(municipality=resolved)
         return CoverageResult(
             "no_boundary_data",
             None,
-            "This address doesn't fall inside any jurisdiction boundary we've loaded yet. "
-            "It may still be in our coverage area — we just haven't loaded that city's "
-            "boundary data. You can petition to have this area added.",
+            "This address couldn't be resolved to a jurisdiction — it may be "
+            "outside the US, or in an area Census's boundary data doesn't "
+            "cover. You can petition to have this area added.",
         )
 
     return CoverageResult("unresolved", None, "No address on file yet.")

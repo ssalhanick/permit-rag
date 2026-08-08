@@ -30,6 +30,33 @@ KNOWN_ALIASES: dict[str, str] = {
     "ft-worth": "fortworth",
     "ft worth": "fortworth",
     "ftworth": "fortworth",
+    # Nationwide jurisdiction resolution (rag.jurisdiction_resolver) suffixes
+    # every place/county it resolves with its containing state name to avoid
+    # cross-state collisions (multiple Springfields, multiple Washington
+    # Counties). Dallas/Fort Worth/Plano and their counties were seeded
+    # before that convention existed and have no state suffix in the corpus
+    # (documents.municipality) — alias the state-suffixed forms back onto
+    # the unsuffixed corpus spelling instead of migrating documents data.
+    "dallas-texas": "dallas",
+    "fort-worth-texas": "fortworth",
+    "fort worth-texas": "fortworth",
+    "ft-worth-texas": "fortworth",
+    "ft worth-texas": "fortworth",
+    "plano-texas": "plano",
+    "dallas county-texas": "dallas-county",
+    "dallas-county-texas": "dallas-county",
+    "tarrant county-texas": "tarrant-county",
+    "tarrant-county-texas": "tarrant-county",
+    "collin county-texas": "collin-county",
+    "collin-county-texas": "collin-county",
+    # documents/catalog.json's first genuinely out-of-Texas entry (Fishers,
+    # Indiana, added 2026-08-08) was catalogued with a bare municipality
+    # slug too, before this alias existed — same fix as the DFW cities
+    # above. New nationwide ingestion should prefer a state-suffixed
+    # municipality value (e.g. "fishers-indiana") to match what the
+    # resolver computes and avoid needing a new alias per city; add one
+    # here only when an existing bare slug must be preserved.
+    "fishers-indiana": "fishers",
 }
 
 

@@ -101,6 +101,45 @@ def list_jurisdictions(
         ).fetchall()
 
 
+def upsert_jurisdiction(
+    *,
+    id: str,
+    name: str,
+    level: str,
+    parent_id: str | None,
+) -> bool:
+    """
+    Lazily create a jurisdiction row (nationwide resolution's on-demand city/
+    county creation, rag.jurisdiction_resolver). ON CONFLICT DO NOTHING —
+    never overwrites a row a human has since curated with dept_name/dept_url.
+
+    Returns True if a row was inserted, False if it already existed or the
+    insert failed (e.g. parent_id has no row yet — FK violation). Callers
+    should treat False as "not persisted yet, try again later" rather than
+    an error: get_jurisdiction_chain degrades gracefully to an exact-match
+    filter when a row is missing.
+    """
+    sql = """
+        INSERT INTO jurisdictions (id, name, level, parent_id)
+        VALUES (%(id)s, %(name)s, %(level)s, %(parent_id)s)
+        ON CONFLICT (id) DO NOTHING
+        RETURNING id;
+    """
+    try:
+        with get_conn() as conn:
+            row = conn.execute(
+                sql, {"id": id, "name": name, "level": level, "parent_id": parent_id}
+            ).fetchone()
+            conn.commit()
+            return row is not None
+    except Exception as exc:
+        log.warning(
+            "upsert_jurisdiction: failed to insert %r (parent_id=%r): %s",
+            id, parent_id, exc,
+        )
+        return False
+
+
 def get_jurisdiction_chain(jurisdiction_id: str) -> list[str]:
     """
     Walk `jurisdictions.parent_id` up from jurisdiction_id to its root.
