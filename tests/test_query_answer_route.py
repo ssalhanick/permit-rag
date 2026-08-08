@@ -95,6 +95,44 @@ def _generation_result() -> SimpleNamespace:
     )
 
 
+def _force_single_subquestion():
+    """
+    Pin query_deconstructor to always return the whole query as one
+    sub-question, and return the (name, saved_spec) pair to restore.
+
+    These tests are testing permit-classification/citation-counting for a
+    plain query, not fan-out — they never touched query_deconstructor and
+    relied on it happening to keep the query single. That held only because
+    the real LLM call was failing wherever these were first written; once it
+    actually works (real API key, `and` in the query text genuinely looks
+    compound), the real deconstructor splits it into several sub-questions,
+    and citations from the mocked generate_answer (same 3 every call,
+    regardless of input) get unioned across each one — 3 sub-questions x 3
+    citations = 9, not the 3 these tests were written to check. Pin the
+    behavior explicitly instead of depending on an unmocked LLM call.
+    """
+    from rag.agents import registry
+    from rag.agents.deconstructor import Deconstruction, SubQuestion
+    from rag.agents.registry import AgentSpec
+
+    saved = registry.get_or_none("query_deconstructor")
+    registry.register(
+        AgentSpec(
+            name="query_deconstructor",
+            callable=lambda q: Deconstruction(sub_questions=[SubQuestion(text=q)]),
+        ),
+        replace=True,
+    )
+    return saved
+
+
+def _restore_subquestion(saved) -> None:
+    if saved is not None:
+        from rag.agents import registry
+
+        registry.register(saved, replace=True)
+
+
 def test_query_answer_returns_multi_permit_types_and_citations(monkeypatch) -> None:
     """Route should return permit_types + structured citations for multi-scope query."""
     import rag.generator as generator_module
@@ -121,6 +159,7 @@ def test_query_answer_returns_multi_permit_types_and_citations(monkeypatch) -> N
         "role": "member",
         "username": "tester"
     }
+    saved_deconstructor = _force_single_subquestion()
 
     try:
         client = TestClient(app)
@@ -137,6 +176,7 @@ def test_query_answer_returns_multi_permit_types_and_citations(monkeypatch) -> N
         assert body["ahj_disclaimer"]["learn_more_url"] == "https://example.org/permits"
     finally:
         app.dependency_overrides.clear()
+        _restore_subquestion(saved_deconstructor)
 
 
 def test_query_answer_classifier_failure_falls_back_to_empty_list(monkeypatch) -> None:
@@ -161,6 +201,7 @@ def test_query_answer_classifier_failure_falls_back_to_empty_list(monkeypatch) -
         "role": "member",
         "username": "tester"
     }
+    saved_deconstructor = _force_single_subquestion()
 
     try:
         client = TestClient(app)
@@ -175,6 +216,7 @@ def test_query_answer_classifier_failure_falls_back_to_empty_list(monkeypatch) -
         assert len(body["citations"]) == 3
     finally:
         app.dependency_overrides.clear()
+        _restore_subquestion(saved_deconstructor)
 
 
 def test_query_answer_empty_corpus_returns_200_abstain(monkeypatch) -> None:
