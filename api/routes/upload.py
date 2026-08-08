@@ -45,6 +45,7 @@ from db.client import (
 )
 from ingestion.chunker import chunk_document
 from ingestion.embedder import embed_document
+from ingestion.metadata_agent import validate_document
 
 log = logging.getLogger(__name__)
 router = APIRouter(prefix="/admin/documents", tags=["admin-upload"])
@@ -189,12 +190,44 @@ def _process_upload(
             embed_result.get("num_new"),
             auto_activate,
         )
+        _propose_metadata(doc_id)
     except Exception as exc:
         log.exception("Upload processing failed for doc_id=%s: %s", doc_id, exc)
         try:
             update_document_admin_fields(doc_id, document_status=_failure_status(local_path))
         except Exception:
             pass
+
+
+def _propose_metadata(doc_id: str) -> None:
+    """
+    One shared LLM pass over the newly-chunked document proposing both
+    subject_tags and effective_date, filed to the existing needs_review queue
+    (Corpus Metadata Validator, agent #13) — never written directly.
+
+    ``draft_on_fail=False``: this reuses ``validate_document`` at upload time,
+    but a fresh upload's ``effective_date`` is always null (nothing populates
+    it earlier in this function), which always counts as a completeness
+    failure. With ``draft_on_fail=True`` that would draft (hide from
+    retrieval) every single upload pending review — a much bigger behavior
+    change than "propose tags/effective-date for review." Kept False so
+    today's immediate-activation behavior is unaffected; this only adds
+    review-queue proposals on top of it.
+
+    Best-effort: this is a metadata enhancement, not part of the ingestion
+    contract chunking/embedding above already satisfies — a failure here must
+    never undo an otherwise-successful upload.
+    """
+    try:
+        report = validate_document(
+            doc_id, use_llm=True, draft_on_fail=False, file_action_items=True,
+        )
+        log.info(
+            "Metadata proposal for doc_id=%s: result=%s proposals=%d",
+            doc_id, report.result, len(report.proposals),
+        )
+    except Exception as exc:
+        log.warning("Metadata proposal failed for doc_id=%s (%s) — skipping", doc_id, exc)
 
 
 # ── Response model ────────────────────────────────────────────
