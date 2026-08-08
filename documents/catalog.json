@@ -273,6 +273,51 @@
     "review_days": 90
   },
   {
+    "doc_id": "frisco-city-ordinance",
+    "url": "https://ecode360.com/38320586#38320586",
+    "municipality": "frisco",
+    "authority_level": "municipal",
+    "doc_type": "building_code",
+    "subject_tags": [
+      "building-code",
+      "permits",
+      "fees",
+      "contractor",
+      "registration",
+      "electrical",
+      "plumbing",
+      "mechanical",
+      "residential",
+      "commercial",
+      "fences",
+      "inspection"
+    ],
+    "version": null,
+    "notes": "Frisco Code of Ordinances Chapter 18 (Buildings and Building Regulations) via eCode360",
+    "review_days": 90
+  },
+  {
+    "doc_id": "Frisco_Ordinance_2026-06-42",
+    "url": "https://www.friscotexas.gov/DocumentCenter/View/Ordinance-2026-06-42",
+    "municipality": "frisco",
+    "authority_level": "municipal",
+    "doc_type": "building_code",
+    "subject_tags": [
+      "energy-conservation",
+      "IECC",
+      "building-envelope",
+      "hvac",
+      "insulation",
+      "air-leakage",
+      "residential",
+      "commercial",
+      "building-code"
+    ],
+    "version": "2024",
+    "notes": "Frisco Ordinance No. 2026-06-42 adopting the 2024 International Energy Conservation Code (IECC) with local amendments to Chapter 18 Division 5.",
+    "review_days": 180
+  },
+  {
     "doc_id": "mckinney-municode-zoning",
     "url": "https://library.municode.com/tx/mckinney/codes/code_of_ordinances",
     "municipality": "mckinney",
@@ -288,6 +333,81 @@
     ],
     "version": null,
     "notes": "McKinney full municipal code via Municode",
+    "review_days": 90
+  },
+  {
+    "doc_id": "mckinney-city-ordinance",
+    "url": "https://library.municode.com/tx/mckinney/codes/code_of_ordinances",
+    "municipality": "mckinney",
+    "authority_level": "municipal",
+    "doc_type": "building_code",
+    "subject_tags": [
+      "building-code",
+      "ordinance",
+      "permits",
+      "fees",
+      "fire-safety",
+      "inspection",
+      "property-maintenance",
+      "substandard-structures",
+      "residential",
+      "commercial"
+    ],
+    "version": null,
+    "notes": "McKinney Code of Ordinances — fire code, property maintenance, and building regulations via Municode",
+    "review_days": 90
+  },
+  {
+    "doc_id": "fishers-in-building-code",
+    "url": "https://codelibrary.amlegal.com/codes/fishers/latest/fishers_in/0-0-0-1",
+    "municipality": "fishers",
+    "authority_level": "municipal",
+    "doc_type": "building_code",
+    "subject_tags": [
+      "building-code",
+      "permits",
+      "inspections",
+      "enforcement",
+      "contractor",
+      "ordinance"
+    ],
+    "version": null,
+    "notes": "Fishers, Indiana Code of Ordinances Title XV Chapter 154 (Building Code) via American Legal Publishing",
+    "review_days": 180
+  },
+  {
+    "doc_id": "fishers-in-general-regulations",
+    "url": "https://codelibrary.amlegal.com/codes/fishers/latest/fishers_in/0-0-0-1",
+    "municipality": "fishers",
+    "authority_level": "municipal",
+    "doc_type": "administrative_rule",
+    "subject_tags": [
+      "general-regulations",
+      "nuisance",
+      "property-maintenance",
+      "ordinance",
+      "penalties"
+    ],
+    "version": null,
+    "notes": "Fishers, Indiana Code of Ordinances Title IX (General Regulations) via American Legal Publishing",
+    "review_days": 90
+  },
+  {
+    "doc_id": "fishers-in-zoning-map-changes",
+    "url": "https://codelibrary.amlegal.com/codes/fishers/latest/fishers_in/0-0-0-1",
+    "municipality": "fishers",
+    "authority_level": "municipal",
+    "doc_type": "zoning_ordinance",
+    "subject_tags": [
+      "zoning",
+      "pud",
+      "land-use",
+      "development",
+      "map-changes",
+      "ordinance"
+    ],
+    "version": null,
+    "notes": "Fishers, Indiana Code of Ordinances Planned Development (PD) Districts and Zoning Map Changes via American Legal Publishing",
     "review_days": 90
   },
   {
