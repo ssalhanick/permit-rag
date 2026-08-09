@@ -1,10 +1,11 @@
 import React, { useEffect } from "react";
 import { Link } from "react-router-dom";
-import { Search, ShieldCheck, Scale, FolderKanban, Sparkles, Smartphone, ArrowRight, CheckCircle2 } from "lucide-react";
+import { Search, ShieldCheck, Scale, FolderKanban, Sparkles, Smartphone, ArrowRight, CheckCircle2, Compass, MapPin } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import LogoSVG from "./components/LogoSVG.jsx";
 import { useLogoAnimation } from "./hooks/useLogoAnimation.js";
 import { useAuth } from "./context/AuthContext.jsx";
+import CoverageMapLandingWidget from "./components/coverage/CoverageMapLandingWidget.jsx";
 
 export default function LandingPage() {
   const { play } = useLogoAnimation();
@@ -92,29 +93,19 @@ export default function LandingPage() {
                     <ArrowRight className="h-4 w-4" />
                   </Button>
                 </Link>
-                <a href="#features">
-                  <Button variant="outline" size="lg" className="w-full sm:w-auto px-8 font-semibold landing-hero-outline">
-                    Learn More
+                <Link to="/coverage">
+                  <Button variant="outline" size="lg" className="w-full sm:w-auto px-8 font-semibold flex items-center gap-2 landing-hero-outline">
+                    <Compass className="h-4 w-4 text-blue-500" />
+                    <span>Explore Coverage Map</span>
                   </Button>
-                </a>
+                </Link>
               </div>
             </div>
           </div>
 
-          {/* DFW Badge Banner */}
-          <div className="pt-12 md:pt-16">
-            <p className="text-xs uppercase font-semibold tracking-wider text-muted-foreground mb-6">Supported DFW Municipalities</p>
-            <div className="flex flex-wrap justify-center gap-3">
-              {municipalities.map((city, index) => (
-                <div
-                  key={index}
-                  className="px-4 py-2 bg-card border border-border rounded-xl text-sm font-medium hover:border-accent/40 hover:bg-secondary/10 transition-all cursor-default shadow-sm group"
-                >
-                  <span className="font-heading font-bold text-foreground block">{city.name}</span>
-                  <span className="text-[10px] text-muted-foreground group-hover:text-accent transition-colors">{city.desc}</span>
-                </div>
-              ))}
-            </div>
+          {/* Interactive Coverage Map Preview Widget */}
+          <div className="pt-10 md:pt-14 text-left">
+            <CoverageMapLandingWidget />
           </div>
         </div>
       </section>
@@ -185,10 +176,25 @@ export default function LandingPage() {
       </section>
 
       {/* Footer */}
-      <footer className="mt-auto border-t border-border py-8 bg-card">
-        <div className="max-w-6xl mx-auto px-4 text-center text-xs text-muted-foreground space-y-2">
-          <p>© {new Date().getFullYear()} permit_rag. All rights reserved.</p>
-          <p>Disclaimer: permit_rag provides cited references for assistance only. Confirm all compliance decisions with local AHJ before building.</p>
+      <footer className="mt-auto border-t border-border py-12 bg-card">
+        <div className="max-w-6xl mx-auto px-4 space-y-6">
+          <div className="flex flex-col sm:flex-row items-center justify-between gap-6 pb-6 border-b border-border/80 text-xs">
+            <div className="flex items-center gap-3">
+              <LogoSVG className="h-7 w-auto" />
+              <span className="font-extrabold text-sm text-foreground">permit_rag</span>
+            </div>
+            <div className="flex flex-wrap items-center justify-center gap-6 font-semibold text-muted-foreground">
+              <Link to="/coverage" className="hover:text-blue-500 transition-colors">Interactive Coverage Map</Link>
+              <Link to="/welcome" className="hover:text-blue-500 transition-colors">Overview</Link>
+              <Link to={isAuthed ? "/query" : "/auth"} className="hover:text-blue-500 transition-colors">Ordinance AI Query</Link>
+              <Link to={isAuthed ? "/projects" : "/auth"} className="hover:text-blue-500 transition-colors">Projects</Link>
+              <Link to="/auth" className="hover:text-blue-500 transition-colors">Sign In</Link>
+            </div>
+          </div>
+          <div className="text-center text-xs text-muted-foreground space-y-2">
+            <p>© {new Date().getFullYear()} permit_rag. All rights reserved.</p>
+            <p>Disclaimer: permit_rag provides cited references for assistance only. Confirm all compliance decisions with local AHJ before building.</p>
+          </div>
         </div>
       </footer>
     </div>

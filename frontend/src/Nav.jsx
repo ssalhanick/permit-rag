@@ -18,7 +18,9 @@ import {
   LogIn,
   ArrowRight,
   HardHat,
-  UploadCloud
+  UploadCloud,
+  MapPin,
+  Compass
 } from "lucide-react";
 import LogoSVG from "./components/LogoSVG.jsx";
 import ProjectSwitcher from "./components/ProjectSwitcher.jsx";
@@ -127,6 +129,21 @@ export default function Nav() {
                 </NavLink>
               </>
             )}
+
+            {user && (
+              <NavLink
+                to="/coverage"
+                className={({ isActive }) =>
+                  `tt-btn-outline text-xs whitespace-nowrap shrink-0 ${
+                    isActive ? "tt-btn-outline-active" : ""
+                  }`
+                }
+                onClick={closeMenu}
+              >
+                <Compass className="w-3.5 h-3.5 mr-1.5 shrink-0" />
+                <span>Coverage Map</span>
+              </NavLink>
+            )}
           </div>
 
           {/* User Profile / Auth Action Section */}
@@ -216,6 +233,15 @@ export default function Nav() {
                   <div className="tt-dropdown-divider" />
                   <div className="tt-dropdown-section-label">Administration & Resources</div>
                   <NavLink
+                    to="/coverage"
+                    className="tt-dropdown-link"
+                    onClick={closeMenu}
+                  >
+                    <Compass className="w-4 h-4 text-blue-400" />
+                    Coverage Map & GIS
+                  </NavLink>
+
+                  <NavLink
                     to="/documents"
                     className="tt-dropdown-link"
                     onClick={closeMenu}
@@ -264,21 +290,38 @@ export default function Nav() {
               </div>
             ) : (
               <div className="flex flex-col min-[901px]:flex-row items-stretch min-[901px]:items-center gap-2.5 w-full min-[901px]:w-auto mt-3 min-[901px]:mt-0 pt-3 min-[901px]:pt-0 border-t min-[901px]:border-t-0 border-slate-800 shrink-0">
+                {/* 1. Coverage Map (Outlined Button: 2px border, no background, accessible hover) */}
                 <NavLink
-                  to="/auth"
-                  className="tt-nav-item flex items-center justify-center gap-1.5 whitespace-nowrap shrink-0 w-full min-[901px]:w-auto"
+                  to="/coverage"
+                  className={({ isActive }) =>
+                    `tt-btn-outline text-xs whitespace-nowrap shrink-0 w-full min-[901px]:w-auto ${
+                      isActive ? "tt-btn-outline-active" : ""
+                    }`
+                  }
                   onClick={closeMenu}
                 >
-                  <LogIn className="w-4 h-4 text-slate-400" />
-                  Sign In
+                  <Compass className="w-3.5 h-3.5 mr-1.5 shrink-0" />
+                  <span>Coverage Map</span>
                 </NavLink>
+
+                {/* 2. Get Started (Primary CTA Button) */}
                 <NavLink
                   to="/auth"
                   className="tt-btn-primary flex items-center justify-center gap-1.5 text-xs px-4 py-2 whitespace-nowrap shrink-0 w-full min-[901px]:w-auto"
                   onClick={closeMenu}
                 >
-                  Get Started
+                  <span>Get Started</span>
                   <ArrowRight className="w-3.5 h-3.5" />
+                </NavLink>
+
+                {/* 3. Sign In */}
+                <NavLink
+                  to="/auth"
+                  className="tt-nav-item flex items-center justify-center gap-1.5 whitespace-nowrap shrink-0 w-full min-[901px]:w-auto text-xs"
+                  onClick={closeMenu}
+                >
+                  <LogIn className="w-4 h-4 text-slate-400" />
+                  <span>Sign In</span>
                 </NavLink>
               </div>
             )}
