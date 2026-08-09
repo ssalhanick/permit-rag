@@ -2,6 +2,8 @@ import React, { useCallback, useEffect, useState } from "react";
 import {
   approveDocumentPetition,
   approveOverlayPetition,
+  downloadDocument,
+  fetchDocumentDetail,
   listPendingDocumentPetitions,
   listPendingOverlayPetitions,
   rejectDocumentPetition,
@@ -21,6 +23,9 @@ export default function PetitionReviewPane() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [busyId, setBusyId] = useState(null);
+  const [expandedDocId, setExpandedDocId] = useState(null);
+  const [detailByDocId, setDetailByDocId] = useState({});
+  const [detailError, setDetailError] = useState({});
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -44,15 +49,39 @@ export default function PetitionReviewPane() {
   }, [load]);
 
   const handleDocumentDecision = async (docId, decision) => {
+    let reason = null;
+    if (decision === "reject") {
+      reason = window.prompt(
+        `Reason for rejecting ${docId}? (shown to the submitter, optional)`,
+        "",
+      );
+      if (reason === null) return; // user cancelled
+    }
     setBusyId(docId);
     setError(null);
     try {
-      await (decision === "approve" ? approveDocumentPetition(docId) : rejectDocumentPetition(docId));
+      await (decision === "approve" ? approveDocumentPetition(docId) : rejectDocumentPetition(docId, reason || null));
       await load();
     } catch (err) {
       setError(err.message || `Failed to ${decision} ${docId}.`);
     } finally {
       setBusyId(null);
+    }
+  };
+
+  const toggleDocumentPreview = async (docId) => {
+    if (expandedDocId === docId) {
+      setExpandedDocId(null);
+      return;
+    }
+    setExpandedDocId(docId);
+    if (!detailByDocId[docId]) {
+      try {
+        const res = await fetchDocumentDetail(docId);
+        setDetailByDocId((prev) => ({ ...prev, [docId]: res.data }));
+      } catch (err) {
+        setDetailError((prev) => ({ ...prev, [docId]: err.message || "Failed to load document detail." }));
+      }
     }
   };
 
@@ -91,7 +120,35 @@ export default function PetitionReviewPane() {
             {d.subject_tags?.length > 0 && (
               <div style={S.meta}>Tags: {d.subject_tags.join(", ")}</div>
             )}
+            {expandedDocId === d.doc_id && (
+              <div style={S.preview}>
+                {detailError[d.doc_id] ? (
+                  <p style={S.error}>{detailError[d.doc_id]}</p>
+                ) : detailByDocId[d.doc_id] ? (
+                  <>
+                    <div style={S.meta}>Chunks stored: {detailByDocId[d.doc_id].chunk_count}</div>
+                    <div style={S.meta}>Checksum: {detailByDocId[d.doc_id].checksum_sha256 || "—"}</div>
+                    <button
+                      type="button"
+                      style={S.btnGhost}
+                      onClick={() => downloadDocument(d.doc_id, d.doc_id)}
+                    >
+                      Open / download source file
+                    </button>
+                  </>
+                ) : (
+                  <p style={S.muted}>Loading…</p>
+                )}
+              </div>
+            )}
             <div style={S.cardFoot}>
+              <button
+                type="button"
+                style={S.btnGhost}
+                onClick={() => toggleDocumentPreview(d.doc_id)}
+              >
+                {expandedDocId === d.doc_id ? "Hide document" : "View document"}
+              </button>
               <button
                 type="button"
                 style={S.btnPrimary}
@@ -160,6 +217,7 @@ const S = {
   card: { border: BORDER, borderRadius: 10, padding: "1rem 1.25rem", marginBottom: "0.85rem" },
   cardHead: { display: "flex", justifyContent: "space-between", alignItems: "baseline", gap: "1rem" },
   meta: { fontSize: "0.85rem", color: "#94a3b8", margin: "0.4rem 0" },
+  preview: { marginTop: "0.6rem", padding: "0.6rem 0.75rem", background: "rgba(148,163,184,0.08)", borderRadius: 6 },
   cardFoot: { marginTop: "0.75rem", display: "flex", gap: "0.5rem" },
   btnPrimary: { padding: "8px 18px", background: "#2f6feb", color: "#fff", border: "none", borderRadius: 6, cursor: "pointer", fontSize: "0.9rem" },
   btnDanger: { padding: "8px 18px", background: "transparent", color: "#ef4444", border: "1px solid #ef4444", borderRadius: 6, cursor: "pointer", fontSize: "0.9rem" },

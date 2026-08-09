@@ -50,6 +50,7 @@ def _to_document_summary(row: dict) -> DocumentSummaryResponse:
         uploaded_by=row.get("uploaded_by"),
         project_id=row.get("project_id"),
         source_tier=row.get("source_tier"),
+        rejection_reason=row.get("rejection_reason"),
     )
 
 

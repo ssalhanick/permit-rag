@@ -76,6 +76,55 @@ def _failure_status(local_path: str) -> str:
     """Map processing failures to document lifecycle status by file type."""
     return "needs_ocr" if Path(local_path).suffix.lower() == ".pdf" else "draft"
 
+
+# ── Contributor submission guard (dedup + rate limit) ────────
+# Shared by the two contributor-facing petition routes (document_petitions.py,
+# overlays.py) -- not applied to this module's own admin-only /upload route,
+# which is staff-gated already. Split into two standalone checks (rather than
+# one combined "save file, then check" helper) because overlays.py needs the
+# dedup check to run *before* it creates the overlay row -- that row has no
+# document behind it until later, so a failed check afterward would strand
+# an orphaned 'petitioned' overlay with nothing to approve.
+#
+# Deliberately not a general-purpose rate limiter -- no library dependency,
+# no token bucket. A coarse per-user hourly cap plus a checksum dedup check
+# is proportionate to "a handful of trusted contributors" MVP scale. Opening
+# submissions to the general public should replace this with something more
+# robust (e.g. IP-based limiting at the edge) rather than scaling this
+# further.
+
+PETITION_RATE_LIMIT_PER_HOUR = 10
+PETITION_RATE_LIMIT_WINDOW_MINUTES = 60
+
+
+def _check_petition_rate_limit(user_id: UUID) -> None:
+    from db import client as db_client
+
+    if db_client.count_recent_documents_by_user(
+        user_id, minutes=PETITION_RATE_LIMIT_WINDOW_MINUTES
+    ) >= PETITION_RATE_LIMIT_PER_HOUR:
+        raise HTTPException(
+            status_code=429,
+            detail=(
+                f"Too many submissions in the last {PETITION_RATE_LIMIT_WINDOW_MINUTES} "
+                "minutes. Please try again later."
+            ),
+        )
+
+
+def _check_petition_dedup(checksum_sha256: str) -> None:
+    from db import client as db_client
+
+    existing = db_client.get_document_by_checksum(checksum_sha256)
+    if existing:
+        raise HTTPException(
+            status_code=409,
+            detail=(
+                f"This exact file was already submitted (doc_id={existing['doc_id']!r}, "
+                f"status={existing['document_status']!r})."
+            ),
+        )
+
 # ── Auth (reuses existing admin token logic) ─────────────────
 
 _token_header = APIKeyHeader(name="X-Admin-Token", auto_error=False)

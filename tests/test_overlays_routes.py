@@ -143,10 +143,68 @@ def test_petition_overlay_success_schedules_background_processing() -> None:
         assert process_kwargs["project_id"] == project_id
         assert process_kwargs["source_tier"] == 3
         assert process_kwargs["doc_type"] == "zoning_ordinance"
+        # An unapproved overlay's document must stay out of match_chunks
+        # (which has no source_tier exclusion) until the overlay itself is
+        # approved -- see approve_overlay's document-activation UPDATE.
+        assert process_kwargs["auto_activate"] is False
     finally:
         app.dependency_overrides.clear()
         with contextlib.suppress(FileNotFoundError):
             (UPLOAD_DIR / f"overlay-{overlay_id}.pdf").unlink()
+
+
+def test_petition_overlay_rejects_when_rate_limited() -> None:
+    """Rate limit must be enforced before create_overlay_petition -- a failed
+    check must not strand an orphaned overlay row with no document."""
+    project_id = uuid4()
+    user_id = uuid4()
+
+    app.dependency_overrides[overlays_route.get_current_user] = lambda: _current_user(user_id)
+    try:
+        with patch.object(overlays_route, "_require_role", return_value=None), \
+             patch.object(
+                 overlays_route.db_client, "get_project",
+                 return_value={"id": project_id, "municipality": "dallas", "latitude": 32.8, "longitude": -96.78},
+             ), \
+             patch.object(overlays_route.db_client, "count_recent_documents_by_user", return_value=10), \
+             patch.object(overlays_route.db_client, "create_overlay_petition") as mock_create:
+            resp = client.post(
+                f"/api/projects/{project_id}/overlays",
+                files={"file": ("bylaws.pdf", b"fake", "application/pdf")},
+                data={"name": "Oak Hollow HOA", "overlay_type": "hoa"},
+            )
+        assert resp.status_code == 429
+        mock_create.assert_not_called()
+    finally:
+        app.dependency_overrides.clear()
+
+
+def test_petition_overlay_rejects_duplicate_checksum_before_creating_row() -> None:
+    project_id = uuid4()
+    user_id = uuid4()
+
+    app.dependency_overrides[overlays_route.get_current_user] = lambda: _current_user(user_id)
+    try:
+        with patch.object(overlays_route, "_require_role", return_value=None), \
+             patch.object(
+                 overlays_route.db_client, "get_project",
+                 return_value={"id": project_id, "municipality": "dallas", "latitude": 32.8, "longitude": -96.78},
+             ), \
+             patch.object(overlays_route.db_client, "count_recent_documents_by_user", return_value=0), \
+             patch.object(
+                 overlays_route.db_client, "get_document_by_checksum",
+                 return_value={"doc_id": "overlay-existing", "document_status": "draft"},
+             ), \
+             patch.object(overlays_route.db_client, "create_overlay_petition") as mock_create:
+            resp = client.post(
+                f"/api/projects/{project_id}/overlays",
+                files={"file": ("bylaws.pdf", b"identical bytes", "application/pdf")},
+                data={"name": "Oak Hollow HOA", "overlay_type": "hoa"},
+            )
+        assert resp.status_code == 409
+        mock_create.assert_not_called()
+    finally:
+        app.dependency_overrides.clear()
 
 
 def test_list_pending_overlays_requires_admin_auth() -> None:

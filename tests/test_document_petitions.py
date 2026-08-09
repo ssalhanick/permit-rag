@@ -156,6 +156,54 @@ def test_petition_from_verified_contributor_auto_approves() -> None:
         _cleanup_upload_dir_prefix("ordinance-petition-")
 
 
+def test_petition_rejects_when_rate_limited() -> None:
+    user_id = uuid4()
+    app.dependency_overrides[petitions_route.get_current_user] = lambda: _current_user(user_id)
+    try:
+        with patch.object(
+            petitions_route.db_client, "get_user_by_id",
+            return_value={"id": user_id, "is_verified_contributor": False},
+        ), patch.object(db_client, "count_recent_documents_by_user", return_value=10), \
+             patch.object(petitions_route, "_process_upload") as mock_process:
+            resp = client.post(
+                "/api/documents/petitions",
+                files={"file": ("ordinance.pdf", b"fake pdf", "application/pdf")},
+                data={"municipality": "dallas", "authority_level": "municipal", "doc_type": "zoning_ordinance"},
+            )
+        assert resp.status_code == 429
+        mock_process.assert_not_called()
+    finally:
+        app.dependency_overrides.clear()
+        _cleanup_upload_dir_prefix("ordinance-petition-")
+
+
+def test_petition_rejects_duplicate_checksum() -> None:
+    """A byte-identical resubmission must not schedule a second background
+    job or save a second copy of the file."""
+    user_id = uuid4()
+    app.dependency_overrides[petitions_route.get_current_user] = lambda: _current_user(user_id)
+    try:
+        with patch.object(
+            petitions_route.db_client, "get_user_by_id",
+            return_value={"id": user_id, "is_verified_contributor": False},
+        ), patch.object(db_client, "count_recent_documents_by_user", return_value=0), \
+             patch.object(
+                 db_client, "get_document_by_checksum",
+                 return_value={"doc_id": "ordinance-petition-existing", "document_status": "draft"},
+             ), patch.object(petitions_route, "_process_upload") as mock_process:
+            resp = client.post(
+                "/api/documents/petitions",
+                files={"file": ("ordinance.pdf", b"identical bytes", "application/pdf")},
+                data={"municipality": "dallas", "authority_level": "municipal", "doc_type": "zoning_ordinance"},
+            )
+        assert resp.status_code == 409
+        assert "ordinance-petition-existing" in resp.json()["detail"]
+        mock_process.assert_not_called()
+    finally:
+        app.dependency_overrides.clear()
+        _cleanup_upload_dir_prefix("ordinance-petition-")
+
+
 def test_petition_treats_missing_user_row_as_unverified() -> None:
     """get_user_by_id returning None (e.g. inactive) must not crash and must
     default to the safer (pending-queue) path."""
@@ -233,6 +281,32 @@ def test_reject_document_route_404_when_missing() -> None:
          patch.object(petitions_route.db_client, "reject_pending_document", return_value=False):
         resp = client.post("/api/admin/documents/does-not-exist/reject")
     assert resp.status_code == 404
+
+
+def test_reject_document_route_passes_reason_through() -> None:
+    with patch.object(petitions_route, "_require_admin_auth", return_value=None), \
+         patch.object(
+             petitions_route.db_client, "reject_pending_document", return_value=True,
+         ) as mock_reject:
+        resp = client.post(
+            "/api/admin/documents/ordinance-petition-abc/reject",
+            json={"reason": "Wrong jurisdiction — this is Frisco's code, not Plano's."},
+        )
+    assert resp.status_code == 200
+    mock_reject.assert_called_once_with(
+        "ordinance-petition-abc", reason="Wrong jurisdiction — this is Frisco's code, not Plano's.",
+    )
+
+
+def test_reject_document_route_reason_optional() -> None:
+    """No body at all must still work -- reason is optional, not required."""
+    with patch.object(petitions_route, "_require_admin_auth", return_value=None), \
+         patch.object(
+             petitions_route.db_client, "reject_pending_document", return_value=True,
+         ) as mock_reject:
+        resp = client.post("/api/admin/documents/ordinance-petition-abc/reject")
+    assert resp.status_code == 200
+    mock_reject.assert_called_once_with("ordinance-petition-abc", reason=None)
 
 
 # ── PATCH /admin/users/{user_id}/verified-contributor ──────────
@@ -339,9 +413,13 @@ def test_approve_pending_document_scoped_to_tier2(monkeypatch) -> None:
     assert "WHERE doc_id = %s AND source_tier = 2" in captured["sql"][0]
 
 
-def test_reject_pending_document_deletes_chunks_then_document(monkeypatch) -> None:
+def test_reject_pending_document_deletes_chunks_marks_rejected(monkeypatch) -> None:
+    """Row is kept and marked 'rejected' (migration 047), not hard-deleted --
+    only its chunks are removed."""
     document_id = uuid4()
     calls: list[str] = []
+    captured_sql: dict[str, str] = {}
+    captured_params: dict[str, dict] = {}
 
     class _FakeConn:
         def execute(self, sql, params=None):
@@ -352,6 +430,8 @@ def test_reject_pending_document_deletes_chunks_then_document(monkeypatch) -> No
                 calls.append("chunks")
                 return type("R", (), {"rowcount": 3})()
             calls.append("documents")
+            captured_sql["documents"] = sql
+            captured_params["documents"] = params
             return type("R", (), {"rowcount": 1})()
 
         def commit(self):
@@ -363,8 +443,11 @@ def test_reject_pending_document_deletes_chunks_then_document(monkeypatch) -> No
 
     monkeypatch.setattr(db_client, "get_conn", _factory)
 
-    assert db_client.reject_pending_document("x") is True
+    assert db_client.reject_pending_document("x", reason="Wrong jurisdiction.") is True
     assert calls == ["lookup", "chunks", "documents", "commit"]
+    assert "DELETE FROM documents" not in captured_sql["documents"]
+    assert "document_status = 'rejected'" in captured_sql["documents"]
+    assert captured_params["documents"]["reason"] == "Wrong jurisdiction."
 
 
 def test_reject_pending_document_returns_false_when_not_found(monkeypatch) -> None:

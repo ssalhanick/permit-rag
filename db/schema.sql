@@ -24,7 +24,8 @@ create type document_status as enum (
     'superseded',
     'repealed',
     'needs_ocr',
-    'draft'
+    'draft',
+    'rejected'          -- migration 047: rejected tier-2 petition, row kept for the reason
 );
 
 create type doc_type as enum (
@@ -101,6 +102,7 @@ create table documents (
                         constraint chk_source_tier check (source_tier in (1, 2, 3)),
     ingested_at     timestamptz not null default now(),
     updated_at      timestamptz not null default now(),
+    rejection_reason text,                            -- migration 047: set when document_status = 'rejected'
 
     -- Supersession tracking
     superseded_by   uuid references documents(id),

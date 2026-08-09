@@ -672,9 +672,10 @@ export async function approveDocumentPetition(docId) {
   });
 }
 
-export async function rejectDocumentPetition(docId) {
+export async function rejectDocumentPetition(docId, reason = null) {
   return await requestJson(`/admin/documents/${encodeURIComponent(docId)}/reject`, {
     method: "POST",
+    body: { reason },
   });
 }
 

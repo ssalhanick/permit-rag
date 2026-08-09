@@ -2144,6 +2144,18 @@ textarea::placeholder {
   color: #991b1b;
 }
 
+.profile-doc-status--rejected {
+  background: #fef2f2;
+  color: #b91c1c;
+}
+
+.profile-doc-reject-reason {
+  margin-top: 4px;
+  font-size: 0.72rem;
+  color: var(--tt-text-muted, #64748b);
+  max-width: 220px;
+}
+
 .dark .profile-doc-status--active {
   background: #052e16 !important;
   color: #bbf7d0 !important;
@@ -2163,6 +2175,11 @@ textarea::placeholder {
 .dark .profile-doc-status--needs_ocr {
   background: #450a0a !important;
   color: #fecaca !important;
+}
+
+.dark .profile-doc-status--rejected {
+  background: #450a0a !important;
+  color: #fca5a5 !important;
 }
 
 .profile-doc-share-row {

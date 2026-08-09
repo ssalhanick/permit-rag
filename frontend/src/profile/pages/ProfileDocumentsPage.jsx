@@ -17,6 +17,7 @@ const STATUS_BADGE = {
   superseded: { label: "Superseded", className: "profile-doc-status--superseded" },
   repealed: { label: "Repealed", className: "profile-doc-status--repealed" },
   needs_ocr: { label: "Processing", className: "profile-doc-status--needs_ocr" },
+  rejected: { label: "Rejected", className: "profile-doc-status--rejected" },
 };
 
 /**
@@ -249,7 +250,15 @@ export default function ProfileDocumentsPage() {
                       <td>{d.municipality}</td>
                       <td>{d.doc_type}</td>
                       <td>
-                        <span className={`profile-doc-status ${badge.className}`}>{badge.label}</span>
+                        <span
+                          className={`profile-doc-status ${badge.className}`}
+                          title={d.document_status === "rejected" ? d.rejection_reason || "No reason given." : undefined}
+                        >
+                          {badge.label}
+                        </span>
+                        {d.document_status === "rejected" && d.rejection_reason && (
+                          <div className="profile-doc-reject-reason">{d.rejection_reason}</div>
+                        )}
                       </td>
                       <td>
                         <div className="profile-doc-share-row">

@@ -13,7 +13,7 @@ from uuid import UUID
 
 from pydantic import BaseModel, EmailStr, Field
 
-DocumentStatusType = Literal["active", "superseded", "repealed", "needs_ocr", "draft"]
+DocumentStatusType = Literal["active", "superseded", "repealed", "needs_ocr", "draft", "rejected"]
 DocumentVisibilityType = Literal["private", "team"]  # migration 040, tier-3 only
 AuthorityLevelType = Literal["municipal", "county", "state", "federal"]
 DocTypeType = Literal[
@@ -485,6 +485,14 @@ class ApproveOverlayRequest(BaseModel):
     )
 
 
+class RejectDocumentRequest(BaseModel):
+    """Optional reason when a staff reviewer rejects a pending ordinance
+    petition (migration 047). The document row is kept (not deleted) so the
+    submitter can see why via their own Documents library."""
+
+    reason: str | None = Field(default=None, description="Shown to the submitter as the rejection reason.")
+
+
 class SetVerifiedContributorRequest(BaseModel):
     """Admin-settable tiered-trust flag (migration 041) — Type 1 of the
     document-upload plan. A verified contributor's ordinance petitions
@@ -527,6 +535,9 @@ class DocumentSummaryResponse(BaseModel):
     )
     source_tier: int | None = Field(
         default=None, description="1=shared corpus, 2=pending petition, 3=project document."
+    )
+    rejection_reason: str | None = Field(
+        default=None, description="Set when document_status is 'rejected' (migration 047)."
     )
 
 

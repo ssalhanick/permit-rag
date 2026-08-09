@@ -144,6 +144,7 @@ _PROBES: list[tuple[str, str, str, str | None]] = [
         "WHERE jurisdiction_id = 'dallas' AND source_name = 'internal-task14b-pilot') AS present;",
         None,
     ),
+    ("047_document_rejection", "column", "documents", "rejection_reason"),
 ]
 
 _TABLE_SQL = """

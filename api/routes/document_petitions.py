@@ -16,8 +16,8 @@ api/routes/project_documents.py do.
 
 from __future__ import annotations
 
+import hashlib
 import logging
-import shutil
 from pathlib import Path
 from typing import Annotated
 from uuid import UUID, uuid4
@@ -41,9 +41,11 @@ from api.routes.upload import (
     VALID_AUTHORITY_LEVELS,
     VALID_DOC_TYPES,
     UploadResponse,
+    _check_petition_dedup,
+    _check_petition_rate_limit,
     _process_upload,
 )
-from api.schemas import DocumentSummaryResponse, SetVerifiedContributorRequest
+from api.schemas import DocumentSummaryResponse, RejectDocumentRequest, SetVerifiedContributorRequest
 from db import client as db_client
 from rag.jurisdiction_ids import canonicalize
 
@@ -118,16 +120,20 @@ async def petition_document(
     user_row = db_client.get_user_by_id(current_user["user_id"])
     is_verified = bool(user_row and user_row.get("is_verified_contributor"))
 
+    _check_petition_rate_limit(current_user["user_id"])
+
+    content = await file.read()
+    await file.close()
+    checksum = hashlib.sha256(content).hexdigest()
+    _check_petition_dedup(checksum)
+
     doc_id = f"ordinance-petition-{uuid4().hex}"
     UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
     dest = UPLOAD_DIR / f"{doc_id}{suffix}"
     try:
-        with dest.open("wb") as f:
-            shutil.copyfileobj(file.file, f)
+        dest.write_bytes(content)
     except OSError as exc:
         raise HTTPException(status_code=500, detail=f"Failed to save file: {exc}") from exc
-    finally:
-        await file.close()
 
     tags = [t.strip() for t in subject_tags.split(",") if t.strip()] if subject_tags else []
 
@@ -197,14 +203,16 @@ def approve_document_admin(
 )
 def reject_document_admin(
     doc_id: str,
+    body: RejectDocumentRequest | None = None,
     x_admin_token: str | None = Header(default=None),
     x_admin_role: str | None = Header(default=None),
     current_user: Annotated[dict | None, Depends(get_optional_current_user)] = None,
 ) -> dict:
     _require_admin_auth(x_admin_token, x_admin_role, current_user)
-    if not db_client.reject_pending_document(doc_id):
+    reason = body.reason if body else None
+    if not db_client.reject_pending_document(doc_id, reason=reason):
         raise HTTPException(status_code=404, detail="Pending document not found.")
-    return {"detail": f"Rejected and deleted pending document {doc_id}."}
+    return {"detail": f"Rejected pending document {doc_id}."}
 
 
 @router.patch(

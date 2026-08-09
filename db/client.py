@@ -287,6 +287,36 @@ def get_document_by_uuid(uuid: UUID) -> dict[str, Any] | None:
         return conn.execute(sql, (uuid,)).fetchone()
 
 
+def get_document_by_checksum(checksum_sha256: str) -> dict[str, Any] | None:
+    """Find an existing document with the same content hash, to dedupe
+    resubmissions on the contributor petition endpoints. Excludes rejected
+    rows -- a resubmission of a previously-rejected file should be eligible
+    for review again, not permanently blocked by its own prior rejection."""
+    sql = """
+        SELECT * FROM documents
+        WHERE checksum_sha256 = %s AND document_status != 'rejected'
+        ORDER BY ingested_at DESC
+        LIMIT 1;
+    """
+    with get_conn() as conn:
+        return conn.execute(sql, (checksum_sha256,)).fetchone()
+
+
+def count_recent_documents_by_user(user_id: UUID, *, minutes: int = 60) -> int:
+    """Count documents a user has submitted in the last ``minutes`` -- a
+    coarse per-user cap on the contributor petition endpoints, sized for a
+    handful-of-trusted-contributors MVP scale rather than a general-purpose
+    rate limiter."""
+    sql = """
+        SELECT count(*) AS n FROM documents
+        WHERE uploaded_by = %(user_id)s
+          AND ingested_at > now() - (%(minutes)s || ' minutes')::interval;
+    """
+    with get_conn() as conn:
+        row = conn.execute(sql, {"user_id": user_id, "minutes": minutes}).fetchone()
+    return row["n"] if row else 0
+
+
 def list_documents(
     *,
     municipality: str | None = None,
@@ -571,6 +601,11 @@ def approve_overlay(
     replaces the petitioner's default buffer with a refined "tight boundary"
     before approving. Otherwise the existing geometry (the default buffer, if
     never refined) stands as the approved boundary.
+
+    Also activates the overlay's linked source document (petition_overlay
+    schedules it with auto_activate=False, so it's sitting at 'draft' until
+    this happens) -- otherwise nothing ever flips it to 'active' and an
+    approved overlay's document would stay invisible to match_chunks forever.
     """
     if geojson_polygon:
         sql = """
@@ -589,8 +624,14 @@ def approve_overlay(
             RETURNING *;
         """
         params = {"overlay_id": overlay_id, "approved_by": approved_by}
+    sql_activate_document = """
+        UPDATE documents SET document_status = 'active'
+        WHERE overlay_id = %(overlay_id)s AND document_status = 'draft';
+    """
     with get_conn() as conn:
         row = conn.execute(sql, params).fetchone()
+        if row:
+            conn.execute(sql_activate_document, {"overlay_id": overlay_id})
         conn.commit()
     if row:
         log.info("Approved overlay %s by %s", overlay_id, approved_by)
@@ -598,15 +639,32 @@ def approve_overlay(
 
 
 def reject_overlay(overlay_id: UUID, *, approved_by: UUID | None) -> dict[str, Any] | None:
-    """Reject a petitioned overlay. Reuses approved_by/approved_at as the reviewer/review-time fields."""
+    """Reject a petitioned overlay. Reuses approved_by/approved_at as the reviewer/review-time fields.
+
+    Also deletes the overlay's linked source document (chunks + row) if it's
+    still sitting at 'draft' (petition_overlay's auto_activate=False leaves it
+    there pending this decision) -- otherwise a rejected overlay leaves an
+    orphaned, permanently-'draft' document behind with no reviewer ever able
+    to act on it again (get_pending_documents only looks at tier-2 rows).
+    """
     sql = """
         UPDATE overlays
         SET status = 'rejected', approved_by = %(approved_by)s, approved_at = now()
         WHERE id = %(overlay_id)s
         RETURNING *;
     """
+    sql_find_document = """
+        SELECT id FROM documents WHERE overlay_id = %(overlay_id)s AND document_status = 'draft';
+    """
+    sql_delete_chunks = "DELETE FROM chunks WHERE document_id = %(document_id)s;"
+    sql_delete_document = "DELETE FROM documents WHERE id = %(document_id)s;"
     with get_conn() as conn:
         row = conn.execute(sql, {"overlay_id": overlay_id, "approved_by": approved_by}).fetchone()
+        if row:
+            doc_row = conn.execute(sql_find_document, {"overlay_id": overlay_id}).fetchone()
+            if doc_row:
+                conn.execute(sql_delete_chunks, {"document_id": doc_row["id"]})
+                conn.execute(sql_delete_document, {"document_id": doc_row["id"]})
         conn.commit()
     return row
 
@@ -2172,6 +2230,32 @@ def get_pending_documents() -> list[dict[str, Any]]:
         return conn.execute(sql).fetchall()
 
 
+def get_stuck_draft_documents(min_age_minutes: int = 30) -> list[dict[str, Any]]:
+    """Find documents that look like abandoned/crashed background jobs
+    rather than legitimate pending-review petitions.
+
+    _process_upload chunks (and inserts chunks) *before* the auto_activate
+    gate, so a document that's genuinely "successfully processed, pending
+    admin review" always has chunks by the time it's sitting at 'draft'. A
+    document with zero chunks that's been at 'draft' past ``min_age_minutes``
+    is either a container-killed-mid-job BackgroundTasks task (no exception
+    handler ever ran) or an ordinary chunking failure -- either way, nothing
+    else in the system will ever surface it to a human without this query.
+    """
+    sql = """
+        SELECT d.*, count(c.id) AS chunk_count
+        FROM documents d
+        LEFT JOIN chunks c ON c.document_id = d.id
+        WHERE d.document_status = 'draft'
+          AND d.ingested_at < now() - (%(min_age_minutes)s || ' minutes')::interval
+        GROUP BY d.id
+        HAVING count(c.id) = 0
+        ORDER BY d.ingested_at ASC;
+    """
+    with get_conn() as conn:
+        return conn.execute(sql, {"min_age_minutes": min_age_minutes}).fetchall()
+
+
 def approve_pending_document(doc_id: str) -> dict[str, Any] | None:
     """Promote a tier-2 ordinance petition into the shared tier-1 corpus.
 
@@ -2193,27 +2277,35 @@ def approve_pending_document(doc_id: str) -> dict[str, Any] | None:
     return row
 
 
-def reject_pending_document(doc_id: str) -> bool:
-    """Reject a tier-2 ordinance petition: delete its chunks and the document
-    row, in one transaction. documents.document_status has no 'rejected'
-    value (unlike overlays' status enum) — deletion is the terminal state
-    here rather than adding an enum value for one workflow. Scoped to
-    source_tier = 2 so this can't delete an already-approved (tier-1) or
-    project (tier-3) document.
+def reject_pending_document(doc_id: str, *, reason: str | None = None) -> bool:
+    """Reject a tier-2 ordinance petition: delete its chunks (a rejected
+    document shouldn't retain embeddings) and mark the row 'rejected' with an
+    optional reason (migration 047), rather than deleting the row outright.
+
+    There's no email/notification system in this codebase -- keeping the row
+    lets the submitter see the rejection (and why) via their own "Documents"
+    library (GET /api/documents?scope=mine), which is the only place they
+    already check on petition status. Mirrors reject_overlay's keep-row-mark-
+    status pattern. Scoped to source_tier = 2 so this can't touch an already-
+    approved (tier-1) or project (tier-3) document.
     """
     sql_lookup = "SELECT id FROM documents WHERE doc_id = %s AND source_tier = 2;"
     sql_chunks = "DELETE FROM chunks WHERE document_id = %s;"
-    sql_document = "DELETE FROM documents WHERE doc_id = %s AND source_tier = 2;"
+    sql_document = """
+        UPDATE documents
+        SET document_status = 'rejected', rejection_reason = %(reason)s
+        WHERE doc_id = %(doc_id)s AND source_tier = 2;
+    """
     with get_conn() as conn:
         row = conn.execute(sql_lookup, (doc_id,)).fetchone()
         if row is None:
             return False
         conn.execute(sql_chunks, (row["id"],))
-        cur = conn.execute(sql_document, (doc_id,))
+        cur = conn.execute(sql_document, {"doc_id": doc_id, "reason": reason})
         conn.commit()
     rejected = cur.rowcount > 0
     if rejected:
-        log.info("Rejected pending document: %s (chunks + row deleted)", doc_id)
+        log.info("Rejected pending document: %s (chunks deleted, row kept as 'rejected')", doc_id)
     return rejected
 
 

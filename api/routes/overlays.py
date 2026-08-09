@@ -17,8 +17,8 @@ rather than duplicating it.
 
 from __future__ import annotations
 
+import hashlib
 import logging
-import shutil
 from pathlib import Path
 from typing import Annotated
 from uuid import UUID
@@ -37,7 +37,13 @@ from fastapi import (
 from api.auth import get_current_user, get_optional_current_user
 from api.routes.admin import _require_admin_auth
 from api.routes.projects import _require_role
-from api.routes.upload import ALLOWED_EXTENSIONS, UPLOAD_DIR, _process_upload
+from api.routes.upload import (
+    ALLOWED_EXTENSIONS,
+    UPLOAD_DIR,
+    _check_petition_dedup,
+    _check_petition_rate_limit,
+    _process_upload,
+)
 from api.schemas import ApproveOverlayRequest, OverlayResponse
 from db import client as db_client
 
@@ -126,6 +132,18 @@ async def petition_overlay(
             detail=f"Unsupported file type '{suffix}'. Allowed: {ALLOWED_EXTENSIONS}",
         )
 
+    # Rate-limit and dedup checks run before create_overlay_petition, using
+    # the file's in-memory bytes -- not after, and not against a file already
+    # saved under this overlay's id. Checking afterward would risk stranding
+    # an orphaned 'petitioned' overlay row with no document ever scheduled
+    # for it (get_pending_documents/the admin pane would show a petition an
+    # admin could "approve" into nothing).
+    _check_petition_rate_limit(current_user["user_id"])
+    content = await file.read()
+    await file.close()
+    checksum = hashlib.sha256(content).hexdigest()
+    _check_petition_dedup(checksum)
+
     overlay = db_client.create_overlay_petition(
         name=name,
         overlay_type=overlay_type,
@@ -141,12 +159,9 @@ async def petition_overlay(
     UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
     dest = UPLOAD_DIR / f"{doc_id}{suffix}"
     try:
-        with dest.open("wb") as f:
-            shutil.copyfileobj(file.file, f)
+        dest.write_bytes(content)
     except OSError as exc:
         raise HTTPException(status_code=500, detail=f"Failed to save file: {exc}") from exc
-    finally:
-        await file.close()
 
     background_tasks.add_task(
         _process_upload,
@@ -161,6 +176,12 @@ async def petition_overlay(
         project_id=project_id,
         uploaded_by=current_user["user_id"],
         overlay_id=overlay["id"],
+        # A petitioned overlay isn't approved yet -- without this, the
+        # document goes live in general corpus search (match_chunks has no
+        # source_tier exclusion) the moment chunking finishes, regardless of
+        # the overlay's own 'petitioned'/'approved' status. approve_overlay
+        # flips this document to 'active' once the overlay itself is approved.
+        auto_activate=False,
     )
 
     log.info(
