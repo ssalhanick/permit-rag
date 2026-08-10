@@ -145,6 +145,7 @@ _PROBES: list[tuple[str, str, str, str | None]] = [
         None,
     ),
     ("047_document_rejection", "column", "documents", "rejection_reason"),
+    ("048_user_avatars", "table", "user_avatars", None),
 ]
 
 _TABLE_SQL = """

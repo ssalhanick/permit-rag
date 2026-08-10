@@ -293,6 +293,7 @@ p.muted,
   align-items: center;
   justify-content: center;
   box-shadow: 0 2px 6px rgba(37, 99, 235, 0.3);
+  overflow: hidden;
 }
 
 .tt-user-details {
@@ -1227,6 +1228,8 @@ svg.tt-site-logo {
   align-items: center;
   justify-content: center;
   box-shadow: 0 2px 8px rgba(37, 99, 235, 0.3);
+  overflow: hidden;
+  flex-shrink: 0;
 }
 
 .profile-sidebar-user-meta {
@@ -1593,6 +1596,39 @@ svg.tt-site-logo {
   align-items: center;
   justify-content: center;
   flex-shrink: 0;
+  overflow: hidden;
+}
+
+/* ── Profile photos ──────────────────────────────────────────
+   Every avatar slot is a fixed-size circle whose gradient background doubles
+   as the initials backdrop. When <Avatar> renders a photo instead, it fills
+   the slot exactly and inherits the circle, so the two states are
+   interchangeable and nothing above needs a size override. */
+.tt-user-avatar img,
+.tt-dropdown-avatar img,
+.profile-sidebar-avatar img,
+.member-avatar img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  border-radius: inherit;
+  display: block;
+}
+
+/* Small avatar for table rows (project member lists). */
+.member-avatar {
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, #3b82f6 0%, #1d4ed8 100%);
+  color: #ffffff;
+  font-weight: 700;
+  font-size: 0.65rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  overflow: hidden;
 }
 
 .tt-dropdown-user-info {

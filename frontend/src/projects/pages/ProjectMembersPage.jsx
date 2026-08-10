@@ -10,6 +10,7 @@ import {
   transferProjectOwnership,
 } from "../../api.js";
 import { useAuth } from "../../context/AuthContext.jsx";
+import Avatar from "../../components/Avatar.jsx";
 import { useProject } from "../ProjectContext.jsx";
 import { Users, UserPlus, ShieldAlert, AlertTriangle, CheckCircle, Trash2, Shield, UserX, ArrowRightLeft, Archive } from "lucide-react";
 
@@ -219,6 +220,7 @@ export default function ProjectMembersPage() {
                 {members.map((m) => (
                   <tr key={m.user_id} className="hover:bg-slate-50/60 dark:hover:bg-slate-700/40 transition-colors">
                     <td className="py-3.5 px-2 font-semibold text-slate-900 dark:text-slate-100 flex items-center gap-2">
+                      <Avatar user={m} className="member-avatar" />
                       {m.role === "owner" && <Shield className="w-4 h-4 text-blue-600 dark:text-blue-400" />}
                       {m.username} {m.user_id === user?.id && <span className="text-blue-600 dark:text-blue-400 font-bold">(You)</span>}
                     </td>

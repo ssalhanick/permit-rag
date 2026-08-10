@@ -1,6 +1,7 @@
 import React, { useState } from "react";
 import { NavLink, Outlet, useLocation } from "react-router-dom";
 import { useAuth } from "../context/AuthContext.jsx";
+import Avatar from "../components/Avatar.jsx";
 import {
   getProfilePageTitle,
   PROFILE_NAV_ITEMS,
@@ -21,8 +22,6 @@ export default function ProfileLayout() {
     return null;
   }
 
-  const initials = (user.username || "U").slice(0, 2).toUpperCase();
-
   return (
     <div className="profile-dashboard-layout">
       {sidebarOpen && (
@@ -40,9 +39,7 @@ export default function ProfileLayout() {
         aria-label="Profile navigation"
       >
         <div className="profile-sidebar-user">
-          <div className="profile-sidebar-avatar" aria-hidden="true">
-            {initials}
-          </div>
+          <Avatar user={user} className="profile-sidebar-avatar" />
           <div className="profile-sidebar-user-meta">
             <strong>{user.username}</strong>
             <span className="profile-sidebar-role">

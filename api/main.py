@@ -45,6 +45,7 @@ from api.routes import (
     pull_router,
     query_router,
     upload_router,
+    users_router,
 )
 from api.schemas import HealthResponse
 from db import graph_client as _graph_client
@@ -200,6 +201,7 @@ api_router.include_router(contractors_router)
 api_router.include_router(marketplace_router)
 api_router.include_router(bids_router)
 api_router.include_router(corpus_router)
+api_router.include_router(users_router)
 app.include_router(api_router)
 
 

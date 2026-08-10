@@ -7,11 +7,12 @@ Keeps route files thin and enables OpenAPI schema generation.
 
 from __future__ import annotations
 
+import re
 from datetime import date, datetime
 from typing import Literal
 from uuid import UUID
 
-from pydantic import BaseModel, EmailStr, Field
+from pydantic import BaseModel, EmailStr, Field, field_validator
 
 DocumentStatusType = Literal["active", "superseded", "repealed", "needs_ocr", "draft", "rejected"]
 DocumentVisibilityType = Literal["private", "team"]  # migration 040, tier-3 only
@@ -1071,6 +1072,10 @@ class ProjectMemberResponse(BaseModel):
     email: str
     role: str
     invited_at: datetime
+    avatar_updated_at: datetime | None = Field(
+        default=None,
+        description="Set when the member has a profile photo; doubles as the avatar URL cache-buster.",
+    )
 
 
 class AddMemberRequest(BaseModel):
@@ -1178,6 +1183,53 @@ class UserMeResponse(BaseModel):
     created_at: datetime
     active_project_id: UUID | None = None
     has_contractor_profile: bool = False
+    avatar_updated_at: datetime | None = Field(
+        default=None,
+        description=(
+            "None when the user has no profile photo. The frontend appends it to the "
+            "avatar URL as a cache-buster, so a replaced photo shows up immediately. "
+            "Image bytes are never inlined here — they are served by "
+            "GET /users/{user_id}/avatar."
+        ),
+    )
+
+
+class UpdateUserProfileRequest(BaseModel):
+    """Payload for PATCH /auth/me — the caller editing their own profile.
+
+    Every field is optional; only those present in the request body are written
+    (the route passes exclude_unset=True). Today that is just the username, which
+    until now was auto-derived from the email at first Cognito login
+    (db.client._derive_username) and never user-choosable.
+    """
+    username: str | None = Field(
+        default=None,
+        min_length=3,
+        max_length=30,
+        description="Lowercase letters, digits, underscore, dot, or hyphen.",
+    )
+
+    @field_validator("username")
+    @classmethod
+    def _normalize_username(cls, v: str | None) -> str | None:
+        """Lowercase and charset-check.
+
+        users.username is documented as "stored lowercase" (migration 011) and
+        _derive_username already emits exactly this charset, so normalizing here
+        keeps user-chosen names indistinguishable from generated ones — and stops
+        "Scott" and "scott" from being two accounts that collide on the UNIQUE
+        index in a confusing way.
+        """
+        if v is None:
+            return None
+        normalized = v.strip().lower()
+        if not re.fullmatch(r"[a-z0-9_.\-]+", normalized):
+            raise ValueError(
+                "Username may contain only letters, digits, underscore, dot, or hyphen."
+            )
+        if not re.search(r"[a-z0-9]", normalized):
+            raise ValueError("Username must contain at least one letter or digit.")
+        return normalized
 
 
 class SetActiveProjectRequest(BaseModel):

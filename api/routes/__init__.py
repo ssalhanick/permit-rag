@@ -20,6 +20,7 @@ from api.routes.projects import router as projects_router
 from api.routes.pull import router as pull_router
 from api.routes.query import router as query_router
 from api.routes.upload import router as upload_router
+from api.routes.users import router as users_router
 
 __all__ = [
     "admin_router",
@@ -38,4 +39,5 @@ __all__ = [
     "pull_router",
     "query_router",
     "upload_router",
+    "users_router",
 ]

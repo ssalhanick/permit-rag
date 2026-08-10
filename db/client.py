@@ -1615,10 +1615,96 @@ def get_or_create_cognito_user(
 
 
 def get_user_by_id(user_id: UUID) -> dict[str, Any] | None:
-    """Fetch active user row by primary key UUID."""
-    sql = "SELECT * FROM users WHERE id = %s AND is_active = true;"
+    """Fetch active user row by primary key UUID, plus avatar_updated_at.
+
+    The LEFT JOIN pulls only the avatar's timestamp, never its bytes — that is
+    the whole reason migration 048 put images in a side table. Callers get
+    everything they need to build a UserMeResponse in one round trip while this
+    query, which runs on every authenticated request, stays cheap.
+    """
+    sql = """
+        SELECT u.*, a.updated_at AS avatar_updated_at
+        FROM users u
+        LEFT JOIN user_avatars a ON a.user_id = u.id
+        WHERE u.id = %s AND u.is_active = true;
+    """
     with get_conn() as conn:
         return conn.execute(sql, (user_id,)).fetchone()
+
+
+def update_user_profile(
+    user_id: UUID,
+    *,
+    username: str | None = None,
+) -> dict[str, Any] | None:
+    """Update the caller's own mutable profile fields.
+
+    Raises psycopg.errors.UniqueViolation when the username is already taken —
+    the route translates that into a 409 rather than pre-checking with a SELECT,
+    which would race between the check and the write.
+    """
+    assignments: list[str] = []
+    params: dict[str, Any] = {"user_id": user_id}
+    if username is not None:
+        assignments.append("username = %(username)s")
+        params["username"] = username
+    if not assignments:
+        return get_user_by_id(user_id)
+
+    sql = f"""
+        UPDATE users
+        SET {", ".join(assignments)}
+        WHERE id = %(user_id)s AND is_active = true
+        RETURNING id;
+    """
+    with get_conn() as conn:
+        row = conn.execute(sql, params).fetchone()
+        conn.commit()
+    if not row:
+        return None
+    # Re-read through get_user_by_id so the caller gets avatar_updated_at too.
+    return get_user_by_id(user_id)
+
+
+# ── Profile photos (migration 048) ──────────────────────────
+
+def get_user_avatar(user_id: UUID) -> dict[str, Any] | None:
+    """Fetch a user's avatar bytes, mime, and updated_at. None when unset."""
+    sql = "SELECT data, mime, updated_at FROM user_avatars WHERE user_id = %s;"
+    with get_conn() as conn:
+        return conn.execute(sql, (user_id,)).fetchone()
+
+
+def set_user_avatar(user_id: UUID, data: bytes, mime: str) -> datetime:
+    """Insert or replace a user's avatar. Returns the new updated_at.
+
+    updated_at is bumped explicitly on conflict (rather than left to the column
+    default) because it is what the ETag and the frontend's ?v= cache-buster are
+    derived from — a replacement that kept the old timestamp would keep serving
+    the old image from cache.
+    """
+    sql = """
+        INSERT INTO user_avatars (user_id, data, mime)
+        VALUES (%(user_id)s, %(data)s, %(mime)s)
+        ON CONFLICT (user_id) DO UPDATE
+            SET data = EXCLUDED.data,
+                mime = EXCLUDED.mime,
+                updated_at = now()
+        RETURNING updated_at;
+    """
+    with get_conn() as conn:
+        row = conn.execute(sql, {"user_id": user_id, "data": data, "mime": mime}).fetchone()
+        conn.commit()
+    return row["updated_at"]
+
+
+def clear_user_avatar(user_id: UUID) -> bool:
+    """Delete a user's avatar. Returns True if a row was removed."""
+    sql = "DELETE FROM user_avatars WHERE user_id = %s RETURNING user_id;"
+    with get_conn() as conn:
+        row = conn.execute(sql, (user_id,)).fetchone()
+        conn.commit()
+    return row is not None
 
 
 def sync_user_role(user_id: UUID, role: str) -> None:
@@ -2115,9 +2201,11 @@ def get_project_role(project_id: UUID, user_id: UUID) -> str | None:
 def list_project_members(project_id: UUID) -> list[dict[str, Any]]:
     """Join with users table: returns user details and role."""
     sql = """
-        SELECT u.id AS user_id, u.username, u.email, pm.role, pm.invited_at
+        SELECT u.id AS user_id, u.username, u.email, pm.role, pm.invited_at,
+               a.updated_at AS avatar_updated_at
         FROM project_members pm
         JOIN users u ON u.id = pm.user_id
+        LEFT JOIN user_avatars a ON a.user_id = u.id
         WHERE pm.project_id = %s
         ORDER BY pm.invited_at ASC;
     """

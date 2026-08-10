@@ -20,6 +20,9 @@ const DEFAULT_BASE_URL = "http://localhost:8000";
 export const API_PREFIX = "/api";
 // When VITE_API_BASE_URL is explicitly set (even to ""), use it. Blank string
 // means "same origin" so the Vite dev-server proxy handles routing to the backend.
+// Re-exported at the bottom of this file: <img src> URLs (avatars) must be
+// built outside requestJson, and the native app is served from capacitor://
+// where a relative path has no backend to resolve against.
 const API_BASE_URL =
   import.meta.env?.VITE_API_BASE_URL !== undefined
     ? (import.meta.env.VITE_API_BASE_URL ?? "")
@@ -317,6 +320,39 @@ export async function setActiveProjectApi(projectId) {
     method: "PATCH",
     body: { project_id: projectId },
   });
+}
+
+/** Update the caller's own profile (currently just the username). 409 if taken. */
+export async function updateMe(payload) {
+  return await requestJson("/auth/me", { method: "PATCH", body: payload });
+}
+
+/**
+ * Upload a profile photo. Multipart, so it bypasses requestJson (which always
+ * JSON.stringifies its body) — same raw-fetch pattern as replaceProjectDocument.
+ *
+ * Expects an already-resized blob from avatarUtils.resizeImageToSquare; posting
+ * a raw camera image here would trip the server's 512 KB cap.
+ */
+export async function uploadMyAvatar(blob, filename = "avatar.webp") {
+  const body = new FormData();
+  body.append("file", blob, filename);
+  const accessToken = localStorage.getItem("access_token");
+  const res = await fetch(`${API_BASE_URL}${API_PREFIX}/auth/me/avatar`, {
+    method: "POST",
+    headers: accessToken ? { Authorization: `Bearer ${accessToken}` } : {},
+    body,
+  });
+  const data = await res.json();
+  if (!res.ok) {
+    throw new Error(data?.detail || `HTTP ${res.status}`);
+  }
+  return data;
+}
+
+/** Remove the caller's profile photo. Idempotent. */
+export async function deleteMyAvatar() {
+  return await requestJson("/auth/me/avatar", { method: "DELETE" });
 }
 
 // ── Project Endpoints ────────────────────────────────────────

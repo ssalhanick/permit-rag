@@ -2,6 +2,7 @@ import React, { useState, useRef, useEffect } from "react";
 import { NavLink, useLocation } from "react-router-dom";
 import { useAuth } from "./context/AuthContext.jsx";
 import { useIsSuperAdmin } from "./hooks/useIsSuperAdmin.js";
+import Avatar from "./components/Avatar.jsx";
 import {
   LayoutDashboard,
   FolderKanban,
@@ -52,14 +53,6 @@ export default function Nav() {
 
   const username = user?.username || user?.email?.split("@")[0] || "Alex Rivera";
   const userEmail = user?.email || `${username.toLowerCase().replace(/\s+/g, ".")}@home.io`;
-
-  // Get user initials for avatar
-  const initials = username
-    .split(" ")
-    .map((n) => n[0])
-    .join("")
-    .substring(0, 2)
-    .toUpperCase();
 
   const isSuperAdmin = useIsSuperAdmin();
 
@@ -158,7 +151,7 @@ export default function Nav() {
                   aria-expanded={userMenuOpen}
                   aria-label="User Account Menu"
                 >
-                  <div className="tt-user-avatar">{initials}</div>
+                  <Avatar user={user} className="tt-user-avatar" fallback={username} />
                   <span className="tt-user-name text-sm font-medium text-slate-200">
                     {username}
                   </span>
@@ -172,7 +165,7 @@ export default function Nav() {
                 <div className={`tt-user-dropdown-menu ${userMenuOpen ? "block" : "hidden min-[901px]:hidden"} min-[901px]:${userMenuOpen ? "block" : "hidden"} max-[900px]:block`}>
                   {/* Header */}
                   <div className="tt-dropdown-header">
-                    <div className="tt-dropdown-avatar">{initials}</div>
+                    <Avatar user={user} className="tt-dropdown-avatar" fallback={username} />
                     <div className="tt-dropdown-user-info">
                       <span className="tt-dropdown-username">{username}</span>
                       <span className="tt-dropdown-email">{userEmail}</span>
